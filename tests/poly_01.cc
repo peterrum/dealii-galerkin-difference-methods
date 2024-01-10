@@ -44,9 +44,11 @@ private:
 };
 
 
-std::vector<Polynomials::Polynomial<double>>
+std::vector<std::vector<Polynomials::Polynomial<double>>>
 generate_polynomials_1D()
 {
+  std::vector<std::vector<Polynomials::Polynomial<double>>> all_polynomial;
+
   std::vector<std::vector<double>> coefficients = {
     {{{-1.0 / 6.0, 1.0 / 2.0, -1.0 / 3.0, 0.0}},
      {{1.0 / 2.0, -1.0, -1.0 / 2.0, 1.0}},
@@ -60,7 +62,9 @@ generate_polynomials_1D()
   for (unsigned int i = 0; i < coefficients.size(); ++i)
     polynomials.emplace_back(coefficients[i]);
 
-  return polynomials;
+  all_polynomial.push_back(polynomials);
+
+  return all_polynomial;
 }
 
 
@@ -70,47 +74,56 @@ main()
   const unsigned int dim            = 1;
   const unsigned int n_subdivisions = 20;
 
-  const auto polynomials = generate_polynomials_1D();
+  const auto all_polynomials = generate_polynomials_1D();
 
-  std::vector<std::vector<Polynomials::Polynomial<double>>> aniso_polynomials;
-  for (unsigned int i = 0; i < dim; ++i)
-    aniso_polynomials.push_back(polynomials);
-
-  AnisotropicPolynomials<dim> poly(aniso_polynomials);
-
-  for (unsigned int j = 0; j <= n_subdivisions; ++j)
+  for (const auto &polynomials : all_polynomials)
     {
-      Point<dim> x;
-      x[0] = 1.0 / n_subdivisions * j;
+      std::vector<std::vector<Polynomials::Polynomial<double>>>
+        aniso_polynomials;
+      for (unsigned int i = 0; i < dim; ++i)
+        aniso_polynomials.push_back(polynomials);
 
-      for (unsigned int i = 0; i < polynomials.size(); ++i)
-        printf("%7.3f ", poly.compute_value(i, x));
-      std::cout << std::endl;
+      AnisotropicPolynomials<dim> poly(aniso_polynomials);
+
+      for (unsigned int j = 0; j <= n_subdivisions; ++j)
+        {
+          Point<dim> x;
+          x[0] = 1.0 / n_subdivisions * j;
+
+          for (unsigned int i = 0; i < polynomials.size(); ++i)
+            printf("%7.3f ", poly.compute_value(i, x));
+          std::cout << std::endl;
+        }
+
+      continue;
+
+      FE_GDM<dim> fe(poly);
+
+      MappingQ1<dim> mapping;
+      QGauss<dim>    quad(polynomials.size());
+
+      FEValues<dim> fe_values(mapping,
+                              fe,
+                              quad,
+                              update_values | update_JxW_values);
+
+      Triangulation<dim> tria;
+      GridGenerator::hyper_cube(tria);
+
+      fe_values.reinit(tria.begin());
+
+      const unsigned int dofs_per_cell = fe.n_dofs_per_cell();
+      FullMatrix<double> cell_matrix(dofs_per_cell, dofs_per_cell);
+
+      for (const unsigned int q_index : fe_values.quadrature_point_indices())
+        {
+          for (const unsigned int i : fe_values.dof_indices())
+            for (const unsigned int j : fe_values.dof_indices())
+              cell_matrix(i, j) +=
+                (fe_values.shape_value(i, q_index) *
+                 fe_values.shape_value(j, q_index) * fe_values.JxW(q_index));
+        }
+
+      cell_matrix.print_formatted(std::cout);
     }
-
-  FE_GDM<dim> fe(poly);
-
-  MappingQ1<dim> mapping;
-  QGauss<dim>    quad(polynomials.size());
-
-  FEValues<dim> fe_values(mapping, fe, quad, update_values | update_JxW_values);
-
-  Triangulation<dim> tria;
-  GridGenerator::hyper_cube(tria);
-
-  fe_values.reinit(tria.begin());
-
-  const unsigned int dofs_per_cell = fe.n_dofs_per_cell();
-  FullMatrix<double> cell_matrix(dofs_per_cell, dofs_per_cell);
-
-  for (const unsigned int q_index : fe_values.quadrature_point_indices())
-    {
-      for (const unsigned int i : fe_values.dof_indices())
-        for (const unsigned int j : fe_values.dof_indices())
-          cell_matrix(i, j) +=
-            (fe_values.shape_value(i, q_index) *
-             fe_values.shape_value(j, q_index) * fe_values.JxW(q_index));
-    }
-
-  cell_matrix.print_formatted(std::cout);
 }
