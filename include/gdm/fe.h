@@ -40,8 +40,10 @@ private:
 
 
 std::vector<std::vector<Polynomials::Polynomial<double>>>
-generate_polynomials_1D()
+generate_polynomials_1D(const unsigned int fe_degree)
 {
+  AssertDimension(fe_degree, 3);
+
   std::vector<std::vector<Polynomials::Polynomial<double>>> all_polynomial;
 
   {

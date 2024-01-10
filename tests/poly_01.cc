@@ -15,8 +15,9 @@ main()
 {
   const unsigned int dim            = 1;
   const unsigned int n_subdivisions = 20;
+  const unsigned int fe_degree      = 3;
 
-  const auto all_polynomials = generate_polynomials_1D();
+  const auto all_polynomials = generate_polynomials_1D(fe_degree);
   const auto fe_collection   = generate_fe_collection<dim>(all_polynomials);
 
   for (const auto &polynomials : all_polynomials)
