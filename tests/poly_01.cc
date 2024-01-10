@@ -43,12 +43,10 @@ private:
   }
 };
 
-int
-main()
-{
-  const unsigned int dim            = 1;
-  const unsigned int n_subdivisions = 20;
 
+std::vector<Polynomials::Polynomial<double>>
+generate_polynomials_1D()
+{
   std::vector<std::vector<double>> coefficients = {
     {{{-1.0 / 6.0, 1.0 / 2.0, -1.0 / 3.0, 0.0}},
      {{1.0 / 2.0, -1.0, -1.0 / 2.0, 1.0}},
@@ -62,6 +60,18 @@ main()
   for (unsigned int i = 0; i < coefficients.size(); ++i)
     polynomials.emplace_back(coefficients[i]);
 
+  return polynomials;
+}
+
+
+int
+main()
+{
+  const unsigned int dim            = 1;
+  const unsigned int n_subdivisions = 20;
+
+  const auto polynomials = generate_polynomials_1D();
+
   std::vector<std::vector<Polynomials::Polynomial<double>>> aniso_polynomials;
   for (unsigned int i = 0; i < dim; ++i)
     aniso_polynomials.push_back(polynomials);
@@ -73,7 +83,7 @@ main()
       Point<dim> x;
       x[0] = 1.0 / n_subdivisions * j;
 
-      for (unsigned int i = 0; i < coefficients.size(); ++i)
+      for (unsigned int i = 0; i < polynomials.size(); ++i)
         printf("%7.3f ", poly.compute_value(i, x));
       std::cout << std::endl;
     }
@@ -81,7 +91,7 @@ main()
   FE_GDM<dim> fe(poly);
 
   MappingQ1<dim> mapping;
-  QGauss<dim>    quad(coefficients.size());
+  QGauss<dim>    quad(polynomials.size());
 
   FEValues<dim> fe_values(mapping, fe, quad, update_values | update_JxW_values);
 
