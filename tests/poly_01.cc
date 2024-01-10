@@ -104,6 +104,32 @@ generate_polynomials_1D()
 }
 
 
+template <int dim>
+hp::FECollection<dim>
+generate_fe_collection(
+  const std::vector<std::vector<Polynomials::Polynomial<double>>>
+    &all_polynomials_1D)
+{
+  AssertDimension(dim, 1);
+
+  hp::FECollection<dim> fe_collection;
+
+  for (const auto &polynomials : all_polynomials_1D)
+    {
+      std::vector<std::vector<Polynomials::Polynomial<double>>>
+        aniso_polynomials;
+      for (unsigned int i = 0; i < dim; ++i)
+        aniso_polynomials.push_back(polynomials);
+
+      AnisotropicPolynomials<dim> poly(aniso_polynomials);
+
+      fe_collection.push_back(FE_GDM<dim>(poly));
+    }
+
+  return fe_collection;
+}
+
+
 int
 main()
 {
@@ -111,6 +137,7 @@ main()
   const unsigned int n_subdivisions = 20;
 
   const auto all_polynomials = generate_polynomials_1D();
+  const auto fe_collection   = generate_fe_collection<dim>(all_polynomials);
 
   for (const auto &polynomials : all_polynomials)
     {
