@@ -42,7 +42,7 @@ private:
 std::vector<std::vector<Polynomials::Polynomial<double>>>
 generate_polynomials_1D(const unsigned int fe_degree)
 {
-  AssertDimension(fe_degree, 3);
+  AssertDimension(fe_degree, 3); // TODO: for higher degree
 
   std::vector<std::vector<Polynomials::Polynomial<double>>> all_polynomial;
 
@@ -107,7 +107,7 @@ generate_fe_collection(
   const std::vector<std::vector<Polynomials::Polynomial<double>>>
     &all_polynomials_1D)
 {
-  AssertDimension(dim, 1);
+  AssertDimension(dim, 1); // TODO: for higher dimension
 
   hp::FECollection<dim> fe_collection;
 

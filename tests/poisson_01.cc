@@ -25,7 +25,7 @@ template <int dim>
 unsigned int
 get_category(const TriaActiveIterator<CellAccessor<dim>> &cell)
 {
-  AssertDimension(dim, 1);
+  AssertDimension(dim, 1); // TODO: for higher dimension
 
   if (cell->at_boundary(0))
     return 0;
@@ -43,7 +43,7 @@ get_dof_indices(std::vector<types::global_dof_index>        &dof_indices,
                 const hp::FECollection<dim>                 &fe,
                 const unsigned int                           active_fe_index)
 {
-  AssertDimension(dim, 1);
+  AssertDimension(dim, 1); // TODO: for higher dimension/degree
 
   const unsigned int cell_index = cell->active_cell_index();
 
@@ -81,7 +81,7 @@ main()
   hp::QCollection<dim> quadrature;
   quadrature.push_back(QGauss<dim>(fe_degree + 1));
 
-  // Create constraints (TODO: generalize)
+  // Create constraints (TODO: for higher dimension)
   AffineConstraints<double> constraints;
   constraints.constrain_dof_to_zero(0);
   constraints.constrain_dof_to_zero(n_subdivisions);
@@ -94,7 +94,9 @@ main()
     active_fe_indices[cell->active_cell_index()] = get_category(cell);
 
   // Create sparsity pattern and allocate sparse matrix
-  DynamicSparsityPattern dsp(n_subdivisions + 1 /*TODO*/);
+  const unsigned int n_dofs = n_subdivisions + 1; // TODO: for higher dimension
+
+  DynamicSparsityPattern dsp(n_dofs);
 
   std::vector<types::global_dof_index> dof_indices;
   for (const auto &cell : tria.active_cell_iterators())
@@ -113,8 +115,8 @@ main()
   SparseMatrix<double> sparse_matrix;
   sparse_matrix.reinit(sparsity_pattern);
 
-  Vector<double> rhs(n_subdivisions + 1 /*TODO*/);
-  Vector<double> solution(n_subdivisions + 1 /*TODO*/);
+  Vector<double> rhs(n_dofs);
+  Vector<double> solution(n_dofs);
 
   // compute matrix and right-hand side vector
   hp::FEValues<dim> fe_values_collection(mapping,
