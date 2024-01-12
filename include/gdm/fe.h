@@ -111,12 +111,12 @@ generate_fe_collection(
 
   hp::FECollection<dim> fe_collection;
 
-  for (const auto &polynomials : all_polynomials_1D)
+  for (unsigned int j = 0; j < all_polynomials_1D.size(); ++j)
     {
       std::vector<std::vector<Polynomials::Polynomial<double>>>
         aniso_polynomials;
       for (unsigned int i = 0; i < dim; ++i)
-        aniso_polynomials.push_back(polynomials);
+        aniso_polynomials.push_back(all_polynomials_1D[j]);
 
       AnisotropicPolynomials<dim> poly(aniso_polynomials);
 
