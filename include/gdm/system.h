@@ -13,22 +13,6 @@ using namespace dealii;
 
 namespace GDM
 {
-
-  template <int dim>
-  unsigned int
-  get_category(const TriaActiveIterator<CellAccessor<dim>> &cell)
-  {
-    AssertDimension(dim, 1); // TODO: for higher dimension
-
-    if (cell->at_boundary(0))
-      return 0;
-    else if (cell->at_boundary(1))
-      return 2;
-    else
-      return 1;
-  }
-
-
   template <int dim>
   class System;
 
@@ -193,7 +177,8 @@ namespace GDM
   {
   public:
     System(const unsigned int fe_degree, const unsigned int n_components)
-      : fe(generate_fe_collection<dim>(generate_polynomials_1D(fe_degree),
+      : fe_degree(fe_degree)
+      , fe(generate_fe_collection<dim>(generate_polynomials_1D(fe_degree),
                                        n_components))
     {}
 
@@ -215,7 +200,22 @@ namespace GDM
       active_fe_indices.resize(tria.n_active_cells());
 
       for (const auto &cell : tria.active_cell_iterators())
-        active_fe_indices[cell->active_cell_index()] = get_category(cell);
+        {
+          unsigned int cell_index = cell->active_cell_index(); // TODO: better?
+
+          auto indices = index_to_indices<dim>(cell_index, n_subdivisions);
+
+          for (unsigned int d = 0; d < dim; ++d)
+            indices[d] =
+              (indices[d] < (fe_degree / 2) ?
+                 indices[d] :
+                 (indices[d] < (n_subdivisions[d] - fe_degree / 2) ?
+                    (fe_degree / 2) :
+                    (2 + indices[d] + fe_degree / 2 - n_subdivisions[d])));
+
+          active_fe_indices[cell->active_cell_index()] =
+            indices_to_index<dim>(indices, fe_degree);
+        }
     }
 
 
@@ -291,7 +291,8 @@ namespace GDM
 
   private:
     // finite element
-    hp::FECollection<dim> fe;
+    const unsigned int          fe_degree;
+    const hp::FECollection<dim> fe;
 
     // geometry
     std::array<unsigned int, dim> n_subdivisions;

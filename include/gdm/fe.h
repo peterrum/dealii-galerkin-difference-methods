@@ -111,20 +111,62 @@ namespace GDM
 
   template <int dim>
   std::array<unsigned int, dim>
-  index_to_indices(const unsigned int index, const unsigned int N)
+  index_to_indices(const unsigned int                  index,
+                   const std::array<unsigned int, dim> Ns)
   {
     std::array<unsigned int, dim> indices;
 
     if (dim >= 1)
-      indices[0] = index % N;
+      indices[0] = index % Ns[0];
 
     if (dim >= 2)
-      indices[1] = (index / N) % N;
+      indices[1] = (index / Ns[0]) % Ns[1];
 
     if (dim >= 3)
-      indices[2] = index / (N * N);
+      indices[2] = index / (Ns[0] * Ns[1]);
 
     return indices;
+  }
+
+
+  template <int dim>
+  std::array<unsigned int, dim>
+  index_to_indices(const unsigned int index, const unsigned int N)
+  {
+    std::array<unsigned int, dim> Ns;
+    std::fill(Ns.begin(), Ns.end(), N);
+    return index_to_indices<dim>(index, Ns);
+  }
+
+
+  template <int dim>
+  unsigned int
+  indices_to_index(const std::array<unsigned int, dim> indices,
+                   const std::array<unsigned int, dim> Ns)
+  {
+    unsigned int index = 0;
+
+    if (dim >= 1)
+      index += indices[0];
+
+    if (dim >= 2)
+      index += indices[1] * Ns[0];
+
+    if (dim >= 3)
+      index += indices[2] * Ns[0] * Ns[1];
+
+    return index;
+  }
+
+
+  template <int dim>
+  unsigned int
+  indices_to_index(const std::array<unsigned int, dim> index,
+                   const unsigned int                  N)
+  {
+    std::array<unsigned int, dim> Ns;
+    std::fill(Ns.begin(), Ns.end(), N);
+    return indices_to_index<dim>(index, Ns);
   }
 
 
