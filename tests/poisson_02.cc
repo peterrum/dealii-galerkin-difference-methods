@@ -70,8 +70,11 @@ test()
   sparse_matrix.reinit(sparsity_pattern);
 
   // create vectors
-  VectorType rhs(n_dofs);
-  VectorType solution(n_dofs);
+  const auto partitioner =
+    std::make_shared<Utilities::MPI::Partitioner>(n_dofs);
+
+  VectorType rhs(partitioner);
+  VectorType solution(partitioner);
 
   // compute matrix and right-hand side vector
   hp::FEValues<dim> fe_values_collection(mapping,
