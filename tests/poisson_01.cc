@@ -62,9 +62,134 @@ template <int dim>
 class System
 {
 public:
+  class CellAccessor
+  {
+  public:
+    CellAccessor(const System<dim> &system, const unsigned int index)
+      : system(system)
+      , index(index)
+    {}
+
+    unsigned int
+    active_fe_index() const;
+
+    void
+    operator++()
+    {
+      index++;
+    }
+
+    void
+    operator++(int n)
+    {
+      index += n;
+    }
+
+    void
+    operator--()
+    {
+      index--;
+    }
+
+    void
+    operator--(int n)
+    {
+      index -= n;
+    }
+
+    bool
+    operator==(const CellAccessor &other) const
+    {
+      return index == other.index;
+    }
+
+    bool
+    operator!=(const CellAccessor &other) const
+    {
+      return index != other.index;
+    }
+
+    typename Triangulation<dim>::active_cell_iterator
+    dealii_iterator() const;
+
+    void
+    get_dof_indices(std::vector<types::global_dof_index> &dof_indices) const;
+
+  private:
+    const System<dim> &system;
+    unsigned int       index;
+  };
+
+
+  class CellIterator
+  {
+  public:
+    using value_type      = CellAccessor;
+    using difference_type = int;
+
+    CellIterator(CellAccessor accessor)
+      : accessor(accessor)
+    {}
+
+    const CellAccessor *
+    operator->() const
+    {
+      return &accessor;
+    }
+
+    CellIterator
+    operator++()
+    {
+      accessor++;
+
+      return *this;
+    }
+
+    CellIterator
+    operator++(int n)
+    {
+      accessor->operator++(n);
+
+      return *this;
+    }
+
+    CellIterator
+    operator--()
+    {
+      accessor--;
+
+      return *this;
+    }
+
+    CellIterator
+    operator--(int n)
+    {
+      accessor->operator--(n);
+
+      return *this;
+    }
+
+    bool
+    operator==(const CellIterator &other) const
+    {
+      return accessor == other.accessor;
+    }
+
+    bool
+    operator!=(const CellIterator &other) const
+    {
+      return accessor != other.accessor;
+    }
+
+  private:
+    CellAccessor accessor;
+  };
+
+
   System(const unsigned int fe_degree)
     : fe(generate_fe_collection<dim>(generate_polynomials_1D(fe_degree)))
   {}
+
 
   void
   subdivided_hyper_cube(const unsigned int n_subdivisions_1D)
@@ -106,10 +231,13 @@ public:
 
 
   const Triangulation<dim> &
-  get_triangulation() const(return tria;)
+  get_triangulation() const
+  {
+    return tria;
+  }
 
-
-    types::global_dof_index n_dofs() const
+  types::global_dof_index
+  n_dofs() const
   {
     types::global_dof_index n = 1;
 
@@ -135,6 +263,14 @@ public:
         for (const auto i : dof_indices)
           dsp.add_entries(i, dof_indices.begin(), dof_indices.end());
       }
+  }
+
+
+  IteratorRange<CellIterator>
+  active_cell_iterators() const
+  {
+    return {CellIterator(CellAccessor(*this, 0)),
+            CellIterator(CellAccessor(*this, tria.n_cells()))};
   }
 
   // finite element
@@ -209,15 +345,12 @@ test()
                                            update_JxW_values);
 
   std::vector<types::global_dof_index> dof_indices;
-  for (const auto &cell : system.tria.active_cell_iterators())
+  for (const auto &cell : system.active_cell_iterators())
     {
-      const auto active_fe_index =
-        system.active_fe_indices[cell->active_cell_index()];
-
-      fe_values_collection.reinit(cell,
+      fe_values_collection.reinit(cell->dealii_iterator(),
                                   numbers::invalid_unsigned_int,
                                   numbers::invalid_unsigned_int,
-                                  active_fe_index);
+                                  cell->active_fe_index());
 
       const auto &fe_values = fe_values_collection.get_present_fe_values();
 
@@ -225,7 +358,7 @@ test()
 
       // get indices
       dof_indices.resize(dofs_per_cell);
-      get_dof_indices(dof_indices, cell, fe, active_fe_index);
+      cell->get_dof_indices(dof_indices);
 
       // compute element stiffness matrix
       FullMatrix<double> cell_matrix(dofs_per_cell, dofs_per_cell);
@@ -278,15 +411,12 @@ test()
                                              update_JxW_values);
 
     std::vector<types::global_dof_index> dof_indices;
-    for (const auto &cell : system.tria.active_cell_iterators())
+    for (const auto &cell : system.active_cell_iterators())
       {
-        const auto active_fe_index =
-          system.active_fe_indices[cell->active_cell_index()];
-
-        fe_values_collection.reinit(cell,
+        fe_values_collection.reinit(cell->dealii_iterator(),
                                     numbers::invalid_unsigned_int,
                                     numbers::invalid_unsigned_int,
-                                    active_fe_index);
+                                    cell->active_fe_index());
 
         const auto &fe_values = fe_values_collection.get_present_fe_values();
 
@@ -294,7 +424,7 @@ test()
 
         // get indices
         dof_indices.resize(dofs_per_cell);
-        get_dof_indices(dof_indices, cell, fe, active_fe_index);
+        cell->get_dof_indices(dof_indices);
 
         // read vector
         Vector<double> cell_vector_input(dofs_per_cell);
@@ -311,7 +441,8 @@ test()
               fe_values.shape_value(i, q_index) * cell_vector_input[i];
 
         // write
-        cell->as_dof_handler_iterator(dof_handler_output)
+        cell->dealii_iterator()
+          ->as_dof_handler_iterator(dof_handler_output)
           ->set_dof_values(cell_vector_output, solution_output);
       }
 
