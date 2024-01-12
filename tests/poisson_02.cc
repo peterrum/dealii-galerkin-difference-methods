@@ -1,5 +1,6 @@
 // Test Poisson problem.
 
+#include <deal.II/base/conditional_ostream.h>
 #include <deal.II/base/mpi.h>
 #include <deal.II/base/quadrature_lib.h>
 
@@ -25,6 +26,10 @@ template <int dim>
 void
 test()
 {
+  ConditionalOStream pcout(std::cout,
+                           Utilities::MPI::this_mpi_process(MPI_COMM_WORLD) ==
+                             0);
+
   const unsigned int n_subdivisions   = 20;
   const unsigned int fe_degree        = 3;
   const unsigned int n_components     = 1;
@@ -34,7 +39,7 @@ test()
   using VectorType = LinearAlgebra::distributed::Vector<Number>;
 
   // Create GDM system
-  GDM::System<dim> system(fe_degree, n_components);
+  GDM::System<dim> system(MPI_COMM_WORLD, fe_degree, n_components);
 
   // Create mesh
   system.subdivided_hyper_cube(n_subdivisions);
@@ -59,8 +64,6 @@ test()
   system.categorize();
 
   // Create sparsity pattern and allocate sparse matrix
-  const unsigned int n_dofs = system.n_dofs();
-
   TrilinosWrappers::SparsityPattern sparsity_pattern(
     system.locally_owned_dofs(), MPI_COMM_WORLD);
   system.create_sparsity_pattern(sparsity_pattern);
@@ -71,7 +74,9 @@ test()
 
   // create vectors
   const auto partitioner =
-    std::make_shared<Utilities::MPI::Partitioner>(n_dofs);
+    std::make_shared<Utilities::MPI::Partitioner>(system.locally_owned_dofs(),
+                                                  system.locally_active_dofs(),
+                                                  MPI_COMM_WORLD);
 
   VectorType rhs(partitioner);
   VectorType solution(partitioner);
@@ -122,6 +127,9 @@ test()
         cell_matrix, cell_vector, dof_indices, sparse_matrix, rhs);
     }
 
+  sparse_matrix.compress(VectorOperation::values::add);
+  rhs.compress(VectorOperation::values::add);
+
   // choose preconditioner
   TrilinosWrappers::PreconditionAMG preconditioner;
   preconditioner.initialize(sparse_matrix);
@@ -130,15 +138,26 @@ test()
   ReductionControl     solver_control(100, 1.e-10, 1.e-4);
   SolverCG<VectorType> solver(solver_control);
   solver.solve(sparse_matrix, solution, rhs, preconditioner);
-  std::cout << solver_control.last_step() << std::endl << std::endl;
+  pcout << solver_control.last_step() << std::endl << std::endl;
 
   // output result
-  for (const auto &value : solution)
-    std::cout << value << std::endl;
-  std::cout << std::endl;
+  const unsigned int my_rank = Utilities::MPI::this_mpi_process(MPI_COMM_WORLD);
+  IndexSet           is_all(system.n_dofs());
+  is_all.add_range(0, system.n_dofs());
+  VectorType solution_root(system.locally_owned_dofs(), is_all, MPI_COMM_WORLD);
+  solution_root = solution;
+  solution_root.update_ghost_values();
+
+  if (my_rank == 0)
+    {
+      for (unsigned int i = 0; i < solution_root.size(); ++i)
+        pcout << solution_root.begin()[i] << std::endl;
+      pcout << std::endl;
+    }
 
   // output result -> Paraview
   GDM::DataOut<dim> data_out(system, mapping, fe_degree_output);
+  solution.update_ghost_values();
   data_out.add_data_vector(solution, "solution");
   data_out.build_patches();
 

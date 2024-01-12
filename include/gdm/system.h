@@ -1,5 +1,9 @@
 #pragma once
 
+#include <deal.II/base/mpi.h>
+
+#include <deal.II/distributed/shared_tria.h>
+
 #include <deal.II/grid/grid_generator.h>
 #include <deal.II/grid/tria.h>
 
@@ -80,14 +84,15 @@ namespace GDM
       dealii_iterator() const
       {
         return typename Triangulation<dim>::active_cell_iterator(
-          &system.get_triangulation(), 0, _index);
+          &system.get_triangulation(), 0, system.active_cell_index_map[_index]);
       }
 
       void
       get_dof_indices(std::vector<types::global_dof_index> &dof_indices) const
       {
         const auto indices =
-          index_to_indices<dim>(_index, system.n_subdivisions);
+          index_to_indices<dim>(system.active_cell_index_map[_index],
+                                system.n_subdivisions);
 
         std::array<unsigned int, dim> offset_reference;
         for (unsigned int d = 0; d < dim; ++d)
@@ -205,7 +210,17 @@ namespace GDM
   {
   public:
     System(const unsigned int fe_degree, const unsigned int n_components)
-      : fe_degree(fe_degree)
+      : comm(MPI_COMM_NULL)
+      , fe_degree(fe_degree)
+      , fe(generate_fe_collection<dim>(generate_polynomials_1D(fe_degree),
+                                       n_components))
+    {}
+
+    System(const MPI_Comm     comm,
+           const unsigned int fe_degree,
+           const unsigned int n_components)
+      : comm(comm)
+      , fe_degree(fe_degree)
       , fe(generate_fe_collection<dim>(generate_polynomials_1D(fe_degree),
                                        n_components))
     {}
@@ -218,20 +233,100 @@ namespace GDM
                 this->n_subdivisions.end(),
                 n_subdivisions_1D);
 
-      tria = std::make_unique<Triangulation<dim>>();
+      if (comm == MPI_COMM_NULL)
+        {
+          tria = std::make_shared<Triangulation<dim>>();
+
+          unsigned int dofs = 1;
+          for (unsigned int d = 0; d < dim; ++d)
+            dofs *= n_subdivisions[d] + 1;
+
+          IndexSet is_local(dofs);
+          is_local.add_range(0, dofs);
+          this->is_local = is_local;
+        }
+      else
+        {
+          const unsigned int n_procs = Utilities::MPI::n_mpi_processes(comm);
+          const unsigned int my_rank = Utilities::MPI::this_mpi_process(comm);
+
+          unsigned int face_dofs = 1;
+          for (unsigned int d = 0; d < dim - 1; ++d)
+            face_dofs *= n_subdivisions[d] + 1;
+
+          IndexSet is_local(face_dofs * (n_subdivisions[dim - 1] + 1));
+
+          const unsigned int stride =
+            (n_subdivisions[dim - 1] + n_procs - 1) / n_procs;
+          unsigned int range_start =
+            (my_rank == 0) ? 0 : ((stride * my_rank) + 1);
+          unsigned int range_end = stride * (my_rank + 1) + 1;
+
+          is_local.add_range(
+            face_dofs * std::min(range_start, n_subdivisions[dim - 1] + 1),
+            face_dofs * std::min(range_end, n_subdivisions[dim - 1] + 1));
+
+          this->is_local = is_local;
+
+          auto temp = std::make_shared<parallel::shared::Triangulation<dim>>(
+            comm,
+            Triangulation<dim>::none,
+            true,
+            parallel::shared::Triangulation<dim>::partition_custom_signal);
+
+          temp->signals.create.connect([&, stride]() {
+            for (const auto &cell : tria->active_cell_iterators())
+              {
+                unsigned int cell_index = cell->active_cell_index();
+
+                auto indices =
+                  index_to_indices<dim>(cell_index, n_subdivisions);
+
+                cell->set_subdomain_id(indices[dim - 1] / stride);
+              }
+          });
+
+          tria = temp;
+        }
 
       GridGenerator::subdivided_hyper_cube(*tria, n_subdivisions_1D);
+
+      for (const auto &cell : tria->active_cell_iterators())
+        if (cell->is_locally_owned())
+          active_cell_index_map.push_back(cell->active_cell_index());
+
+      if (comm == MPI_COMM_NULL)
+        {
+          this->is_ghost = this->is_local;
+        }
+      else
+        {
+          IndexSet is_ghost = this->is_local;
+
+          std::vector<types::global_dof_index> dof_indices;
+          for (const auto &cell : active_cell_iterators())
+            {
+              dof_indices.resize(fe[0 /*TODO*/].n_dofs_per_cell());
+              cell->get_dof_indices(dof_indices);
+
+              for (const auto i : dof_indices)
+                if (is_local.is_element(i) == false)
+                  is_ghost.add_index(i);
+            }
+
+          this->is_ghost = is_ghost;
+        }
     }
 
 
     void
     categorize()
     {
-      active_fe_indices.resize(tria->n_active_cells());
+      active_fe_indices.resize(active_cell_index_map.size());
 
-      for (const auto &cell : tria->active_cell_iterators())
+      for (unsigned int i = 0; i < active_cell_index_map.size(); ++i)
         {
-          unsigned int cell_index = cell->active_cell_index(); // TODO: better?
+          unsigned int cell_index = active_cell_index_map[i];
 
           auto indices = index_to_indices<dim>(cell_index, n_subdivisions);
 
@@ -243,8 +338,7 @@ namespace GDM
                     (fe_degree / 2) :
                     (2 + indices[d] + fe_degree / 2 - n_subdivisions[d])));
 
-          active_fe_indices[cell->active_cell_index()] =
-            indices_to_index<dim>(indices, fe_degree);
+          active_fe_indices[i] = indices_to_index<dim>(indices, fe_degree);
         }
     }
 
@@ -322,27 +416,38 @@ namespace GDM
     {
       return {GDM::internal::CellIterator<dim>(
                 GDM::internal::CellAccessor<dim>(*this, 0)),
-              GDM::internal::CellIterator<dim>(
-                GDM::internal::CellAccessor<dim>(*this, tria->n_cells()))};
+              GDM::internal::CellIterator<dim>(GDM::internal::CellAccessor<dim>(
+                *this, active_cell_index_map.size()))};
     }
 
     IndexSet
     locally_owned_dofs()
     {
-      IndexSet is(n_dofs());
-      is.add_range(0, n_dofs());
+      return is_local;
+    }
 
-      return is;
+    IndexSet
+    locally_active_dofs()
+    {
+      return is_ghost;
     }
 
   private:
+    const MPI_Comm comm;
+
     // finite element
     const unsigned int          fe_degree;
     const hp::FECollection<dim> fe;
 
     // geometry
     std::array<unsigned int, dim>       n_subdivisions;
-    std::unique_ptr<Triangulation<dim>> tria;
+    std::shared_ptr<Triangulation<dim>> tria;
+
+    //
+    IndexSet is_local;
+    IndexSet is_ghost;
+
+    std::vector<unsigned int> active_cell_index_map;
 
     // category
     std::vector<unsigned int> active_fe_indices;
