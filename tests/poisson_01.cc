@@ -57,10 +57,11 @@ get_dof_indices(std::vector<types::global_dof_index>        &dof_indices,
 }
 
 
-int
-main()
+
+template <int dim>
+void
+test()
 {
-  const unsigned int dim              = 1;
   const unsigned int n_subdivisions   = 20;
   const unsigned int fe_degree        = 3;
   const unsigned int fe_degree_output = 2;
@@ -237,4 +238,11 @@ main()
     std::ofstream file("solution.vtu");
     data_out.write_vtu(file);
   }
+}
+
+
+int
+main()
+{
+  test<2>;
 }
