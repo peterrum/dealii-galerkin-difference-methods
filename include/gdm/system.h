@@ -192,8 +192,9 @@ namespace GDM
   class System
   {
   public:
-    System(const unsigned int fe_degree)
-      : fe(generate_fe_collection<dim>(generate_polynomials_1D(fe_degree)))
+    System(const unsigned int fe_degree, const unsigned int n_components)
+      : fe(generate_fe_collection<dim>(generate_polynomials_1D(fe_degree),
+                                       n_components))
     {}
 
 

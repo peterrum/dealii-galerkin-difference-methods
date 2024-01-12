@@ -4,6 +4,7 @@
 #include <deal.II/base/tensor_product_polynomials.h>
 
 #include <deal.II/fe/fe_q_base.h>
+#include <deal.II/fe/fe_system.h>
 
 #include <deal.II/hp/fe_collection.h>
 
@@ -131,7 +132,8 @@ namespace GDM
   hp::FECollection<dim>
   generate_fe_collection(
     const std::vector<std::vector<Polynomials::Polynomial<double>>>
-      &all_polynomials_1D)
+                      &all_polynomials_1D,
+    const unsigned int n_components)
   {
     hp::FECollection<dim> fe_collection;
 
@@ -143,8 +145,9 @@ namespace GDM
         for (const auto d : index_to_indices<dim>(p, all_polynomials_1D.size()))
           aniso_polynomials.push_back(all_polynomials_1D[d]);
 
-        fe_collection.push_back(
-          FE_GDM<dim>(AnisotropicPolynomials<dim>(aniso_polynomials)));
+        fe_collection.push_back(FESystem<dim>(
+          FE_GDM<dim>(AnisotropicPolynomials<dim>(aniso_polynomials)),
+          n_components));
       }
 
     return fe_collection;

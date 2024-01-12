@@ -27,10 +27,11 @@ test()
 {
   const unsigned int n_subdivisions   = 20;
   const unsigned int fe_degree        = 3;
+  const unsigned int n_components     = 1;
   const unsigned int fe_degree_output = 2;
 
   // Create GDM system
-  GDM::System<dim> system(fe_degree);
+  GDM::System<dim> system(fe_degree, n_components);
 
   // Create mesh
   system.subdivided_hyper_cube(n_subdivisions);
