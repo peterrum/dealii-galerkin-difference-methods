@@ -244,5 +244,5 @@ test()
 int
 main()
 {
-  test<2>;
+  test<1>();
 }
