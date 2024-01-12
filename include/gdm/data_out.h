@@ -1,5 +1,7 @@
 #pragma once
 
+#include <deal.II/fe/fe_dgq.h>
+
 #include <deal.II/numerics/data_out.h>
 
 #include <gdm/system.h>

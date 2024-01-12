@@ -280,6 +280,15 @@ namespace GDM
                 GDM::internal::CellAccessor<dim>(*this, tria.n_cells()))};
     }
 
+    IndexSet
+    locally_owned_dofs()
+    {
+      IndexSet is(n_dofs());
+      is.add_range(0, n_dofs());
+
+      return is;
+    }
+
     // finite element
     hp::FECollection<dim> fe;
 

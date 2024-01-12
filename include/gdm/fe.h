@@ -133,7 +133,7 @@ namespace GDM
   generate_fe_collection(
     const std::vector<std::vector<Polynomials::Polynomial<double>>>
                       &all_polynomials_1D,
-    const unsigned int n_components)
+    const unsigned int n_components = 1)
   {
     hp::FECollection<dim> fe_collection;
 

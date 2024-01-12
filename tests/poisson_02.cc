@@ -1,5 +1,6 @@
 // Test Poisson problem.
 
+#include <deal.II/base/mpi.h>
 #include <deal.II/base/quadrature_lib.h>
 
 #include <deal.II/fe/fe_values.h>
@@ -7,10 +8,11 @@
 
 #include <deal.II/hp/fe_values.h>
 
-#include <deal.II/lac/dynamic_sparsity_pattern.h>
 #include <deal.II/lac/precondition.h>
 #include <deal.II/lac/solver_cg.h>
-#include <deal.II/lac/sparse_matrix.h>
+#include <deal.II/lac/trilinos_precondition.h>
+#include <deal.II/lac/trilinos_sparse_matrix.h>
+#include <deal.II/lac/trilinos_sparsity_pattern.h>
 
 #include <gdm/data_out.h>
 #include <gdm/system.h>
@@ -29,7 +31,7 @@ test()
   const unsigned int fe_degree_output = 2;
 
   using Number     = double;
-  using VectorType = Vector<Number>;
+  using VectorType = LinearAlgebra::distributed::Vector<Number>;
 
   // Create GDM system
   GDM::System<dim> system(fe_degree, n_components);
@@ -59,13 +61,12 @@ test()
   // Create sparsity pattern and allocate sparse matrix
   const unsigned int n_dofs = system.n_dofs();
 
-  DynamicSparsityPattern dsp(n_dofs);
-  system.create_sparsity_pattern(dsp);
+  TrilinosWrappers::SparsityPattern sparsity_pattern(
+    system.locally_owned_dofs(), MPI_COMM_WORLD);
+  system.create_sparsity_pattern(sparsity_pattern);
+  sparsity_pattern.compress();
 
-  SparsityPattern sparsity_pattern;
-  sparsity_pattern.copy_from(dsp);
-
-  SparseMatrix<Number> sparse_matrix;
+  TrilinosWrappers::SparseMatrix sparse_matrix;
   sparse_matrix.reinit(sparsity_pattern);
 
   // create vectors
@@ -119,7 +120,8 @@ test()
     }
 
   // choose preconditioner
-  PreconditionIdentity preconditioner;
+  TrilinosWrappers::PreconditionAMG preconditioner;
+  preconditioner.initialize(sparse_matrix);
 
   // solve problem
   ReductionControl     solver_control(100, 1.e-10, 1.e-4);
@@ -142,7 +144,9 @@ test()
 
 
 int
-main()
+main(int argc, char **argv)
 {
+  Utilities::MPI::MPI_InitFinalize mpi(argc, argv, 1);
+
   test<1>();
 }
