@@ -114,7 +114,7 @@ index_to_indices(const unsigned int index, const unsigned int N)
     indices[1] = (index / N) % N;
 
   if (dim >= 3)
-    indices[2] = index % (N * N);
+    indices[2] = index / (N * N);
 
   return indices;
 }

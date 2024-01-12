@@ -30,6 +30,7 @@ test()
         }
       std::cout << std::endl;
     }
+  std::cout << std::endl << std::endl << std::endl;
 }
 
 
@@ -37,4 +38,6 @@ int
 main()
 {
   test<1>();
+  test<2>();
+  test<3>();
 }
