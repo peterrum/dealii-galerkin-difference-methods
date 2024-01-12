@@ -289,6 +289,7 @@ namespace GDM
       return is;
     }
 
+  private:
     // finite element
     hp::FECollection<dim> fe;
 
@@ -299,7 +300,6 @@ namespace GDM
     // category
     std::vector<unsigned int> active_fe_indices;
 
-  private:
     friend GDM::internal::CellAccessor<dim>;
   };
 
