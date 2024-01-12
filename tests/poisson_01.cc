@@ -59,6 +59,100 @@ get_dof_indices(std::vector<types::global_dof_index>        &dof_indices,
 
 
 template <int dim>
+class System
+{
+public:
+  System(const unsigned int fe_degree)
+    : fe(generate_fe_collection<dim>(generate_polynomials_1D(fe_degree)))
+  {}
+
+  void
+  subdivided_hyper_cube(const unsigned int n_subdivisions_1D)
+  {
+    std::fill(this->n_subdivisions.begin(),
+              this->n_subdivisions.end(),
+              n_subdivisions_1D);
+
+    GridGenerator::subdivided_hyper_cube(tria, n_subdivisions_1D);
+  }
+
+
+  void
+  categorize()
+  {
+    active_fe_indices.resize(tria.n_active_cells());
+
+    for (const auto &cell : tria.active_cell_iterators())
+      active_fe_indices[cell->active_cell_index()] = get_category(cell);
+  }
+
+
+  template <typename Number>
+  void
+  fill_constraints(AffineConstraints<Number> &constraints) const
+  {
+    AssertDimension(dim, 1); // TODO: higher dimensions
+
+    constraints.constrain_dof_to_zero(0);
+    constraints.constrain_dof_to_zero(n_subdivisions[0]);
+  }
+
+
+  const hp::FECollection<dim> &
+  get_fe() const
+  {
+    return fe;
+  }
+
+
+  const Triangulation<dim> &
+  get_triangulation() const(return tria;)
+
+
+    types::global_dof_index n_dofs() const
+  {
+    types::global_dof_index n = 1;
+
+    for (unsigned int d = 0; d < dim; ++d)
+      n *= n_subdivisions[d] + 1;
+
+    return n;
+  }
+
+
+  template <typename SparsityPatternType>
+  void
+  create_sparsity_pattern(SparsityPatternType &dsp) const
+  {
+    std::vector<types::global_dof_index> dof_indices;
+    for (const auto &cell : tria.active_cell_iterators())
+      {
+        const auto active_fe_index =
+          active_fe_indices[cell->active_cell_index()];
+        dof_indices.resize(fe[active_fe_index].n_dofs_per_cell());
+        get_dof_indices(dof_indices, cell, fe, active_fe_index);
+
+        for (const auto i : dof_indices)
+          dsp.add_entries(i, dof_indices.begin(), dof_indices.end());
+      }
+  }
+
+  // finite element
+  hp::FECollection<dim> fe;
+
+  // geometry
+  std::array<unsigned int, dim> n_subdivisions;
+  Triangulation<dim>            tria;
+
+  // category
+  std::vector<unsigned int> active_fe_indices;
+
+private:
+};
+
+
+
+template <int dim>
 void
 test()
 {
@@ -66,13 +160,14 @@ test()
   const unsigned int fe_degree        = 3;
   const unsigned int fe_degree_output = 2;
 
+  // Create GDM system
+  System<dim> system(fe_degree);
+
   // Create mesh
-  Triangulation<dim> tria;
-  GridGenerator::subdivided_hyper_cube(tria, n_subdivisions);
+  system.subdivided_hyper_cube(n_subdivisions);
 
   // Create finite elements
-  const auto all_polynomials = generate_polynomials_1D(fe_degree);
-  const auto fe              = generate_fe_collection<dim>(all_polynomials);
+  const auto &fe = system.get_fe();
 
   // Create mapping
   hp::MappingCollection<dim> mapping;
@@ -82,33 +177,19 @@ test()
   hp::QCollection<dim> quadrature;
   quadrature.push_back(QGauss<dim>(fe_degree + 1));
 
-  // Create constraints (TODO: for higher dimension)
+  // Create constraints
   AffineConstraints<double> constraints;
-  constraints.constrain_dof_to_zero(0);
-  constraints.constrain_dof_to_zero(n_subdivisions);
+  system.fill_constraints(constraints);
   constraints.close();
 
   // Categorize cells
-  std::vector<unsigned int> active_fe_indices(tria.n_active_cells());
-
-  for (const auto &cell : tria.active_cell_iterators())
-    active_fe_indices[cell->active_cell_index()] = get_category(cell);
+  system.categorize();
 
   // Create sparsity pattern and allocate sparse matrix
-  const unsigned int n_dofs = n_subdivisions + 1; // TODO: for higher dimension
+  const unsigned int n_dofs = system.n_dofs();
 
   DynamicSparsityPattern dsp(n_dofs);
-
-  std::vector<types::global_dof_index> dof_indices;
-  for (const auto &cell : tria.active_cell_iterators())
-    {
-      const auto active_fe_index = active_fe_indices[cell->active_cell_index()];
-      dof_indices.resize(fe[active_fe_index].n_dofs_per_cell());
-      get_dof_indices(dof_indices, cell, fe, active_fe_index);
-
-      for (const auto i : dof_indices)
-        dsp.add_entries(i, dof_indices.begin(), dof_indices.end());
-    }
+  system.create_sparsity_pattern(dsp);
 
   SparsityPattern sparsity_pattern;
   sparsity_pattern.copy_from(dsp);
@@ -116,6 +197,7 @@ test()
   SparseMatrix<double> sparse_matrix;
   sparse_matrix.reinit(sparsity_pattern);
 
+  // create vectors
   Vector<double> rhs(n_dofs);
   Vector<double> solution(n_dofs);
 
@@ -126,9 +208,11 @@ test()
                                          update_gradients | update_values |
                                            update_JxW_values);
 
-  for (const auto &cell : tria.active_cell_iterators())
+  std::vector<types::global_dof_index> dof_indices;
+  for (const auto &cell : system.tria.active_cell_iterators())
     {
-      const auto active_fe_index = active_fe_indices[cell->active_cell_index()];
+      const auto active_fe_index =
+        system.active_fe_indices[cell->active_cell_index()];
 
       fe_values_collection.reinit(cell,
                                   numbers::invalid_unsigned_int,
@@ -179,7 +263,7 @@ test()
   // output result -> Paraview
   {
     FE_DGQ<dim>     fe_output(fe_degree_output);
-    DoFHandler<dim> dof_handler_output(tria);
+    DoFHandler<dim> dof_handler_output(system.get_triangulation());
     dof_handler_output.distribute_dofs(fe_output);
 
     Vector<double> solution_output(dof_handler_output.n_dofs());
@@ -193,10 +277,11 @@ test()
                                            update_gradients | update_values |
                                              update_JxW_values);
 
-    for (const auto &cell : tria.active_cell_iterators())
+    std::vector<types::global_dof_index> dof_indices;
+    for (const auto &cell : system.tria.active_cell_iterators())
       {
         const auto active_fe_index =
-          active_fe_indices[cell->active_cell_index()];
+          system.active_fe_indices[cell->active_cell_index()];
 
         fe_values_collection.reinit(cell,
                                     numbers::invalid_unsigned_int,
