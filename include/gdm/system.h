@@ -223,10 +223,26 @@ namespace GDM
     void
     fill_constraints(AffineConstraints<Number> &constraints) const
     {
-      AssertDimension(dim, 1); // TODO: higher dimensions
+      for (unsigned int surface = 0; surface < 2 * dim; ++surface)
+        {
+          const unsigned int d = surface / 2; // direction
+          const unsigned int s = surface % 2; // left or right surface
 
-      constraints.constrain_dof_to_zero(0);
-      constraints.constrain_dof_to_zero(n_subdivisions[0]);
+          unsigned int n0 = 1;
+          for (unsigned int i = d + 1; i < dim; ++i)
+            n0 *= n_subdivisions[i] + 1;
+
+          unsigned int n1 = 1;
+          for (unsigned int i = d + 1; i < d; ++i)
+            n1 *= n_subdivisions[i] + 1;
+
+          unsigned int n2 = n1 * n_subdivisions[d];
+
+          for (unsigned int i = 0; i < n0; ++i)
+            for (unsigned int j = 0; j < n1; ++j)
+              constraints.constrain_dof_to_zero(
+                i * n2 + (s == 0 ? 0 : n_subdivisions[d]) * n1 + j);
+        }
     }
 
 
