@@ -79,9 +79,8 @@ namespace GDM
       typename Triangulation<dim>::active_cell_iterator
       dealii_iterator() const
       {
-        return typename Triangulation<dim>::active_cell_iterator(&system.tria,
-                                                                 0,
-                                                                 _index);
+        return typename Triangulation<dim>::active_cell_iterator(
+          &system.get_triangulation(), 0, _index);
       }
 
       void
@@ -219,16 +218,18 @@ namespace GDM
                 this->n_subdivisions.end(),
                 n_subdivisions_1D);
 
-      GridGenerator::subdivided_hyper_cube(tria, n_subdivisions_1D);
+      tria = std::make_unique<Triangulation<dim>>();
+
+      GridGenerator::subdivided_hyper_cube(*tria, n_subdivisions_1D);
     }
 
 
     void
     categorize()
     {
-      active_fe_indices.resize(tria.n_active_cells());
+      active_fe_indices.resize(tria->n_active_cells());
 
-      for (const auto &cell : tria.active_cell_iterators())
+      for (const auto &cell : tria->active_cell_iterators())
         {
           unsigned int cell_index = cell->active_cell_index(); // TODO: better?
 
@@ -285,7 +286,7 @@ namespace GDM
     const Triangulation<dim> &
     get_triangulation() const
     {
-      return tria;
+      return *tria;
     }
 
     types::global_dof_index
@@ -322,7 +323,7 @@ namespace GDM
       return {GDM::internal::CellIterator<dim>(
                 GDM::internal::CellAccessor<dim>(*this, 0)),
               GDM::internal::CellIterator<dim>(
-                GDM::internal::CellAccessor<dim>(*this, tria.n_cells()))};
+                GDM::internal::CellAccessor<dim>(*this, tria->n_cells()))};
     }
 
     IndexSet
@@ -340,8 +341,8 @@ namespace GDM
     const hp::FECollection<dim> fe;
 
     // geometry
-    std::array<unsigned int, dim> n_subdivisions;
-    Triangulation<dim>            tria;
+    std::array<unsigned int, dim>       n_subdivisions;
+    std::unique_ptr<Triangulation<dim>> tria;
 
     // category
     std::vector<unsigned int> active_fe_indices;
