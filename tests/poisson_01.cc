@@ -13,8 +13,7 @@
 #include <deal.II/lac/solver_cg.h>
 #include <deal.II/lac/sparse_matrix.h>
 
-#include <deal.II/numerics/data_out.h>
-
+#include <gdm/data_out.h>
 #include <gdm/system.h>
 
 #include <fstream>
@@ -128,66 +127,12 @@ test()
     std::cout << value << std::endl;
 
   // output result -> Paraview
-  {
-    FE_DGQ<dim>     fe_output(fe_degree_output);
-    DoFHandler<dim> dof_handler_output(system.get_triangulation());
-    dof_handler_output.distribute_dofs(fe_output);
+  GDM::DataOut<dim> data_out(system, mapping, fe_degree_output);
+  data_out.add_data_vector(solution, "solution");
+  data_out.build_patches();
 
-    Vector<double> solution_output(dof_handler_output.n_dofs());
-
-    hp::QCollection<dim> quadrature;
-    quadrature.push_back(Quadrature<dim>(fe_output.get_unit_support_points()));
-
-    hp::FEValues<dim> fe_values_collection(mapping,
-                                           fe,
-                                           quadrature,
-                                           update_gradients | update_values |
-                                             update_JxW_values);
-
-    std::vector<types::global_dof_index> dof_indices;
-    for (const auto &cell : system.active_cell_iterators())
-      {
-        fe_values_collection.reinit(cell->dealii_iterator(),
-                                    numbers::invalid_unsigned_int,
-                                    numbers::invalid_unsigned_int,
-                                    cell->active_fe_index());
-
-        const auto &fe_values = fe_values_collection.get_present_fe_values();
-
-        const unsigned int dofs_per_cell = fe_values.get_fe().n_dofs_per_cell();
-
-        // get indices
-        dof_indices.resize(dofs_per_cell);
-        cell->get_dof_indices(dof_indices);
-
-        // read vector
-        Vector<double> cell_vector_input(dofs_per_cell);
-
-        for (const unsigned int i : fe_values.dof_indices())
-          cell_vector_input[i] = solution[dof_indices[i]];
-
-        // perform interpolation
-        Vector<double> cell_vector_output(fe_output.n_dofs_per_cell());
-
-        for (const unsigned int q_index : fe_values.quadrature_point_indices())
-          for (const unsigned int i : fe_values.dof_indices())
-            cell_vector_output(q_index) +=
-              fe_values.shape_value(i, q_index) * cell_vector_input[i];
-
-        // write
-        cell->dealii_iterator()
-          ->as_dof_handler_iterator(dof_handler_output)
-          ->set_dof_values(cell_vector_output, solution_output);
-      }
-
-    DataOut<dim> data_out;
-    data_out.attach_dof_handler(dof_handler_output);
-    data_out.add_data_vector(solution_output, "solution");
-    data_out.build_patches(mapping, fe_degree_output);
-
-    std::ofstream file("solution.vtu");
-    data_out.write_vtu(file);
-  }
+  std::ofstream file("solution.vtu");
+  data_out.write_vtu(file);
 }
 
 
