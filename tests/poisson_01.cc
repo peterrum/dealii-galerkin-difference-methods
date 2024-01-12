@@ -37,107 +37,115 @@ get_category(const TriaActiveIterator<CellAccessor<dim>> &cell)
 
 
 template <int dim>
-void
-get_dof_indices(std::vector<types::global_dof_index>        &dof_indices,
-                const TriaActiveIterator<CellAccessor<dim>> &cell,
-                const hp::FECollection<dim>                 &fe,
-                const unsigned int                           active_fe_index)
+class System;
+
+
+namespace internal
 {
-  AssertDimension(dim, 1); // TODO: for higher dimension/degree
-
-  const unsigned int cell_index = cell->active_cell_index();
-
-  const int offset =
-    (active_fe_index == 0) ? 0 : ((active_fe_index == 1) ? -1 : -2);
-
-  for (unsigned int i = 0; i < fe[active_fe_index].n_dofs_per_cell(); ++i)
-    {
-      dof_indices[i] = cell_index + i + offset;
-    }
-}
-
-
-
-template <int dim>
-class System
-{
-public:
+  template <int dim>
   class CellAccessor
   {
   public:
-    CellAccessor(const System<dim> &system, const unsigned int index)
+    CellAccessor(const System<dim> &system, const unsigned int _index)
       : system(system)
-      , index(index)
+      , _index(_index)
     {}
 
     unsigned int
-    active_fe_index() const;
+    index() const
+    {
+      return _index;
+    }
+
+    unsigned int
+    active_fe_index() const
+    {
+      return system.active_fe_indices[_index];
+    }
 
     void
     operator++()
     {
-      index++;
+      _index++;
     }
 
     void
-    operator++(int n)
+    operator++(int)
     {
-      index += n;
+      _index++;
     }
 
     void
     operator--()
     {
-      index--;
+      _index--;
     }
 
     void
-    operator--(int n)
+    operator--(int)
     {
-      index -= n;
+      _index--;
     }
 
     bool
     operator==(const CellAccessor &other) const
     {
-      return index == other.index;
+      return _index == other._index;
     }
 
     bool
     operator!=(const CellAccessor &other) const
     {
-      return index != other.index;
+      return _index != other._index;
     }
 
     typename Triangulation<dim>::active_cell_iterator
-    dealii_iterator() const;
+    dealii_iterator() const
+    {
+      return typename Triangulation<dim>::active_cell_iterator(&system.tria,
+                                                               0,
+                                                               _index);
+    }
 
     void
-    get_dof_indices(std::vector<types::global_dof_index> &dof_indices) const;
+    get_dof_indices(std::vector<types::global_dof_index> &dof_indices) const
+    {
+      const int offset =
+        (active_fe_index() == 0) ? 0 : ((active_fe_index() == 1) ? -1 : -2);
+
+      for (unsigned int i = 0;
+           i < system.fe[active_fe_index()].n_dofs_per_cell();
+           ++i)
+        {
+          dof_indices[i] = _index + i + offset;
+        }
+    }
 
   private:
     const System<dim> &system;
-    unsigned int       index;
+    unsigned int       _index;
   };
 
 
+
+  template <int dim>
   class CellIterator
   {
   public:
-    using value_type      = CellAccessor;
+    using value_type      = CellAccessor<dim>;
     using difference_type = int;
 
-    CellIterator(CellAccessor accessor)
+    CellIterator(CellAccessor<dim> accessor)
       : accessor(accessor)
     {}
 
-    const CellAccessor *
+    const CellAccessor<dim> *
     operator->() const
     {
       return &accessor;
     }
 
-    CellIterator
+    CellIterator &
     operator++()
     {
       accessor++;
@@ -145,7 +153,7 @@ public:
       return *this;
     }
 
-    CellIterator
+    CellIterator &
     operator++(int n)
     {
       accessor->operator++(n);
@@ -153,7 +161,7 @@ public:
       return *this;
     }
 
-    CellIterator
+    CellIterator &
     operator--()
     {
       accessor--;
@@ -161,7 +169,7 @@ public:
       return *this;
     }
 
-    CellIterator
+    CellIterator &
     operator--(int n)
     {
       accessor->operator--(n);
@@ -182,10 +190,15 @@ public:
     }
 
   private:
-    CellAccessor accessor;
+    CellAccessor<dim> accessor;
   };
+} // namespace internal
 
 
+template <int dim>
+class System
+{
+public:
   System(const unsigned int fe_degree)
     : fe(generate_fe_collection<dim>(generate_polynomials_1D(fe_degree)))
   {}
@@ -253,12 +266,10 @@ public:
   create_sparsity_pattern(SparsityPatternType &dsp) const
   {
     std::vector<types::global_dof_index> dof_indices;
-    for (const auto &cell : tria.active_cell_iterators())
+    for (const auto &cell : active_cell_iterators())
       {
-        const auto active_fe_index =
-          active_fe_indices[cell->active_cell_index()];
-        dof_indices.resize(fe[active_fe_index].n_dofs_per_cell());
-        get_dof_indices(dof_indices, cell, fe, active_fe_index);
+        dof_indices.resize(fe[cell->active_fe_index()].n_dofs_per_cell());
+        cell->get_dof_indices(dof_indices);
 
         for (const auto i : dof_indices)
           dsp.add_entries(i, dof_indices.begin(), dof_indices.end());
@@ -266,11 +277,13 @@ public:
   }
 
 
-  IteratorRange<CellIterator>
+  IteratorRange<::internal::CellIterator<dim>>
   active_cell_iterators() const
   {
-    return {CellIterator(CellAccessor(*this, 0)),
-            CellIterator(CellAccessor(*this, tria.n_cells()))};
+    return {::internal::CellIterator<dim>(
+              ::internal::CellAccessor<dim>(*this, 0)),
+            ::internal::CellIterator<dim>(
+              ::internal::CellAccessor<dim>(*this, tria.n_cells()))};
   }
 
   // finite element
@@ -284,6 +297,7 @@ public:
   std::vector<unsigned int> active_fe_indices;
 
 private:
+  friend ::internal::CellAccessor<dim>;
 };
 
 
