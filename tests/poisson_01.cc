@@ -1,4 +1,3 @@
-
 #include <deal.II/base/quadrature_lib.h>
 
 #include <deal.II/fe/fe_dgq.h>
@@ -31,7 +30,7 @@ test()
   const unsigned int fe_degree_output = 2;
 
   // Create GDM system
-  System<dim> system(fe_degree);
+  GDM::System<dim> system(fe_degree);
 
   // Create mesh
   system.subdivided_hyper_cube(n_subdivisions);

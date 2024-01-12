@@ -18,7 +18,7 @@ test()
   const QIterated<dim> quadrature(QGaussLobatto<1>(2), n_subdivisions);
 
   const auto fe_collection =
-    generate_fe_collection<dim>(generate_polynomials_1D(fe_degree));
+    GDM::generate_fe_collection<dim>(GDM::generate_polynomials_1D(fe_degree));
 
   for (const auto &fe : fe_collection)
     {

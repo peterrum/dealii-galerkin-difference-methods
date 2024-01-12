@@ -5,142 +5,149 @@
 
 #include <deal.II/fe/fe_q_base.h>
 
+#include <deal.II/hp/fe_collection.h>
+
 using namespace dealii;
 
-template <int dim>
-class FE_GDM : public FE_Q_Base<dim>
+namespace GDM
 {
-public:
-  FE_GDM(const ScalarPolynomialsBase<dim> &poly)
-    : FE_Q_Base<dim>(poly, create_data(poly.n()), std::vector<bool>(1, false))
-  {}
 
-  std::string
-  get_name() const override
+  template <int dim>
+  class FE_GDM : public FE_Q_Base<dim>
   {
-    return "FE_GDM";
-  }
+  public:
+    FE_GDM(const ScalarPolynomialsBase<dim> &poly)
+      : FE_Q_Base<dim>(poly, create_data(poly.n()), std::vector<bool>(1, false))
+    {}
 
-  std::unique_ptr<FiniteElement<dim>>
-  clone() const override
-  {
-    return std::make_unique<FE_GDM<dim>>(*this);
-  }
-
-private:
-  static FiniteElementData<dim>
-  create_data(const unsigned int n)
-  {
-    std::vector<unsigned int> dofs_per_object(dim + 1);
-    dofs_per_object[dim] = n;
-
-    FiniteElementData<dim> fe_data(dofs_per_object, 1, 0 /*not relevant*/);
-
-    return fe_data;
-  }
-};
-
-
-std::vector<std::vector<Polynomials::Polynomial<double>>>
-generate_polynomials_1D(const unsigned int fe_degree)
-{
-  AssertDimension(fe_degree, 3); // TODO: for higher degree
-
-  std::vector<std::vector<Polynomials::Polynomial<double>>> all_polynomial;
-
-  {
-    std::vector<std::vector<double>> coefficients = {
-      {{{-1.0 / 6.0, 1.0, -11.0 / 6.0, 1.0}},
-       {{1.0 / 2.0, -5. / 2.0, 3.0, 0.0}},
-       {{-1.0 / 2.0, +2.0, -3.0 / 2.0, 0.0}},
-       {{1.0 / 6.0, -1. / 2., +1. / 3., 0.0}}}};
-
-    for (unsigned int i = 0; i < coefficients.size(); ++i)
-      std::reverse(coefficients[i].begin(), coefficients[i].end());
-
-    std::vector<Polynomials::Polynomial<double>> polynomials;
-    for (unsigned int i = 0; i < coefficients.size(); ++i)
-      polynomials.emplace_back(coefficients[i]);
-
-    all_polynomial.push_back(polynomials);
-  }
-
-  {
-    std::vector<std::vector<double>> coefficients = {
-      {{{-1.0 / 6.0, 1.0 / 2.0, -1.0 / 3.0, 0.0}},
-       {{1.0 / 2.0, -1.0, -1.0 / 2.0, 1.0}},
-       {{-1.0 / 2.0, +1.0 / 2.0, 1.0, 0.0}},
-       {{1.0 / 6.0, 0.0, -1. / 6., 0.0}}}};
-
-    for (unsigned int i = 0; i < coefficients.size(); ++i)
-      std::reverse(coefficients[i].begin(), coefficients[i].end());
-
-    std::vector<Polynomials::Polynomial<double>> polynomials;
-    for (unsigned int i = 0; i < coefficients.size(); ++i)
-      polynomials.emplace_back(coefficients[i]);
-
-    all_polynomial.push_back(polynomials);
-  }
-
-  {
-    std::vector<std::vector<double>> coefficients = {
-      {{{1.0 / 6.0, -1.0 / 2.0, 1.0 / 3.0, 0.0}},
-       {{1.0 / 2.0, 1.0 / 2.0, -1.0, 0.0}},
-       {{-1.0 / 2.0, -1.0, 1.0 / 2.0, 1.0}},
-       {{1.0 / 6.0, 1.0 / 2.0, 1. / 3., 0.0}}}};
-
-    for (unsigned int i = 0; i < coefficients.size(); ++i)
-      std::reverse(coefficients[i].begin(), coefficients[i].end());
-
-    std::vector<Polynomials::Polynomial<double>> polynomials;
-    for (unsigned int i = 0; i < coefficients.size(); ++i)
-      polynomials.emplace_back(coefficients[i]);
-
-    all_polynomial.push_back(polynomials);
-  }
-
-  return all_polynomial;
-}
-
-
-template <int dim>
-std::array<unsigned int, dim>
-index_to_indices(const unsigned int index, const unsigned int N)
-{
-  std::array<unsigned int, dim> indices;
-
-  if (dim >= 1)
-    indices[0] = index % N;
-
-  if (dim >= 2)
-    indices[1] = (index / N) % N;
-
-  if (dim >= 3)
-    indices[2] = index / (N * N);
-
-  return indices;
-}
-
-
-template <int dim>
-hp::FECollection<dim>
-generate_fe_collection(
-  const std::vector<std::vector<Polynomials::Polynomial<double>>>
-    &all_polynomials_1D)
-{
-  hp::FECollection<dim> fe_collection;
-
-  for (unsigned int p = 0; p < Utilities::pow(all_polynomials_1D.size(), dim);
-       ++p)
+    std::string
+    get_name() const override
     {
-      std::vector<std::vector<Polynomials::Polynomial<double>>>
-        aniso_polynomials;
-      for (const auto d : index_to_indices<dim>(p, all_polynomials_1D.size()))
-        aniso_polynomials.push_back(all_polynomials_1D[d]);
-
-      fe_collection.push_back(
-        FE_GDM<dim>(AnisotropicPolynomials<dim>(aniso_polynomials)));
+      return "FE_GDM";
     }
 
-  return fe_collection;
-}
+    std::unique_ptr<FiniteElement<dim>>
+    clone() const override
+    {
+      return std::make_unique<FE_GDM<dim>>(*this);
+    }
+
+  private:
+    static FiniteElementData<dim>
+    create_data(const unsigned int n)
+    {
+      std::vector<unsigned int> dofs_per_object(dim + 1);
+      dofs_per_object[dim] = n;
+
+      FiniteElementData<dim> fe_data(dofs_per_object, 1, 0 /*not relevant*/);
+
+      return fe_data;
+    }
+  };
+
+
+  std::vector<std::vector<Polynomials::Polynomial<double>>>
+  generate_polynomials_1D(const unsigned int fe_degree)
+  {
+    AssertDimension(fe_degree, 3); // TODO: for higher degree
+
+    std::vector<std::vector<Polynomials::Polynomial<double>>> all_polynomial;
+
+    {
+      std::vector<std::vector<double>> coefficients = {
+        {{{-1.0 / 6.0, 1.0, -11.0 / 6.0, 1.0}},
+         {{1.0 / 2.0, -5. / 2.0, 3.0, 0.0}},
+         {{-1.0 / 2.0, +2.0, -3.0 / 2.0, 0.0}},
+         {{1.0 / 6.0, -1. / 2., +1. / 3., 0.0}}}};
+
+      for (unsigned int i = 0; i < coefficients.size(); ++i)
+        std::reverse(coefficients[i].begin(), coefficients[i].end());
+
+      std::vector<Polynomials::Polynomial<double>> polynomials;
+      for (unsigned int i = 0; i < coefficients.size(); ++i)
+        polynomials.emplace_back(coefficients[i]);
+
+      all_polynomial.push_back(polynomials);
+    }
+
+    {
+      std::vector<std::vector<double>> coefficients = {
+        {{{-1.0 / 6.0, 1.0 / 2.0, -1.0 / 3.0, 0.0}},
+         {{1.0 / 2.0, -1.0, -1.0 / 2.0, 1.0}},
+         {{-1.0 / 2.0, +1.0 / 2.0, 1.0, 0.0}},
+         {{1.0 / 6.0, 0.0, -1. / 6., 0.0}}}};
+
+      for (unsigned int i = 0; i < coefficients.size(); ++i)
+        std::reverse(coefficients[i].begin(), coefficients[i].end());
+
+      std::vector<Polynomials::Polynomial<double>> polynomials;
+      for (unsigned int i = 0; i < coefficients.size(); ++i)
+        polynomials.emplace_back(coefficients[i]);
+
+      all_polynomial.push_back(polynomials);
+    }
+
+    {
+      std::vector<std::vector<double>> coefficients = {
+        {{{1.0 / 6.0, -1.0 / 2.0, 1.0 / 3.0, 0.0}},
+         {{1.0 / 2.0, 1.0 / 2.0, -1.0, 0.0}},
+         {{-1.0 / 2.0, -1.0, 1.0 / 2.0, 1.0}},
+         {{1.0 / 6.0, 1.0 / 2.0, 1. / 3., 0.0}}}};
+
+      for (unsigned int i = 0; i < coefficients.size(); ++i)
+        std::reverse(coefficients[i].begin(), coefficients[i].end());
+
+      std::vector<Polynomials::Polynomial<double>> polynomials;
+      for (unsigned int i = 0; i < coefficients.size(); ++i)
+        polynomials.emplace_back(coefficients[i]);
+
+      all_polynomial.push_back(polynomials);
+    }
+
+    return all_polynomial;
+  }
+
+
+  template <int dim>
+  std::array<unsigned int, dim>
+  index_to_indices(const unsigned int index, const unsigned int N)
+  {
+    std::array<unsigned int, dim> indices;
+
+    if (dim >= 1)
+      indices[0] = index % N;
+
+    if (dim >= 2)
+      indices[1] = (index / N) % N;
+
+    if (dim >= 3)
+      indices[2] = index / (N * N);
+
+    return indices;
+  }
+
+
+  template <int dim>
+  hp::FECollection<dim>
+  generate_fe_collection(
+    const std::vector<std::vector<Polynomials::Polynomial<double>>>
+      &all_polynomials_1D)
+  {
+    hp::FECollection<dim> fe_collection;
+
+    for (unsigned int p = 0; p < Utilities::pow(all_polynomials_1D.size(), dim);
+         ++p)
+      {
+        std::vector<std::vector<Polynomials::Polynomial<double>>>
+          aniso_polynomials;
+        for (const auto d : index_to_indices<dim>(p, all_polynomials_1D.size()))
+          aniso_polynomials.push_back(all_polynomials_1D[d]);
+
+        fe_collection.push_back(
+          FE_GDM<dim>(AnisotropicPolynomials<dim>(aniso_polynomials)));
+      }
+
+    return fe_collection;
+  }
+
+} // namespace GDM
