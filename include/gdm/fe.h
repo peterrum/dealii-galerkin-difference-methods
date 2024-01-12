@@ -1,3 +1,5 @@
+#pragma once
+
 #include <deal.II/base/polynomial.h>
 #include <deal.II/base/tensor_product_polynomials.h>
 
