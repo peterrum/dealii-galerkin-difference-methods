@@ -132,6 +132,7 @@ test()
   // output result
   for (const auto &value : solution)
     std::cout << value << std::endl;
+  std::cout << std::endl;
 
   // output result -> Paraview
   GDM::DataOut<dim> data_out(system, mapping, fe_degree_output);
@@ -149,4 +150,5 @@ main(int argc, char **argv)
   Utilities::MPI::MPI_InitFinalize mpi(argc, argv, 1);
 
   test<1>();
+  test<2>();
 }

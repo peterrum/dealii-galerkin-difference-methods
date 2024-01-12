@@ -87,15 +87,44 @@ namespace GDM
       void
       get_dof_indices(std::vector<types::global_dof_index> &dof_indices) const
       {
-        const int offset =
-          (active_fe_index() == 0) ? 0 : ((active_fe_index() == 1) ? -1 : -2);
+        const auto indices =
+          index_to_indices<dim>(_index, system.n_subdivisions);
 
-        for (unsigned int i = 0;
-             i < system.fe[active_fe_index()].n_dofs_per_cell();
-             ++i)
-          {
-            dof_indices[i] = _index + i + offset;
-          }
+        std::array<unsigned int, dim> offset_reference;
+        for (unsigned int d = 0; d < dim; ++d)
+          offset_reference[d] =
+            (indices[d] < system.fe_degree / 2) ?
+              0 :
+              (std::min(system.n_subdivisions[d],
+                        indices[d] + system.fe_degree / 2 + 1) -
+               system.fe_degree);
+
+        std::array<unsigned int, dim> n_dofs;
+        for (unsigned int d = 0; d < dim; ++d)
+          n_dofs[d] = system.n_subdivisions[d] + 1;
+
+        for (unsigned int k = 0, c = 0;
+             k <= ((dim >= 3) ? system.fe_degree : 0);
+             ++k)
+          for (unsigned int j = 0; j <= ((dim >= 2) ? system.fe_degree : 0);
+               ++j)
+            for (unsigned int i = 0; i <= system.fe_degree; ++i, ++c)
+              {
+                auto offset = offset_reference;
+
+                if (dim >= 1)
+                  offset[0] += i;
+                if (dim >= 2)
+                  offset[1] += j;
+                if (dim >= 3)
+                  offset[2] += k;
+
+                const auto index = indices_to_index<dim>(offset, n_dofs);
+
+                AssertIndexRange(index, system.n_dofs());
+
+                dof_indices[c] = index;
+              }
       }
 
     private:
@@ -233,10 +262,10 @@ namespace GDM
             n0 *= n_subdivisions[i] + 1;
 
           unsigned int n1 = 1;
-          for (unsigned int i = d + 1; i < d; ++i)
+          for (unsigned int i = 0; i < d; ++i)
             n1 *= n_subdivisions[i] + 1;
 
-          unsigned int n2 = n1 * n_subdivisions[d];
+          unsigned int n2 = n1 * (n_subdivisions[d] + 1);
 
           for (unsigned int i = 0; i < n0; ++i)
             for (unsigned int j = 0; j < n1; ++j)
