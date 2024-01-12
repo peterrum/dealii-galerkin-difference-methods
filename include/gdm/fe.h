@@ -102,21 +102,39 @@ generate_polynomials_1D(const unsigned int fe_degree)
 
 
 template <int dim>
+std::array<unsigned int, dim>
+index_to_indices(const unsigned int index, const unsigned int N)
+{
+  std::array<unsigned int, dim> indices;
+
+  if (dim >= 1)
+    indices[0] = index % N;
+
+  if (dim >= 2)
+    indices[1] = (index / N) % N;
+
+  if (dim >= 3)
+    indices[2] = index % (N * N);
+
+  return indices;
+}
+
+
+template <int dim>
 hp::FECollection<dim>
 generate_fe_collection(
   const std::vector<std::vector<Polynomials::Polynomial<double>>>
     &all_polynomials_1D)
 {
-  AssertDimension(dim, 1); // TODO: for higher dimension
-
   hp::FECollection<dim> fe_collection;
 
-  for (unsigned int j = 0; j < all_polynomials_1D.size(); ++j)
+  for (unsigned int p = 0; p < Utilities::pow(all_polynomials_1D.size(), dim);
+       ++p)
     {
       std::vector<std::vector<Polynomials::Polynomial<double>>>
         aniso_polynomials;
-      for (unsigned int i = 0; i < dim; ++i)
-        aniso_polynomials.push_back(all_polynomials_1D[j]);
+      for (const auto d : index_to_indices<dim>(p, all_polynomials_1D.size()))
+        aniso_polynomials.push_back(all_polynomials_1D[d]);
 
       AnisotropicPolynomials<dim> poly(aniso_polynomials);
 
