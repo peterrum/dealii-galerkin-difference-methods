@@ -136,9 +136,8 @@ generate_fe_collection(
       for (const auto d : index_to_indices<dim>(p, all_polynomials_1D.size()))
         aniso_polynomials.push_back(all_polynomials_1D[d]);
 
-      AnisotropicPolynomials<dim> poly(aniso_polynomials);
-
-      fe_collection.push_back(FE_GDM<dim>(poly));
+      fe_collection.push_back(
+        FE_GDM<dim>(AnisotropicPolynomials<dim>(aniso_polynomials)));
     }
 
   return fe_collection;
