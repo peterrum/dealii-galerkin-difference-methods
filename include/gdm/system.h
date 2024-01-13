@@ -345,7 +345,7 @@ namespace GDM
 
     template <typename Number>
     void
-    fill_constraints(AffineConstraints<Number> &constraints) const
+    make_zero_boundary_constraints(AffineConstraints<Number> &constraints) const
     {
       for (unsigned int surface = 0; surface < 2 * dim; ++surface)
         {

@@ -50,7 +50,7 @@ test()
 
   // Create constraints
   AffineConstraints<Number> constraints;
-  system.fill_constraints(constraints);
+  system.make_zero_boundary_constraints(constraints);
   constraints.close();
 
   // Categorize cells
