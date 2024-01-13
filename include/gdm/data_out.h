@@ -1,5 +1,7 @@
 #pragma once
 
+#include <deal.II/dofs/dof_tools.h>
+
 #include <deal.II/fe/fe_dgq.h>
 
 #include <deal.II/numerics/data_out.h>
@@ -31,7 +33,8 @@ namespace GDM
     void
     add_data_vector(const VectorType &solution, const std::string label)
     {
-      VectorType solution_output(dof_handler_output.n_dofs());
+      VectorType solution_output;
+      this->reinit_vector(solution_output);
 
       hp::QCollection<dim> quadrature;
       quadrature.push_back(
@@ -89,6 +92,12 @@ namespace GDM
     void
     build_patches()
     {
+      Vector<float> ranks(
+        dof_handler_output.get_triangulation().n_active_cells());
+      ranks =
+        Utilities::MPI::this_mpi_process(dof_handler_output.get_communicator());
+      data_out.add_data_vector(ranks, "ranks");
+
       data_out.build_patches(mapping, fe_degree_output);
     }
 
@@ -96,6 +105,13 @@ namespace GDM
     write_vtu(std::ostream &out) const
     {
       data_out.write_vtu(out);
+    }
+
+    void
+    write_vtu_in_parallel(const std::string &filename) const
+    {
+      data_out.write_vtu_in_parallel(filename,
+                                     dof_handler_output.get_communicator());
     }
 
   private:
@@ -106,6 +122,22 @@ namespace GDM
     const unsigned int                fe_degree_output;
 
     dealii::DataOut<dim> data_out;
+
+    template <typename Number>
+    void
+    reinit_vector(Vector<Number> &vector)
+    {
+      vector.reinit(dof_handler_output.n_dofs());
+    }
+
+    template <typename Number>
+    void
+    reinit_vector(LinearAlgebra::distributed::Vector<Number> &vector)
+    {
+      vector.reinit(dof_handler_output.locally_owned_dofs(),
+                    DoFTools::extract_locally_active_dofs(dof_handler_output),
+                    dof_handler_output.get_communicator());
+    }
   };
 
 } // namespace GDM

@@ -161,8 +161,7 @@ test()
   data_out.add_data_vector(solution, "solution");
   data_out.build_patches();
 
-  std::ofstream file("solution.vtu");
-  data_out.write_vtu(file);
+  data_out.write_vtu_in_parallel("solution.vtu");
 }
 
 
