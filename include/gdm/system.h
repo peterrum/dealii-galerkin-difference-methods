@@ -227,7 +227,9 @@ namespace GDM
 
 
     void
-    subdivided_hyper_cube(const unsigned int n_subdivisions_1D)
+    subdivided_hyper_cube(const unsigned int n_subdivisions_1D,
+                          const double       left  = 0.0,
+                          const double       right = 1.0)
     {
       std::fill(this->n_subdivisions.begin(),
                 this->n_subdivisions.end(),
@@ -235,7 +237,8 @@ namespace GDM
 
       create_triangulation_pre();
 
-      GridGenerator::subdivided_hyper_cube(*tria, n_subdivisions_1D);
+      GridGenerator::subdivided_hyper_cube(
+        *tria, n_subdivisions_1D, left, right, true);
 
       create_triangulation_post();
     }
