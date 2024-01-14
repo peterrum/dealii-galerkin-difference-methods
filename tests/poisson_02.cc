@@ -1,4 +1,4 @@
-// Test Poisson problem.
+// Test Poisson problem: parallel, with preconditioner, 1D, 2D.
 
 #include <deal.II/base/conditional_ostream.h>
 #include <deal.II/base/mpi.h>

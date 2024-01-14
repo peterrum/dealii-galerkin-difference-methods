@@ -1,4 +1,4 @@
-// Test Poisson problem.
+// Test Poisson problem: serial, 1D.
 
 #include <deal.II/base/quadrature_lib.h>
 
