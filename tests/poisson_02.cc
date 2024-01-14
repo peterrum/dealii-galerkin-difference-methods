@@ -42,7 +42,18 @@ test()
   GDM::System<dim> system(MPI_COMM_WORLD, fe_degree, n_components);
 
   // Create mesh
-  system.subdivided_hyper_cube(n_subdivisions);
+  if (true)
+    {
+      system.subdivided_hyper_cube(n_subdivisions, 0.0, +1.0);
+    }
+  else
+    {
+      const std::vector<unsigned int> repetitions = {{20, 10}};
+      const Point<dim>                p1(0.0, 0.0);
+      const Point<dim>                p2(2.0, 1.0);
+      system.subdivided_hyper_rectangle(repetitions, p1, p2);
+    }
+
 
   // Create finite elements
   const auto &fe = system.get_fe();

@@ -245,6 +245,25 @@ namespace GDM
 
 
     void
+    subdivided_hyper_rectangle(const std::vector<unsigned int> &repetitions,
+                               const Point<dim>                &p1,
+                               const Point<dim>                &p2)
+    {
+      AssertDimension(repetitions.size(), dim);
+
+      for (unsigned int d = 0; d < dim; ++d)
+        this->n_subdivisions[d] = repetitions[d];
+
+      create_triangulation_pre();
+
+      GridGenerator::subdivided_hyper_rectangle(
+        *tria, repetitions, p1, p2, true);
+
+      create_triangulation_post();
+    }
+
+
+    void
     categorize()
     {
       active_fe_indices.resize(active_cell_index_map.size());
