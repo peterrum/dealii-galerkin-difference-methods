@@ -242,98 +242,6 @@ namespace GDM
 
 
     void
-    create_triangulation_pre()
-    {
-      if (comm == MPI_COMM_NULL)
-        {
-          tria = std::make_shared<Triangulation<dim>>();
-
-          unsigned int dofs = 1;
-          for (unsigned int d = 0; d < dim; ++d)
-            dofs *= n_subdivisions[d] + 1;
-
-          IndexSet is_locally_owned(dofs);
-          is_locally_owned.add_range(0, dofs);
-          this->is_locally_owned = is_locally_owned;
-        }
-      else
-        {
-          const unsigned int n_procs = Utilities::MPI::n_mpi_processes(comm);
-          const unsigned int my_rank = Utilities::MPI::this_mpi_process(comm);
-
-          unsigned int face_dofs = 1;
-          for (unsigned int d = 0; d < dim - 1; ++d)
-            face_dofs *= n_subdivisions[d] + 1;
-
-          IndexSet is_locally_owned(face_dofs * (n_subdivisions[dim - 1] + 1));
-
-          const unsigned int stride =
-            (n_subdivisions[dim - 1] + n_procs - 1) / n_procs;
-          unsigned int range_start =
-            (my_rank == 0) ? 0 : ((stride * my_rank) + 1);
-          unsigned int range_end = stride * (my_rank + 1) + 1;
-
-          is_locally_owned.add_range(
-            face_dofs * std::min(range_start, n_subdivisions[dim - 1] + 1),
-            face_dofs * std::min(range_end, n_subdivisions[dim - 1] + 1));
-
-          this->is_locally_owned = is_locally_owned;
-
-          auto temp = std::make_shared<parallel::shared::Triangulation<dim>>(
-            comm,
-            Triangulation<dim>::none,
-            true,
-            parallel::shared::Triangulation<dim>::partition_custom_signal);
-
-          temp->signals.create.connect([&, stride]() {
-            for (const auto &cell : tria->active_cell_iterators())
-              {
-                unsigned int cell_index = cell->active_cell_index();
-
-                auto indices =
-                  index_to_indices<dim>(cell_index, n_subdivisions);
-
-                cell->set_subdomain_id(indices[dim - 1] / stride);
-              }
-          });
-
-          tria = temp;
-        }
-    }
-
-
-    void
-    create_triangulation_post()
-    {
-      for (const auto &cell : tria->active_cell_iterators())
-        if (cell->is_locally_owned())
-          active_cell_index_map.push_back(cell->active_cell_index());
-
-      if (comm == MPI_COMM_NULL)
-        {
-          this->is_locally_active = this->is_locally_owned;
-        }
-      else
-        {
-          IndexSet is_locally_active = this->is_locally_owned;
-
-          std::vector<types::global_dof_index> dof_indices;
-          for (const auto &cell : locally_active_cell_iterators())
-            {
-              dof_indices.resize(fe[0 /*TODO*/].n_dofs_per_cell());
-              cell->get_dof_indices(dof_indices);
-
-              for (const auto i : dof_indices)
-                if (is_locally_owned.is_element(i) == false)
-                  is_locally_active.add_index(i);
-            }
-
-          this->is_locally_active = is_locally_active;
-        }
-    }
-
-
-    void
     categorize()
     {
       active_fe_indices.resize(active_cell_index_map.size());
@@ -527,6 +435,98 @@ namespace GDM
     }
 
   private:
+    void
+    create_triangulation_pre()
+    {
+      if (comm == MPI_COMM_NULL)
+        {
+          tria = std::make_shared<Triangulation<dim>>();
+
+          unsigned int dofs = 1;
+          for (unsigned int d = 0; d < dim; ++d)
+            dofs *= n_subdivisions[d] + 1;
+
+          IndexSet is_locally_owned(dofs);
+          is_locally_owned.add_range(0, dofs);
+          this->is_locally_owned = is_locally_owned;
+        }
+      else
+        {
+          const unsigned int n_procs = Utilities::MPI::n_mpi_processes(comm);
+          const unsigned int my_rank = Utilities::MPI::this_mpi_process(comm);
+
+          unsigned int face_dofs = 1;
+          for (unsigned int d = 0; d < dim - 1; ++d)
+            face_dofs *= n_subdivisions[d] + 1;
+
+          IndexSet is_locally_owned(face_dofs * (n_subdivisions[dim - 1] + 1));
+
+          const unsigned int stride =
+            (n_subdivisions[dim - 1] + n_procs - 1) / n_procs;
+          unsigned int range_start =
+            (my_rank == 0) ? 0 : ((stride * my_rank) + 1);
+          unsigned int range_end = stride * (my_rank + 1) + 1;
+
+          is_locally_owned.add_range(
+            face_dofs * std::min(range_start, n_subdivisions[dim - 1] + 1),
+            face_dofs * std::min(range_end, n_subdivisions[dim - 1] + 1));
+
+          this->is_locally_owned = is_locally_owned;
+
+          auto temp = std::make_shared<parallel::shared::Triangulation<dim>>(
+            comm,
+            Triangulation<dim>::none,
+            true,
+            parallel::shared::Triangulation<dim>::partition_custom_signal);
+
+          temp->signals.create.connect([&, stride]() {
+            for (const auto &cell : tria->active_cell_iterators())
+              {
+                unsigned int cell_index = cell->active_cell_index();
+
+                auto indices =
+                  index_to_indices<dim>(cell_index, n_subdivisions);
+
+                cell->set_subdomain_id(indices[dim - 1] / stride);
+              }
+          });
+
+          tria = temp;
+        }
+    }
+
+
+    void
+    create_triangulation_post()
+    {
+      for (const auto &cell : tria->active_cell_iterators())
+        if (cell->is_locally_owned())
+          active_cell_index_map.push_back(cell->active_cell_index());
+
+      if (comm == MPI_COMM_NULL)
+        {
+          this->is_locally_active = this->is_locally_owned;
+        }
+      else
+        {
+          IndexSet is_locally_active = this->is_locally_owned;
+
+          std::vector<types::global_dof_index> dof_indices;
+          for (const auto &cell : locally_active_cell_iterators())
+            {
+              dof_indices.resize(fe[0 /*TODO*/].n_dofs_per_cell());
+              cell->get_dof_indices(dof_indices);
+
+              for (const auto i : dof_indices)
+                if (is_locally_owned.is_element(i) == false)
+                  is_locally_active.add_index(i);
+            }
+
+          this->is_locally_active = is_locally_active;
+        }
+    }
+
+
     const MPI_Comm comm;
 
     // finite element
