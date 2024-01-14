@@ -241,9 +241,9 @@ namespace GDM
           for (unsigned int d = 0; d < dim; ++d)
             dofs *= n_subdivisions[d] + 1;
 
-          IndexSet is_local(dofs);
-          is_local.add_range(0, dofs);
-          this->is_local = is_local;
+          IndexSet is_locally_owned(dofs);
+          is_locally_owned.add_range(0, dofs);
+          this->is_locally_owned = is_locally_owned;
         }
       else
         {
@@ -254,7 +254,7 @@ namespace GDM
           for (unsigned int d = 0; d < dim - 1; ++d)
             face_dofs *= n_subdivisions[d] + 1;
 
-          IndexSet is_local(face_dofs * (n_subdivisions[dim - 1] + 1));
+          IndexSet is_locally_owned(face_dofs * (n_subdivisions[dim - 1] + 1));
 
           const unsigned int stride =
             (n_subdivisions[dim - 1] + n_procs - 1) / n_procs;
@@ -262,11 +262,11 @@ namespace GDM
             (my_rank == 0) ? 0 : ((stride * my_rank) + 1);
           unsigned int range_end = stride * (my_rank + 1) + 1;
 
-          is_local.add_range(
+          is_locally_owned.add_range(
             face_dofs * std::min(range_start, n_subdivisions[dim - 1] + 1),
             face_dofs * std::min(range_end, n_subdivisions[dim - 1] + 1));
 
-          this->is_local = is_local;
+          this->is_locally_owned = is_locally_owned;
 
           auto temp = std::make_shared<parallel::shared::Triangulation<dim>>(
             comm,
@@ -297,11 +297,11 @@ namespace GDM
 
       if (comm == MPI_COMM_NULL)
         {
-          this->is_ghost = this->is_local;
+          this->is_locally_active = this->is_locally_owned;
         }
       else
         {
-          IndexSet is_ghost = this->is_local;
+          IndexSet is_locally_active = this->is_locally_owned;
 
           std::vector<types::global_dof_index> dof_indices;
           for (const auto &cell : active_cell_iterators())
@@ -310,11 +310,11 @@ namespace GDM
               cell->get_dof_indices(dof_indices);
 
               for (const auto i : dof_indices)
-                if (is_local.is_element(i) == false)
-                  is_ghost.add_index(i);
+                if (is_locally_owned.is_element(i) == false)
+                  is_locally_active.add_index(i);
             }
 
-          this->is_ghost = is_ghost;
+          this->is_locally_active = is_locally_active;
         }
     }
 
@@ -345,6 +345,36 @@ namespace GDM
 
     template <typename Number>
     void
+    make_periodicity_constraints(const unsigned int         d,
+                                 AffineConstraints<Number> &constraints) const
+    {
+      unsigned int n0 = 1;
+      for (unsigned int i = d + 1; i < dim; ++i)
+        n0 *= n_subdivisions[i] + 1;
+
+      unsigned int n1 = 1;
+      for (unsigned int i = 0; i < d; ++i)
+        n1 *= n_subdivisions[i] + 1;
+
+      const unsigned int n2 = n1 * (n_subdivisions[d] + 1);
+
+      for (unsigned int i = 0; i < n0; ++i)
+        for (unsigned int j = 0; j < n1; ++j)
+          {
+            const unsigned int i0 = i * n2 + j;
+            const unsigned int i1 = i0 + n_subdivisions[d];
+
+            if (is_locally_active.is_element(i1) == false)
+              continue;
+
+            constraints.add_line(i1);
+            constraints.add_entry(i1, i0, 1.0);
+          }
+    }
+
+
+    template <typename Number>
+    void
     make_zero_boundary_constraints(const unsigned int         surface,
                                    AffineConstraints<Number> &constraints) const
     {
@@ -359,12 +389,19 @@ namespace GDM
       for (unsigned int i = 0; i < d; ++i)
         n1 *= n_subdivisions[i] + 1;
 
-      unsigned int n2 = n1 * (n_subdivisions[d] + 1);
+      const unsigned int n2 = n1 * (n_subdivisions[d] + 1);
 
       for (unsigned int i = 0; i < n0; ++i)
         for (unsigned int j = 0; j < n1; ++j)
-          constraints.constrain_dof_to_zero(
-            i * n2 + (s == 0 ? 0 : n_subdivisions[d]) * n1 + j);
+          {
+            const unsigned i0 =
+              i * n2 + (s == 0 ? 0 : n_subdivisions[d]) * n1 + j;
+
+            if (is_locally_active.is_element(i0) == false)
+              continue;
+
+            constraints.constrain_dof_to_zero(i0);
+          }
     }
 
 
@@ -402,9 +439,10 @@ namespace GDM
     }
 
 
-    template <typename SparsityPatternType>
+    template <typename Number, typename SparsityPatternType>
     void
-    create_sparsity_pattern(SparsityPatternType &dsp) const
+    create_sparsity_pattern(const AffineConstraints<Number> &constraints,
+                            SparsityPatternType             &dsp) const
     {
       std::vector<types::global_dof_index> dof_indices;
       for (const auto &cell : active_cell_iterators())
@@ -412,8 +450,7 @@ namespace GDM
           dof_indices.resize(fe[cell->active_fe_index()].n_dofs_per_cell());
           cell->get_dof_indices(dof_indices);
 
-          for (const auto i : dof_indices)
-            dsp.add_entries(i, dof_indices.begin(), dof_indices.end());
+          constraints.add_entries_local_to_global(dof_indices, dsp);
         }
     }
 
@@ -427,16 +464,52 @@ namespace GDM
                 *this, active_cell_index_map.size()))};
     }
 
-    IndexSet
-    locally_owned_dofs()
-    {
-      return is_local;
-    }
 
     IndexSet
-    locally_active_dofs()
+    locally_owned_dofs() const
     {
-      return is_ghost;
+      return this->is_locally_owned;
+    }
+
+
+    IndexSet
+    locally_active_dofs() const
+    {
+      return this->is_locally_active;
+    }
+
+
+    template <typename Number>
+    IndexSet
+    locally_relevant_dofs(const AffineConstraints<Number> &constraints) const
+    {
+      IndexSet is_locally_relevant = this->is_locally_active;
+
+      std::vector<types::global_dof_index> is_locally_relevant_temp;
+
+      for (const auto i : is_locally_relevant)
+        {
+          if (is_locally_relevant.is_element(i) == false)
+            is_locally_relevant_temp.emplace_back(i);
+
+          const auto constraints_i = constraints.get_constraint_entries(i);
+
+          if (constraints_i)
+            for (const auto &p : *constraints_i)
+              if (is_locally_relevant.is_element(p.first) == false)
+                is_locally_relevant_temp.emplace_back(p.first);
+        }
+
+      std::sort(is_locally_relevant_temp.begin(),
+                is_locally_relevant_temp.end());
+      is_locally_relevant_temp.erase(
+        std::unique(is_locally_relevant_temp.begin(),
+                    is_locally_relevant_temp.end()),
+        is_locally_relevant_temp.end());
+      is_locally_relevant.add_indices(is_locally_relevant_temp.begin(),
+                                      is_locally_relevant_temp.end());
+
+      return is_locally_relevant;
     }
 
   private:
@@ -450,10 +523,11 @@ namespace GDM
     std::array<unsigned int, dim>       n_subdivisions;
     std::shared_ptr<Triangulation<dim>> tria;
 
-    //
-    IndexSet is_local;
-    IndexSet is_ghost;
+    // index sets
+    IndexSet is_locally_owned;
+    IndexSet is_locally_active;
 
+    // map from local active cell index to active cell index
     std::vector<unsigned int> active_cell_index_map;
 
     // category

@@ -56,7 +56,7 @@ test()
   quadrature.push_back(QGauss<dim>(fe_degree + 1));
 
   // Create constraints
-  AffineConstraints<Number> constraints;
+  AffineConstraints<Number> constraints(system.locally_active_dofs());
   system.make_zero_boundary_constraints(constraints);
   constraints.close();
 
@@ -66,7 +66,7 @@ test()
   // Create sparsity pattern and allocate sparse matrix
   TrilinosWrappers::SparsityPattern sparsity_pattern(
     system.locally_owned_dofs(), MPI_COMM_WORLD);
-  system.create_sparsity_pattern(sparsity_pattern);
+  system.create_sparsity_pattern(constraints, sparsity_pattern);
   sparsity_pattern.compress();
 
   TrilinosWrappers::SparseMatrix sparse_matrix;
@@ -75,7 +75,8 @@ test()
   // create vectors
   const auto partitioner =
     std::make_shared<Utilities::MPI::Partitioner>(system.locally_owned_dofs(),
-                                                  system.locally_active_dofs(),
+                                                  system.locally_relevant_dofs(
+                                                    constraints),
                                                   MPI_COMM_WORLD);
 
   VectorType rhs(partitioner);
@@ -138,6 +139,7 @@ test()
   ReductionControl     solver_control(100, 1.e-10, 1.e-4);
   SolverCG<VectorType> solver(solver_control);
   solver.solve(sparse_matrix, solution, rhs, preconditioner);
+  constraints.distribute(solution);
   pcout << solver_control.last_step() << std::endl << std::endl;
 
   // output result

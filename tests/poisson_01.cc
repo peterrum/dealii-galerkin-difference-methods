@@ -60,7 +60,7 @@ test()
   const unsigned int n_dofs = system.n_dofs();
 
   DynamicSparsityPattern dsp(n_dofs);
-  system.create_sparsity_pattern(dsp);
+  system.create_sparsity_pattern(constraints, dsp);
 
   SparsityPattern sparsity_pattern;
   sparsity_pattern.copy_from(dsp);
