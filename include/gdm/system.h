@@ -233,6 +233,17 @@ namespace GDM
                 this->n_subdivisions.end(),
                 n_subdivisions_1D);
 
+      create_triangulation_pre();
+
+      GridGenerator::subdivided_hyper_cube(*tria, n_subdivisions_1D);
+
+      create_triangulation_post();
+    }
+
+
+    void
+    create_triangulation_pre()
+    {
       if (comm == MPI_COMM_NULL)
         {
           tria = std::make_shared<Triangulation<dim>>();
@@ -288,9 +299,12 @@ namespace GDM
 
           tria = temp;
         }
+    }
 
-      GridGenerator::subdivided_hyper_cube(*tria, n_subdivisions_1D);
 
+    void
+    create_triangulation_post()
+    {
       for (const auto &cell : tria->active_cell_iterators())
         if (cell->is_locally_owned())
           active_cell_index_map.push_back(cell->active_cell_index());
