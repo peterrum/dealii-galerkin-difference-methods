@@ -47,7 +47,7 @@ namespace GDM
                                                update_JxW_values);
 
       std::vector<types::global_dof_index> dof_indices;
-      for (const auto &cell : system.active_cell_iterators())
+      for (const auto &cell : system.locally_active_cell_iterators())
         {
           fe_values_collection.reinit(cell->dealii_iterator(),
                                       numbers::invalid_unsigned_int,

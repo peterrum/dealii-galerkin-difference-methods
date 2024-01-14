@@ -304,7 +304,7 @@ namespace GDM
           IndexSet is_locally_active = this->is_locally_owned;
 
           std::vector<types::global_dof_index> dof_indices;
-          for (const auto &cell : active_cell_iterators())
+          for (const auto &cell : locally_active_cell_iterators())
             {
               dof_indices.resize(fe[0 /*TODO*/].n_dofs_per_cell());
               cell->get_dof_indices(dof_indices);
@@ -445,7 +445,7 @@ namespace GDM
                             SparsityPatternType             &dsp) const
     {
       std::vector<types::global_dof_index> dof_indices;
-      for (const auto &cell : active_cell_iterators())
+      for (const auto &cell : locally_active_cell_iterators())
         {
           dof_indices.resize(fe[cell->active_fe_index()].n_dofs_per_cell());
           cell->get_dof_indices(dof_indices);
@@ -456,7 +456,7 @@ namespace GDM
 
 
     IteratorRange<GDM::internal::CellIterator<dim>>
-    active_cell_iterators() const
+    locally_active_cell_iterators() const
     {
       return {GDM::internal::CellIterator<dim>(
                 GDM::internal::CellAccessor<dim>(*this, 0)),
