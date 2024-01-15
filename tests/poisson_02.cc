@@ -130,8 +130,7 @@ test()
   else
     {
       ExactSolution<dim> fu;
-      for (unsigned int i = 0; i < 2 * dim; ++i)
-        system.interpolate_boundary_values(mapping, i, fu, constraints);
+      system.interpolate_boundary_values(mapping, fu, constraints);
     }
   constraints.close();
 

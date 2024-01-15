@@ -485,6 +485,17 @@ namespace GDM
     }
 
 
+    template <typename Number>
+    void
+    interpolate_boundary_values(const hp::MappingCollection<dim> &mapping,
+                                const Function<dim>              &fu,
+                                AffineConstraints<Number> &constraints) const
+    {
+      for (unsigned int surface = 0; surface < 2 * dim; ++surface)
+        interpolate_boundary_values(mapping, fu, constraints);
+    }
+
+
     const hp::FECollection<dim> &
     get_fe() const
     {
