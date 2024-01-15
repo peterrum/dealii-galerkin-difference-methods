@@ -6,6 +6,7 @@
 
 #include <deal.II/fe/fe_values.h>
 #include <deal.II/fe/mapping_q1.h>
+#include <deal.II/fe/mapping_q_cache.h>
 
 #include <deal.II/hp/fe_values.h>
 
@@ -60,7 +61,41 @@ test()
 
   // Create mapping
   hp::MappingCollection<dim> mapping;
-  mapping.push_back(MappingQ1<dim>());
+
+  if (true)
+    {
+      mapping.push_back(MappingQ1<dim>());
+    }
+  else
+    {
+      MappingQ1<dim> mapping_q1;
+
+      MappingQCache<dim> mapping_q_cache(fe_degree + 1);
+
+      mapping_q_cache.initialize(
+        mapping_q1,
+        system.get_triangulation(),
+        [](const typename Triangulation<dim>::cell_iterator &,
+           const Point<dim> &chart_point) -> Point<dim> {
+          const double left        = 0.0;
+          const double right       = 1.0;
+          const double deformation = 0.3;
+          const double frequency   = 1.0;
+
+          double sinval = deformation;
+          for (unsigned int d = 0; d < dim; ++d)
+            sinval *= std::sin(frequency * dealii::numbers::PI *
+                               (chart_point(d) - left) / (right - left));
+          dealii::Point<dim> space_point;
+          for (unsigned int d = 0; d < dim; ++d)
+            space_point(d) = chart_point(d) + sinval;
+
+          return space_point;
+        },
+        false);
+
+      mapping.push_back(mapping_q_cache);
+    }
 
   // Create quadrature
   hp::QCollection<dim> quadrature;
