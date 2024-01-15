@@ -4,12 +4,16 @@
 
 #include <deal.II/distributed/shared_tria.h>
 
+#include <deal.II/fe/fe_q.h>
+
 #include <deal.II/grid/grid_generator.h>
 #include <deal.II/grid/tria.h>
 
 #include <deal.II/hp/fe_collection.h>
 
 #include <deal.II/lac/affine_constraints.h>
+
+#include <deal.II/numerics/vector_tools.h>
 
 #include <gdm/fe.h>
 
@@ -202,6 +206,90 @@ namespace GDM
     private:
       CellAccessor<dim> accessor;
     };
+
+
+
+    template <int dim>
+    void
+    compute_renumbering_lex(dealii::DoFHandler<dim> &dof_handler)
+    {
+      std::vector<dealii::types::global_dof_index> dof_indices(
+        dof_handler.get_fe().n_dofs_per_cell());
+
+      dealii::IndexSet active_dofs;
+      dealii::DoFTools::extract_locally_active_dofs(dof_handler, active_dofs);
+      const auto partitioner =
+        std::make_shared<dealii::Utilities::MPI::Partitioner>(
+          dof_handler.locally_owned_dofs(), active_dofs, MPI_COMM_WORLD);
+
+      std::vector<
+        std::pair<dealii::types::global_dof_index, dealii::Point<dim>>>
+        points_all;
+
+      dealii::FEValues<dim> fe_values(
+        dof_handler.get_fe(),
+        dealii::Quadrature<dim>(dof_handler.get_fe().get_unit_support_points()),
+        dealii::update_quadrature_points);
+
+      for (const auto &cell : dof_handler.active_cell_iterators())
+        {
+          if (cell->is_locally_owned() == false)
+            continue;
+
+          fe_values.reinit(cell);
+
+          cell->get_dof_indices(dof_indices);
+
+          for (unsigned int i = 0; i < dof_indices.size(); ++i)
+            {
+              if (dof_handler.locally_owned_dofs().is_element(dof_indices[i]))
+                points_all.emplace_back(dof_indices[i],
+                                        fe_values.quadrature_point(i));
+            }
+        }
+
+      std::sort(points_all.begin(),
+                points_all.end(),
+                [](const auto &a, const auto &b) { return a.first < b.first; });
+      points_all.erase(std::unique(points_all.begin(),
+                                   points_all.end(),
+                                   [](const auto &a, const auto &b) {
+                                     return a.first == b.first;
+                                   }),
+                       points_all.end());
+
+      std::sort(points_all.begin(),
+                points_all.end(),
+                [](const auto &a, const auto &b) {
+                  std::vector<double> a_(dim);
+                  std::vector<double> b_(dim);
+
+                  a.second.unroll(a_.begin(), a_.end());
+                  std::reverse(a_.begin(), a_.end());
+
+                  b.second.unroll(b_.begin(), b_.end());
+                  std::reverse(b_.begin(), b_.end());
+
+                  for (unsigned int d = 0; d < dim; ++d)
+                    {
+                      if (std::abs(a_[d] - b_[d]) > 1e-8 /*epsilon*/)
+                        return a_[d] < b_[d];
+                    }
+
+                  return true;
+                });
+
+      std::vector<dealii::types::global_dof_index> result(
+        dof_handler.n_locally_owned_dofs());
+
+      for (unsigned int i = 0; i < result.size(); ++i)
+        {
+          result[partitioner->global_to_local(points_all[i].first)] =
+            partitioner->local_to_global(i);
+        }
+
+      dof_handler.renumber_dofs(result);
+    }
   } // namespace internal
 
 
@@ -355,6 +443,45 @@ namespace GDM
     {
       for (unsigned int surface = 0; surface < 2 * dim; ++surface)
         make_zero_boundary_constraints(surface, constraints);
+    }
+
+
+    template <typename Number>
+    void
+    interpolate_boundary_values(const hp::MappingCollection<dim> &mapping,
+                                const unsigned int                bid,
+                                const Function<dim>              &fu,
+                                AffineConstraints<Number> &constraints) const
+    {
+      if (comm == MPI_COMM_NULL)
+        {
+          VectorTools::interpolate_boundary_values(
+            mapping, dof_handler, bid, fu, constraints);
+        }
+      else
+        {
+          AffineConstraints<Number> constraints_temp(is_locally_active);
+          VectorTools::interpolate_boundary_values(
+            mapping, dof_handler, bid, fu, constraints_temp);
+          constraints_temp.make_consistent_in_parallel(is_locally_owned,
+                                                       is_locally_active,
+                                                       comm);
+          constraints_temp.close();
+
+          for (const auto i : is_locally_active)
+            {
+              if ((constraints_temp.is_constrained(i) == false) ||
+                  (constraints.is_constrained(i) == true))
+                continue;
+
+              const Number inhomogeneity =
+                constraints_temp.is_inhomogeneously_constrained(i) ?
+                  constraints_temp.get_inhomogeneity(i) :
+                  0.0;
+
+              constraints.add_constraint(i, {}, inhomogeneity);
+            }
+        }
     }
 
 
@@ -546,6 +673,10 @@ namespace GDM
 
           this->is_locally_active = is_locally_active;
         }
+
+      dof_handler.reinit(*tria);
+      dof_handler.distribute_dofs(FE_Q<dim>(1));
+      internal::compute_renumbering_lex(dof_handler);
     }
 
 
@@ -558,6 +689,8 @@ namespace GDM
     // geometry
     std::array<unsigned int, dim>       n_subdivisions;
     std::shared_ptr<Triangulation<dim>> tria;
+
+    DoFHandler<dim> dof_handler;
 
     // index sets
     IndexSet is_locally_owned;

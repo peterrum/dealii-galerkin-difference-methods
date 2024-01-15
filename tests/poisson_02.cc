@@ -24,6 +24,26 @@
 
 
 template <int dim>
+class ExactSolution : public Function<dim>
+{
+public:
+  ExactSolution()
+  {}
+
+  virtual double
+  value(const Point<dim> &p, const unsigned int component = 0) const override
+  {
+    (void)component;
+
+    return p[0];
+  }
+
+private:
+};
+
+
+
+template <int dim>
 void
 test()
 {
@@ -103,7 +123,16 @@ test()
 
   // Create constraints
   AffineConstraints<Number> constraints(system.locally_active_dofs());
-  system.make_zero_boundary_constraints(constraints);
+  if (true)
+    {
+      system.make_zero_boundary_constraints(constraints);
+    }
+  else
+    {
+      ExactSolution<dim> fu;
+      for (unsigned int i = 0; i < 2 * dim; ++i)
+        system.interpolate_boundary_values(mapping, i, fu, constraints);
+    }
   constraints.close();
 
   // Categorize cells
