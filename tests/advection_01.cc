@@ -67,7 +67,7 @@ private:
 
 template <int dim>
 void
-test()
+test(const bool use_mass_lumping)
 {
   using Number     = double;
   using VectorType = Vector<Number>;
@@ -119,10 +119,22 @@ test()
   SparsityPattern sparsity_pattern;
   sparsity_pattern.copy_from(dsp);
 
-  SparseMatrix<Number> sparse_matrix;
-  sparse_matrix.reinit(sparsity_pattern);
-  GDM::MatrixCreator::create_mass_matrix(
-    mapping, system, quadrature, sparse_matrix, constraints);
+  SparseMatrix<Number>       sparse_matrix;
+  DiagonalMatrix<VectorType> diagonal_matrix;
+
+  if (use_mass_lumping == false)
+    {
+      sparse_matrix.reinit(sparsity_pattern);
+      GDM::MatrixCreator::create_mass_matrix(
+        mapping, system, quadrature, sparse_matrix, constraints);
+    }
+  else
+    {
+      diagonal_matrix.get_vector().reinit(system.n_dofs());
+      GDM::MatrixCreator::create_lumped_mass_matrix(
+        mapping, system, quadrature, diagonal_matrix.get_vector(), constraints);
+    }
+
 
   // set up initial condition
   VectorType solution(system.n_dofs());
@@ -191,13 +203,20 @@ test()
         constraints.distribute_local_to_global(cell_vector, dof_indices, vec_1);
       }
 
-    // invert mass matrix
-    PreconditionJacobi<SparseMatrix<Number>> preconditioner;
-    preconditioner.initialize(sparse_matrix);
+    if (use_mass_lumping == false)
+      {
+        // invert mass matrix
+        PreconditionJacobi<SparseMatrix<Number>> preconditioner;
+        preconditioner.initialize(sparse_matrix);
 
-    ReductionControl     solver_control(100, 1.e-10, 1.e-8);
-    SolverCG<VectorType> solver(solver_control);
-    solver.solve(sparse_matrix, vec_2, vec_1, preconditioner);
+        ReductionControl     solver_control(100, 1.e-10, 1.e-8);
+        SolverCG<VectorType> solver(solver_control);
+        solver.solve(sparse_matrix, vec_2, vec_1, preconditioner);
+      }
+    else
+      {
+        diagonal_matrix.vmult(vec_2, vec_1);
+      }
 
     return vec_2;
   };
@@ -263,5 +282,6 @@ test()
 int
 main()
 {
-  test<2>();
+  test<2>(/*use_mass_lumping=*/false);
+  test<2>(/*use_mass_lumping=*/true);
 }
