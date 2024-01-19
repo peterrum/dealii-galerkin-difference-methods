@@ -17,14 +17,14 @@
 #include <deal.II/lac/solver_cg.h>
 #include <deal.II/lac/sparse_matrix.h>
 
-#include <deal.II/numerics/matrix_creator.h>
-
 #include <gdm/data_out.h>
 #include <gdm/matrix_creator.h>
 #include <gdm/system.h>
 #include <gdm/vector_tools.h>
 
 #include <fstream>
+
+using namespace dealii;
 
 template <int dim, typename Number = double>
 class ExactSolution : public dealii::Function<dim, Number>
@@ -170,17 +170,19 @@ test(const bool use_mass_lumping)
 
         const auto &fe_values = fe_values_collection.get_present_fe_values();
 
-        const unsigned int dofs_per_cell = fe_values.get_fe().n_dofs_per_cell();
+        const unsigned int n_dofs_per_cell =
+          fe_values.get_fe().n_dofs_per_cell();
 
-        std::vector<types::global_dof_index> dof_indices(dofs_per_cell);
+        std::vector<types::global_dof_index> dof_indices(n_dofs_per_cell);
         cell->get_dof_indices(dof_indices);
 
-        std::vector<Tensor<1, dim, Number>> quadrature_gradients(dofs_per_cell);
+        std::vector<Tensor<1, dim, Number>> quadrature_gradients(
+          n_dofs_per_cell);
         fe_values.get_function_gradients(vec_0,
                                          dof_indices,
                                          quadrature_gradients);
 
-        std::vector<Number> fluxes(dofs_per_cell);
+        std::vector<Number> fluxes(n_dofs_per_cell);
 
         for (const auto q : fe_values.quadrature_point_indices())
           {
@@ -193,7 +195,7 @@ test(const bool use_mass_lumping)
               }
           }
 
-        Vector<Number> cell_vector(dofs_per_cell);
+        Vector<Number> cell_vector(n_dofs_per_cell);
         for (const unsigned int q_index : fe_values.quadrature_point_indices())
           for (const unsigned int i : fe_values.dof_indices())
             cell_vector(i) -= fluxes[q_index] *
@@ -221,7 +223,7 @@ test(const bool use_mass_lumping)
     return vec_2;
   };
 
-  // heper function for postprocessing
+  // helper function for postprocessing
   const auto fu_postprocessing = [&](const double time) {
     static unsigned int counter = 0;
 

@@ -5,9 +5,13 @@
 #include <deal.II/base/quadrature_lib.h>
 #include <deal.II/base/time_stepping.h>
 
+#include <deal.II/dofs/dof_tools.h>
+
+#include <deal.II/fe/fe_q.h>
 #include <deal.II/fe/fe_values.h>
 #include <deal.II/fe/mapping_q1.h>
 
+#include <deal.II/grid/grid_generator.h>
 #include <deal.II/grid/grid_tools.h>
 
 #include <deal.II/hp/fe_values.h>
@@ -17,12 +21,13 @@
 #include <deal.II/lac/solver_cg.h>
 #include <deal.II/lac/sparse_matrix.h>
 
+#include <deal.II/numerics/data_out.h>
 #include <deal.II/numerics/matrix_creator.h>
-
-#include <gdm/data_out.h>
-#include <gdm/system.h>
+#include <deal.II/numerics/vector_tools.h>
 
 #include <fstream>
+
+using namespace dealii;
 
 template <int dim, typename Number = double>
 class ExactSolution : public dealii::Function<dim, Number>
@@ -32,7 +37,7 @@ public:
     : dealii::Function<dim, Number>(1, time)
     , wave_number(2.)
   {
-    advection[0] = 1.;
+    advection[0] = 1.0;
     if (dim > 1)
       advection[1] = 0.15;
     if (dim > 2)
@@ -60,6 +65,7 @@ private:
   dealii::Tensor<1, dim> advection;
   const double           wave_number;
 };
+
 
 
 template <int dim>
@@ -122,11 +128,11 @@ test()
   VectorType solution(dof_handler.n_dofs());
   VectorTools::interpolate(dof_handler, exact_solution, solution);
 
-  const auto fu = [&](const double time, const VectorType &solution) {
+  const auto fu_rhs = [&](const double time, const VectorType &solution) {
     VectorType vec_0, vec_1, vec_2;
-    vec_0.reinit(solution);
-    vec_1.reinit(solution);
-    vec_2.reinit(solution);
+    vec_0.reinit(solution); // for applying constraints
+    vec_1.reinit(solution); // result of assembly of rhs vector
+    vec_2.reinit(solution); // result of inversion mass matrix
 
     vec_0 = solution;
 
@@ -190,13 +196,10 @@ test()
     return vec_2;
   };
 
-  const auto fu_data_out = [&](const double time) {
-    dealii::DataOut<dim> data_out;
-    data_out.add_data_vector(dof_handler, solution, "solution");
-    data_out.build_patches(mapping, fe_degree);
-
+  const auto fu_postprocessing = [&](const double time) {
     static unsigned int counter = 0;
 
+    // compute error
     exact_solution.set_time(time);
 
     Vector<Number> cell_wise_error;
@@ -214,6 +217,11 @@ test()
 
     std::cout << time << " " << error << std::endl;
 
+    // output result -> Paraview
+    dealii::DataOut<dim> data_out;
+    data_out.add_data_vector(dof_handler, solution, "solution");
+    data_out.build_patches(mapping, fe_degree);
+
     std::string   file_name = "solution_" + std::to_string(counter) + ".vtu";
     std::ofstream file(file_name);
     data_out.write_vtu(file);
@@ -227,12 +235,12 @@ test()
   TimeStepping::ExplicitRungeKutta<VectorType> rk;
   rk.initialize(runge_kutta_method);
 
-  fu_data_out(0.0);
+  fu_postprocessing(0.0);
 
   // perform time stepping
   while (time.is_at_end() == false)
     {
-      rk.evolve_one_time_step(fu,
+      rk.evolve_one_time_step(fu_rhs,
                               time.get_current_time(),
                               time.get_next_step_size(),
                               solution);
@@ -241,7 +249,7 @@ test()
       constraints.distribute(solution);
 
       // output result
-      fu_data_out(time.get_current_time() + time.get_next_step_size());
+      fu_postprocessing(time.get_current_time() + time.get_next_step_size());
     }
 }
 
