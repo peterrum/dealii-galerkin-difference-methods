@@ -143,9 +143,9 @@ test(const bool use_mass_lumping)
   // helper function to evaluate right-hand-side vector
   const auto fu_rhs = [&](const double time, const VectorType &solution) {
     VectorType vec_0, vec_1, vec_2;
-    vec_0.reinit(solution);
-    vec_1.reinit(solution);
-    vec_2.reinit(solution);
+    vec_0.reinit(solution); // for applying constraints
+    vec_1.reinit(solution); // result of assembly of rhs vector
+    vec_2.reinit(solution); // result of inversion mass matrix
 
     vec_0 = solution;
 
