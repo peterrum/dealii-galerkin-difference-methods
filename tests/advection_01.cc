@@ -61,6 +61,141 @@ private:
   const double           wave_number;
 };
 
+namespace GDM
+{
+  namespace VectorTools
+  {
+    template <typename VectorType, int dim, int spacedim>
+    void
+    interpolate(
+      const hp::MappingCollection<dim, spacedim>                &mapping,
+      const GDM::System<dim>                                    &system,
+      const Function<spacedim, typename VectorType::value_type> &function,
+      VectorType                                                &vec)
+    {
+      dealii::VectorTools::interpolate(mapping,
+                                       system.get_dof_handler(),
+                                       function,
+                                       vec);
+    }
+
+    template <int dim, typename Number, class OutVector>
+    void
+    integrate_difference(const hp::MappingCollection<dim>    &mapping,
+                         const System<dim>                   &system,
+                         const ReadVector<Number>            &fe_function,
+                         const Function<dim, Number>         &exact_solution,
+                         OutVector                           &difference,
+                         const hp::QCollection<dim>          &quadrature,
+                         const dealii::VectorTools::NormType &norm)
+    {
+      AssertDimension(dealii::VectorTools::NormType::L2_norm, norm);
+
+      difference.reinit(system.get_triangulation().n_active_cells());
+
+      hp::FEValues<dim> fe_values_collection(mapping,
+                                             system.get_fe(),
+                                             quadrature,
+                                             update_quadrature_points |
+                                               update_values |
+                                               update_JxW_values);
+
+      std::vector<types::global_dof_index> dof_indices;
+      std::vector<Number>                  values;
+      std::vector<Number>                  values_exact;
+      for (const auto &cell : system.locally_active_cell_iterators())
+        {
+          fe_values_collection.reinit(cell->dealii_iterator(),
+                                      numbers::invalid_unsigned_int,
+                                      numbers::invalid_unsigned_int,
+                                      cell->active_fe_index());
+
+          const auto &fe_values = fe_values_collection.get_present_fe_values();
+
+          const unsigned int dofs_per_cell =
+            fe_values.get_fe().n_dofs_per_cell();
+
+          // get indices
+          dof_indices.resize(dofs_per_cell);
+          cell->get_dof_indices(dof_indices);
+
+          values.resize(fe_values.n_quadrature_points);
+          fe_values.get_function_values(fe_function, dof_indices, values);
+
+          values_exact.resize(fe_values.n_quadrature_points);
+          exact_solution.value_list(fe_values.get_quadrature_points(),
+                                    values_exact);
+
+          Number diff = 0.0;
+
+          for (const auto q : fe_values.dof_indices())
+            diff +=
+              Utilities::pow(values[q] - values_exact[q], 2) * fe_values.JxW(q);
+
+          difference[cell->dealii_iterator()->active_cell_index()] = diff;
+        }
+    }
+
+  } // namespace VectorTools
+
+  namespace MatrixCreator
+  {
+    template <int dim, typename SparseMatrixType>
+    void
+    create_mass_matrix(
+      const hp::MappingCollection<dim> &mapping,
+      const System<dim>                &system,
+      const hp::QCollection<dim>       &quadrature,
+      SparseMatrixType                 &sparse_matrix,
+      const AffineConstraints<typename SparseMatrixType::value_type>
+        &constraints)
+    {
+      using Number = typename SparseMatrixType::value_type;
+
+      hp::FEValues<dim> fe_values_collection(mapping,
+                                             system.get_fe(),
+                                             quadrature,
+                                             update_values | update_JxW_values);
+
+      std::vector<types::global_dof_index> dof_indices;
+      for (const auto &cell : system.locally_active_cell_iterators())
+        {
+          fe_values_collection.reinit(cell->dealii_iterator(),
+                                      numbers::invalid_unsigned_int,
+                                      numbers::invalid_unsigned_int,
+                                      cell->active_fe_index());
+
+          const auto &fe_values = fe_values_collection.get_present_fe_values();
+
+          const unsigned int dofs_per_cell =
+            fe_values.get_fe().n_dofs_per_cell();
+
+          // get indices
+          dof_indices.resize(dofs_per_cell);
+          cell->get_dof_indices(dof_indices);
+
+          // compute element stiffness matrix
+          FullMatrix<Number> cell_matrix(dofs_per_cell, dofs_per_cell);
+          for (const unsigned int q_index :
+               fe_values.quadrature_point_indices())
+            {
+              for (const unsigned int i : fe_values.dof_indices())
+                for (const unsigned int j : fe_values.dof_indices())
+                  cell_matrix(i, j) += fe_values.shape_value(i, q_index) *
+                                       fe_values.shape_value(j, q_index) *
+                                       fe_values.JxW(q_index);
+            }
+
+          // assemble
+          constraints.distribute_local_to_global(cell_matrix,
+                                                 dof_indices,
+                                                 sparse_matrix);
+        }
+    }
+  } // namespace MatrixCreator
+
+} // namespace GDM
+
 
 template <int dim>
 void
@@ -72,6 +207,7 @@ test()
   // settings
   const unsigned int fe_degree         = 3;
   const unsigned int n_subdivisions_1D = 40;
+  const unsigned int fe_degree_output  = 2;
   const double       delta_t           = 1.0 / n_subdivisions_1D * 0.5;
   const double       start_t           = 0.0;
   const double       end_t             = 0.1;
@@ -82,45 +218,47 @@ test()
   Functions::ConstantFunction<dim, Number> advection(
     exact_solution.get_transport_direction().begin_raw(), dim);
 
-  // create system
-  MappingQ1<dim> mapping;
-  FE_Q<dim>      fe(fe_degree);
-  QGauss<dim>    quadrature(fe_degree + 1);
+  // Create GDM system
+  GDM::System<dim> system(fe_degree, 1);
 
-  Triangulation<dim> tria;
-  GridGenerator::subdivided_hyper_cube(tria, n_subdivisions_1D, 0, 1, true);
+  // Create mesh
+  system.subdivided_hyper_cube(n_subdivisions_1D);
 
-  std::vector<
-    GridTools::PeriodicFacePair<typename Triangulation<dim>::cell_iterator>>
-    face_pairs;
-  for (unsigned int d = 0; d < dim; ++d)
-    GridTools::collect_periodic_faces(tria, 2 * d, 2 * d + 1, d, face_pairs);
-  tria.add_periodicity(face_pairs);
+  // Create finite elements
+  const auto &fe = system.get_fe();
 
-  DoFHandler<dim> dof_handler(tria);
-  dof_handler.distribute_dofs(fe);
+  // Create mapping
+  hp::MappingCollection<dim> mapping;
+  mapping.push_back(MappingQ1<dim>());
 
+  // Create quadrature
+  hp::QCollection<dim> quadrature;
+  quadrature.push_back(QGauss<dim>(fe_degree + 1));
+
+  // Create constraints
   AffineConstraints<Number> constraints;
   for (unsigned int d = 0; d < dim; ++d)
-    DoFTools::make_periodicity_constraints(
-      dof_handler, 2 * d, 2 * d + 1, d, constraints);
+    system.make_periodicity_constraints(d, constraints);
   constraints.close();
 
+  // Categorize cells
+  system.categorize();
+
   // compute mass matrix
-  DynamicSparsityPattern dsp(dof_handler.n_dofs());
-  DoFTools::make_sparsity_pattern(dof_handler, dsp, constraints);
+  DynamicSparsityPattern dsp(system.n_dofs());
+  system.create_sparsity_pattern(constraints, dsp);
 
   SparsityPattern sparsity_pattern;
   sparsity_pattern.copy_from(dsp);
 
   SparseMatrix<Number> sparse_matrix;
   sparse_matrix.reinit(sparsity_pattern);
-  MatrixCreator::create_mass_matrix<dim, dim>(
-    mapping, dof_handler, quadrature, sparse_matrix, nullptr, constraints);
+  GDM::MatrixCreator::create_mass_matrix(
+    mapping, system, quadrature, sparse_matrix, constraints);
 
   // set up initial condition
-  VectorType solution(dof_handler.n_dofs());
-  VectorTools::interpolate(dof_handler, exact_solution, solution);
+  VectorType solution(system.n_dofs());
+  GDM::VectorTools::interpolate(mapping, system, exact_solution, solution);
 
   const auto fu = [&](const double time, const VectorType &solution) {
     VectorType vec_0, vec_1, vec_2;
@@ -133,30 +271,35 @@ test()
     // apply constraints
     constraints.distribute(vec_0);
 
-    FEValues<dim> fe_values(mapping,
-                            fe,
-                            quadrature,
-                            update_values | update_gradients |
-                              update_quadrature_points | update_JxW_values);
+    hp::FEValues<dim> fe_values_collection(mapping,
+                                           fe,
+                                           quadrature,
+                                           update_gradients | update_values |
+                                             update_JxW_values |
+                                             update_quadrature_points);
 
     advection.set_time(time);
 
-    for (const auto &cell : dof_handler.active_cell_iterators())
+    for (const auto &cell : system.locally_active_cell_iterators())
       {
-        fe_values.reinit(cell);
+        fe_values_collection.reinit(cell->dealii_iterator(),
+                                    numbers::invalid_unsigned_int,
+                                    numbers::invalid_unsigned_int,
+                                    cell->active_fe_index());
 
-        const unsigned int n_dofs_per_cell = cell->get_fe().n_dofs_per_cell();
+        const auto &fe_values = fe_values_collection.get_present_fe_values();
 
-        std::vector<types::global_dof_index> dof_indices(n_dofs_per_cell);
+        const unsigned int dofs_per_cell = fe_values.get_fe().n_dofs_per_cell();
+
+        std::vector<types::global_dof_index> dof_indices(dofs_per_cell);
         cell->get_dof_indices(dof_indices);
 
-        std::vector<Tensor<1, dim, Number>> quadrature_gradients(
-          n_dofs_per_cell);
+        std::vector<Tensor<1, dim, Number>> quadrature_gradients(dofs_per_cell);
         fe_values.get_function_gradients(vec_0,
                                          dof_indices,
                                          quadrature_gradients);
 
-        std::vector<Number> fluxes(n_dofs_per_cell);
+        std::vector<Number> fluxes(dofs_per_cell);
 
         for (const auto q : fe_values.quadrature_point_indices())
           {
@@ -169,7 +312,7 @@ test()
               }
           }
 
-        Vector<Number> cell_vector(n_dofs_per_cell);
+        Vector<Number> cell_vector(dofs_per_cell);
         for (const unsigned int q_index : fe_values.quadrature_point_indices())
           for (const unsigned int i : fe_values.dof_indices())
             cell_vector(i) -= fluxes[q_index] *
@@ -191,31 +334,32 @@ test()
   };
 
   const auto fu_data_out = [&](const double time) {
-    dealii::DataOut<dim> data_out;
-    data_out.add_data_vector(dof_handler, solution, "solution");
-    data_out.build_patches(mapping, fe_degree);
-
     static unsigned int counter = 0;
 
+    // compute error
     exact_solution.set_time(time);
 
     Vector<Number> cell_wise_error;
-    VectorTools::integrate_difference(mapping,
-                                      dof_handler,
-                                      solution,
-                                      exact_solution,
-                                      cell_wise_error,
-                                      quadrature,
-                                      VectorTools::NormType::L2_norm);
+    GDM::VectorTools::integrate_difference(mapping,
+                                           system,
+                                           solution,
+                                           exact_solution,
+                                           cell_wise_error,
+                                           quadrature,
+                                           VectorTools::NormType::L2_norm);
     const auto error =
-      VectorTools::compute_global_error(tria,
+      VectorTools::compute_global_error(system.get_triangulation(),
                                         cell_wise_error,
                                         VectorTools::NormType::L2_norm);
 
     std::cout << time << " " << error << std::endl;
 
-    std::string   file_name = "solution_" + std::to_string(counter) + ".vtu";
-    std::ofstream file(file_name);
+    // output result -> Paraview
+    GDM::DataOut<dim> data_out(system, mapping, fe_degree_output);
+    data_out.add_data_vector(solution, "solution");
+    data_out.build_patches();
+
+    std::ofstream file("solution_" + std::to_string(counter) + ".vtu");
     data_out.write_vtu(file);
 
     counter++;

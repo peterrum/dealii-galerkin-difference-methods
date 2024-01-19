@@ -594,6 +594,12 @@ namespace GDM
       return is_locally_relevant;
     }
 
+    const DoFHandler<dim> &
+    get_dof_handler() const
+    {
+      return dof_handler;
+    }
+
   private:
     void
     create_triangulation_pre()
