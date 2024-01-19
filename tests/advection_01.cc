@@ -128,7 +128,8 @@ test()
   VectorType solution(system.n_dofs());
   GDM::VectorTools::interpolate(mapping, system, exact_solution, solution);
 
-  const auto fu = [&](const double time, const VectorType &solution) {
+  // helper function to evaluate right-hand-side vector
+  const auto fu_rhs = [&](const double time, const VectorType &solution) {
     VectorType vec_0, vec_1, vec_2;
     vec_0.reinit(solution);
     vec_1.reinit(solution);
@@ -201,7 +202,8 @@ test()
     return vec_2;
   };
 
-  const auto fu_data_out = [&](const double time) {
+  // heper function for postprocessing
+  const auto fu_postprocessing = [&](const double time) {
     static unsigned int counter = 0;
 
     // compute error
@@ -239,12 +241,12 @@ test()
   TimeStepping::ExplicitRungeKutta<VectorType> rk;
   rk.initialize(runge_kutta_method);
 
-  fu_data_out(0.0);
+  fu_postprocessing(0.0);
 
   // perform time stepping
   while (time.is_at_end() == false)
     {
-      rk.evolve_one_time_step(fu,
+      rk.evolve_one_time_step(fu_rhs,
                               time.get_current_time(),
                               time.get_next_step_size(),
                               solution);
@@ -253,7 +255,7 @@ test()
       constraints.distribute(solution);
 
       // output result
-      fu_data_out(time.get_current_time() + time.get_next_step_size());
+      fu_postprocessing(time.get_current_time() + time.get_next_step_size());
     }
 }
 
