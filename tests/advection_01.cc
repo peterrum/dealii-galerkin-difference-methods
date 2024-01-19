@@ -132,7 +132,8 @@ namespace GDM
             diff +=
               Utilities::pow(values[q] - values_exact[q], 2) * fe_values.JxW(q);
 
-          difference[cell->dealii_iterator()->active_cell_index()] = diff;
+          difference[cell->dealii_iterator()->active_cell_index()] =
+            std::sqrt(diff);
         }
     }
 
