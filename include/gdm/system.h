@@ -405,8 +405,6 @@ namespace GDM
             constraints.add_line(i1);
             constraints.add_entry(i1, i0, 1.0);
           }
-
-      std::cout << std::endl;
     }
 
 
