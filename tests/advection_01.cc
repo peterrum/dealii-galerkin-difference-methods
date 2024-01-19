@@ -32,7 +32,7 @@ public:
     : dealii::Function<dim, Number>(1, time)
     , wave_number(2.)
   {
-    advection[0] = 1.;
+    advection[0] = 1.0;
     if (dim > 1)
       advection[1] = 0.15;
     if (dim > 2)

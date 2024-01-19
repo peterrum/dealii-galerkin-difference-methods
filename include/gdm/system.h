@@ -394,14 +394,19 @@ namespace GDM
         for (unsigned int j = 0; j < n1; ++j)
           {
             const unsigned int i0 = i * n2 + j;
-            const unsigned int i1 = i0 + n_subdivisions[d];
+            const unsigned int i1 = i0 + n_subdivisions[d] * n1;
 
             if (is_locally_active.is_element(i1) == false)
+              continue;
+
+            if (constraints.is_constrained(i1))
               continue;
 
             constraints.add_line(i1);
             constraints.add_entry(i1, i0, 1.0);
           }
+
+      std::cout << std::endl;
     }
 
 
