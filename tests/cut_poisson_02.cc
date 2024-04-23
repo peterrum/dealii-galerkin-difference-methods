@@ -245,7 +245,7 @@ test()
 
   // solve system
   const unsigned int max_iterations = solution.size();
-  ReductionControl   solver_control(max_iterations, 1.e-10, 1.e-4);
+  ReductionControl   solver_control(max_iterations, 1.e-10, 1.e-6);
   SolverCG<>         solver(solver_control);
   solver.solve(stiffness_matrix, solution, rhs, PreconditionIdentity());
 
