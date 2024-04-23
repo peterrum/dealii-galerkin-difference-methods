@@ -1,12 +1,3 @@
-Creating background mesh
-Setting up discrete level set function
-Classifying cells
-Distributing degrees of freedom
-Initializing matrices
-Assembling
-Solving system
-Writing vtu file
-Computing L2 error
 
 Mesh size  L2-Error  
    0.0378 8.4058e-04 

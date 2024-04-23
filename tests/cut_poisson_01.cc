@@ -69,73 +69,62 @@ test()
 {
   const unsigned int fe_degree           = 1;
   const unsigned int fe_degree_level_set = 1;
+  const unsigned int n_refinements       = 4;
+
+  ConvergenceTable convergence_table;
 
   const Functions::ConstantFunction<dim> rhs_function(4.0);
   const Functions::ConstantFunction<dim> boundary_condition(1.0);
 
+  // solution system
   Triangulation<dim> triangulation;
-
-  const FE_Q<dim> fe_level_set(fe_degree_level_set);
-  DoFHandler<dim> level_set_dof_handler(triangulation);
-  Vector<double>  level_set;
-
-  DoFHandler<dim> dof_handler(triangulation);
-  Vector<double>  solution;
-
-  NonMatching::MeshClassifier<dim> mesh_classifier(level_set_dof_handler,
-                                                   level_set);
-
-  SparsityPattern      sparsity_pattern;
-  SparseMatrix<double> stiffness_matrix;
-  Vector<double>       rhs;
-
-  ConvergenceTable   convergence_table;
-  const unsigned int n_refinements = 4;
-
-  std::cout << "Creating background mesh" << std::endl;
 
   GridGenerator::hyper_cube(triangulation, -1.21, 1.21);
   triangulation.refine_global(2);
   triangulation.refine_global(n_refinements);
 
-  std::cout << "Setting up discrete level set function" << std::endl;
+  hp::FECollection<dim> fe;
+  fe.push_back(FE_Q<dim>(fe_degree));
 
+  DoFHandler<dim> dof_handler(triangulation);
+  dof_handler.distribute_dofs(fe);
+
+  // level set and classify cells
+  const FE_Q<dim> fe_level_set(fe_degree_level_set);
+  DoFHandler<dim> level_set_dof_handler(triangulation);
   level_set_dof_handler.distribute_dofs(fe_level_set);
+
+  Vector<double> level_set;
   level_set.reinit(level_set_dof_handler.n_dofs());
+
+  NonMatching::MeshClassifier<dim> mesh_classifier(level_set_dof_handler,
+                                                   level_set);
 
   const Functions::SignedDistance::Sphere<dim> signed_distance_sphere;
   VectorTools::interpolate(level_set_dof_handler,
                            signed_distance_sphere,
                            level_set);
 
-  std::cout << "Classifying cells" << std::endl;
   mesh_classifier.reclassify();
 
-
-  std::cout << "Distributing degrees of freedom" << std::endl;
-
-  hp::FECollection<dim> fe;
-  fe.push_back(FE_Q<dim>(fe_degree));
-
-  dof_handler.distribute_dofs(fe);
-
-  std::cout << "Initializing matrices" << std::endl;
-
+  // allocate memory
   DynamicSparsityPattern dsp(dof_handler.n_dofs(), dof_handler.n_dofs());
 
   const AffineConstraints<double> constraints;
 
   DoFTools::make_sparsity_pattern(dof_handler, dsp, constraints);
 
+  SparsityPattern sparsity_pattern;
   sparsity_pattern.copy_from(dsp);
 
+  SparseMatrix<double> stiffness_matrix;
   stiffness_matrix.reinit(sparsity_pattern);
+
+  Vector<double> solution, rhs;
   solution.reinit(dof_handler.n_dofs());
   rhs.reinit(dof_handler.n_dofs());
 
-
-  std::cout << "Assembling" << std::endl;
-
+  // assemble system
   const unsigned int n_dofs_per_cell = fe[0].dofs_per_cell;
   FullMatrix<double> local_stiffness(n_dofs_per_cell, n_dofs_per_cell);
   Vector<double>     local_rhs(n_dofs_per_cell);
@@ -250,15 +239,14 @@ test()
         entry.value() = 1.0;
       }
 
-  std::cout << "Solving system" << std::endl;
-
+  // solve system
   const unsigned int max_iterations = solution.size();
   SolverControl      solver_control(max_iterations);
   SolverCG<>         solver(solver_control);
   solver.solve(stiffness_matrix, solution, rhs, PreconditionIdentity());
 
-  std::cout << "Writing vtu file" << std::endl;
 
+  // create Paraview output
   DataOut<dim> data_out;
   data_out.add_data_vector(dof_handler, solution, "solution");
   data_out.add_data_vector(level_set_dof_handler, level_set, "level_set");
@@ -267,9 +255,7 @@ test()
   std::ofstream output("step-85.vtu");
   data_out.write_vtu(output);
 
-
-  std::cout << "Computing L2 error" << std::endl;
-
+  // compute error
   const QGauss<1> quadrature_1D_error(fe_degree + 1);
 
   NonMatching::RegionUpdateFlags region_update_flags_error;
