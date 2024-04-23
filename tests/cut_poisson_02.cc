@@ -39,6 +39,9 @@
 #include <deal.II/numerics/data_out.h>
 #include <deal.II/numerics/vector_tools.h>
 
+#include <gdm/data_out.h>
+#include <gdm/system.h>
+
 #include <fstream>
 #include <vector>
 
@@ -67,24 +70,37 @@ void
 test()
 {
   const unsigned int n_subdivisions      = 64;
-  const unsigned int fe_degree           = 1;
+  const unsigned int n_components        = 1;
+  const unsigned int fe_degree           = 3;
   const unsigned int fe_degree_level_set = 1;
+  const unsigned int fe_degree_output    = 2;
 
   ConvergenceTable convergence_table;
 
   const Functions::ConstantFunction<dim> rhs_function(4.0);
   const Functions::ConstantFunction<dim> boundary_condition(1.0);
 
-  // solution system
-  Triangulation<dim> triangulation;
-  GridGenerator::subdivided_hyper_cube(
-    triangulation, n_subdivisions, -1.21, 1.21, true);
+  // Create GDM system
+  GDM::System<dim> system(fe_degree, n_components);
 
-  hp::FECollection<dim> fe;
-  fe.push_back(FE_Q<dim>(fe_degree));
+  // Create mesh
+  system.subdivided_hyper_cube(n_subdivisions, -1.21, 1.21);
 
-  DoFHandler<dim> dof_handler(triangulation);
-  dof_handler.distribute_dofs(fe);
+  // Create finite elements
+  const auto &fe = system.get_fe();
+
+  // Create mapping
+  hp::MappingCollection<dim> mapping;
+  mapping.push_back(MappingQ1<dim>());
+
+  // Create constraints
+  const AffineConstraints<double> constraints;
+
+  // Categorize cells
+  system.categorize();
+
+  const auto &triangulation = system.get_triangulation();
+
 
   // level set and classify cells
   const FE_Q<dim> fe_level_set(fe_degree_level_set);
@@ -105,11 +121,8 @@ test()
   mesh_classifier.reclassify();
 
   // allocate memory
-  DynamicSparsityPattern dsp(dof_handler.n_dofs(), dof_handler.n_dofs());
-
-  const AffineConstraints<double> constraints;
-
-  DoFTools::make_sparsity_pattern(dof_handler, dsp, constraints);
+  DynamicSparsityPattern dsp(system.n_dofs());
+  system.create_sparsity_pattern(constraints, dsp);
 
   SparsityPattern sparsity_pattern;
   sparsity_pattern.copy_from(dsp);
@@ -118,8 +131,8 @@ test()
   stiffness_matrix.reinit(sparsity_pattern);
 
   Vector<double> solution, rhs;
-  solution.reinit(dof_handler.n_dofs());
-  rhs.reinit(dof_handler.n_dofs());
+  solution.reinit(system.n_dofs());
+  rhs.reinit(system.n_dofs());
 
   // assemble system
   const unsigned int n_dofs_per_cell = fe[0].dofs_per_cell;
@@ -145,16 +158,18 @@ test()
                                                     level_set_dof_handler,
                                                     level_set);
 
-  for (const auto &cell : dof_handler.active_cell_iterators())
-    if (mesh_classifier.location_to_level_set(cell) !=
+  for (const auto &cell : system.locally_active_cell_iterators())
+    if (mesh_classifier.location_to_level_set(cell->dealii_iterator()) !=
         NonMatching::LocationToLevelSet::outside)
       {
         local_stiffness = 0;
         local_rhs       = 0;
 
-        const double cell_side_length = cell->minimum_vertex_distance();
+        const double cell_side_length =
+          cell->dealii_iterator()->minimum_vertex_distance();
 
-        non_matching_fe_values.reinit(cell);
+        non_matching_fe_values.reinit(cell->dealii_iterator(),
+                                      cell->active_fe_index());
 
         const std::optional<FEValues<dim>> &inside_fe_values =
           non_matching_fe_values.get_inside_fe_values();
@@ -230,19 +245,18 @@ test()
 
   // solve system
   const unsigned int max_iterations = solution.size();
-  SolverControl      solver_control(max_iterations);
+  ReductionControl   solver_control(max_iterations, 1.e-10, 1.e-4);
   SolverCG<>         solver(solver_control);
   solver.solve(stiffness_matrix, solution, rhs, PreconditionIdentity());
 
 
   // create Paraview output
-  DataOut<dim> data_out;
-  data_out.add_data_vector(dof_handler, solution, "solution");
-  data_out.add_data_vector(level_set_dof_handler, level_set, "level_set");
-
+  GDM::DataOut<dim> data_out(system, mapping, fe_degree_output);
+  data_out.add_data_vector(solution, "solution");
   data_out.build_patches();
-  std::ofstream output("step-85.vtu");
-  data_out.write_vtu(output);
+
+  std::ofstream file("step-85.vtu");
+  data_out.write_vtu(file);
 
   // compute error
   const QGauss<1> quadrature_1D_error(fe_degree + 1);
@@ -262,11 +276,12 @@ test()
   AnalyticalSolution<dim> analytical_solution;
   double                  error_L2_squared = 0;
 
-  for (const auto &cell : dof_handler.active_cell_iterators())
-    if (mesh_classifier.location_to_level_set(cell) !=
+  for (const auto &cell : system.locally_active_cell_iterators())
+    if (mesh_classifier.location_to_level_set(cell->dealii_iterator()) !=
         NonMatching::LocationToLevelSet::outside)
       {
-        non_matching_fe_values_error.reinit(cell);
+        non_matching_fe_values_error.reinit(cell->dealii_iterator(),
+                                            cell->active_fe_index());
 
         const std::optional<FEValues<dim>> &fe_values =
           non_matching_fe_values_error.get_inside_fe_values();
@@ -274,7 +289,11 @@ test()
         if (fe_values)
           {
             std::vector<double> solution_values(fe_values->n_quadrature_points);
-            fe_values->get_function_values(solution, solution_values);
+
+            cell->get_dof_indices(local_dof_indices);
+            fe_values->get_function_values(solution,
+                                           local_dof_indices,
+                                           solution_values);
 
             for (const unsigned int q : fe_values->quadrature_point_indices())
               {
