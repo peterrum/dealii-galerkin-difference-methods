@@ -1,8 +1,8 @@
 // Test cut Poisson problem: serial, FEM.
 
-#include <deal.II/base/function.h>
-
 #include <deal.II/base/convergence_table.h>
+#include <deal.II/base/function.h>
+#include <deal.II/base/function_signed_distance.h>
 #include <deal.II/base/point.h>
 #include <deal.II/base/quadrature.h>
 #include <deal.II/base/quadrature_lib.h>
@@ -16,8 +16,8 @@
 #include <deal.II/fe/fe_update_flags.h>
 #include <deal.II/fe/fe_values.h>
 
-#include <deal.II/grid/grid_generator.h>
 #include <deal.II/grid/filtered_iterator.h>
+#include <deal.II/grid/grid_generator.h>
 #include <deal.II/grid/tria.h>
 
 #include <deal.II/hp/fe_collection.h>
@@ -33,17 +33,15 @@
 #include <deal.II/lac/sparsity_pattern.h>
 #include <deal.II/lac/vector.h>
 
+#include <deal.II/non_matching/fe_immersed_values.h>
+#include <deal.II/non_matching/fe_values.h>
+#include <deal.II/non_matching/mesh_classifier.h>
+
 #include <deal.II/numerics/data_out.h>
 #include <deal.II/numerics/vector_tools.h>
 
 #include <fstream>
 #include <vector>
-
-#include <deal.II/base/function_signed_distance.h>
-
-#include <deal.II/non_matching/fe_immersed_values.h>
-#include <deal.II/non_matching/fe_values.h>
-#include <deal.II/non_matching/mesh_classifier.h>
 
 namespace Step85
 {
@@ -55,26 +53,36 @@ namespace Step85
   public:
     LaplaceSolver();
 
-    void run();
+    void
+    run();
 
   private:
-    void make_grid();
+    void
+    make_grid();
 
-    void setup_discrete_level_set();
+    void
+    setup_discrete_level_set();
 
-    void distribute_dofs();
+    void
+    distribute_dofs();
 
-    void initialize_matrices();
+    void
+    initialize_matrices();
 
-    void assemble_system();
+    void
+    assemble_system();
 
-    void solve();
+    void
+    solve();
 
-    void output_results() const;
+    void
+    output_results() const;
 
-    double compute_L2_error() const;
+    double
+    compute_L2_error() const;
 
-    bool face_has_ghost_penalty(
+    bool
+    face_has_ghost_penalty(
       const typename Triangulation<dim>::active_cell_iterator &cell,
       const unsigned int face_index) const;
 
@@ -116,7 +124,8 @@ namespace Step85
 
 
   template <int dim>
-  void LaplaceSolver<dim>::make_grid()
+  void
+  LaplaceSolver<dim>::make_grid()
   {
     std::cout << "Creating background mesh" << std::endl;
 
@@ -127,7 +136,8 @@ namespace Step85
 
 
   template <int dim>
-  void LaplaceSolver<dim>::setup_discrete_level_set()
+  void
+  LaplaceSolver<dim>::setup_discrete_level_set()
   {
     std::cout << "Setting up discrete level set function" << std::endl;
 
@@ -149,7 +159,8 @@ namespace Step85
   };
 
   template <int dim>
-  void LaplaceSolver<dim>::distribute_dofs()
+  void
+  LaplaceSolver<dim>::distribute_dofs()
   {
     std::cout << "Distributing degrees of freedom" << std::endl;
 
@@ -173,7 +184,8 @@ namespace Step85
 
 
   template <int dim>
-  void LaplaceSolver<dim>::initialize_matrices()
+  void
+  LaplaceSolver<dim>::initialize_matrices()
   {
     std::cout << "Initializing matrices" << std::endl;
 
@@ -211,7 +223,8 @@ namespace Step85
 
 
   template <int dim>
-  bool LaplaceSolver<dim>::face_has_ghost_penalty(
+  bool
+  LaplaceSolver<dim>::face_has_ghost_penalty(
     const typename Triangulation<dim>::active_cell_iterator &cell,
     const unsigned int                                       face_index) const
   {
@@ -238,7 +251,8 @@ namespace Step85
 
 
   template <int dim>
-  void LaplaceSolver<dim>::assemble_system()
+  void
+  LaplaceSolver<dim>::assemble_system()
   {
     std::cout << "Assembling" << std::endl;
 
@@ -396,7 +410,8 @@ namespace Step85
 
 
   template <int dim>
-  void LaplaceSolver<dim>::solve()
+  void
+  LaplaceSolver<dim>::solve()
   {
     std::cout << "Solving system" << std::endl;
 
@@ -409,7 +424,8 @@ namespace Step85
 
 
   template <int dim>
-  void LaplaceSolver<dim>::output_results() const
+  void
+  LaplaceSolver<dim>::output_results() const
   {
     std::cout << "Writing vtu file" << std::endl;
 
@@ -435,15 +451,17 @@ namespace Step85
   class AnalyticalSolution : public Function<dim>
   {
   public:
-    double value(const Point<dim>  &point,
-                 const unsigned int component = 0) const override;
+    double
+    value(const Point<dim>  &point,
+          const unsigned int component = 0) const override;
   };
 
 
 
   template <int dim>
-  double AnalyticalSolution<dim>::value(const Point<dim>  &point,
-                                        const unsigned int component) const
+  double
+  AnalyticalSolution<dim>::value(const Point<dim>  &point,
+                                 const unsigned int component) const
   {
     AssertIndexRange(component, this->n_components);
     (void)component;
@@ -454,7 +472,8 @@ namespace Step85
 
 
   template <int dim>
-  double LaplaceSolver<dim>::compute_L2_error() const
+  double
+  LaplaceSolver<dim>::compute_L2_error() const
   {
     std::cout << "Computing L2 error" << std::endl;
 
@@ -505,48 +524,42 @@ namespace Step85
 
 
   template <int dim>
-  void LaplaceSolver<dim>::run()
+  void
+  LaplaceSolver<dim>::run()
   {
     ConvergenceTable   convergence_table;
-    const unsigned int n_refinements = 3;
+    const unsigned int n_refinements = 4;
 
     make_grid();
-    for (unsigned int cycle = 0; cycle <= n_refinements; cycle++)
-      {
-        std::cout << "Refinement cycle " << cycle << std::endl;
-        triangulation.refine_global(1);
-        setup_discrete_level_set();
-        std::cout << "Classifying cells" << std::endl;
-        mesh_classifier.reclassify();
-        distribute_dofs();
-        initialize_matrices();
-        assemble_system();
-        solve();
-        if (cycle == 1)
-          output_results();
-        const double error_L2 = compute_L2_error();
-        const double cell_side_length =
-          triangulation.begin_active()->minimum_vertex_distance();
+    triangulation.refine_global(n_refinements);
+    setup_discrete_level_set();
+    std::cout << "Classifying cells" << std::endl;
+    mesh_classifier.reclassify();
+    distribute_dofs();
+    initialize_matrices();
+    assemble_system();
+    solve();
+    output_results();
+    const double error_L2 = compute_L2_error();
+    const double cell_side_length =
+      triangulation.begin_active()->minimum_vertex_distance();
 
-        convergence_table.add_value("Cycle", cycle);
-        convergence_table.add_value("Mesh size", cell_side_length);
-        convergence_table.add_value("L2-Error", error_L2);
+    convergence_table.add_value("Mesh size", cell_side_length);
+    convergence_table.add_value("L2-Error", error_L2);
 
-        convergence_table.evaluate_convergence_rates(
-          "L2-Error", ConvergenceTable::reduction_rate_log2);
-        convergence_table.set_scientific("L2-Error", true);
+    convergence_table.set_scientific("L2-Error", true);
 
-        std::cout << std::endl;
-        convergence_table.write_text(std::cout);
-        std::cout << std::endl;
-      }
+    std::cout << std::endl;
+    convergence_table.write_text(std::cout);
+    std::cout << std::endl;
   }
 
-}
+} // namespace Step85
 
 
 
-int main()
+int
+main()
 {
   const int dim = 2;
 
