@@ -67,14 +67,15 @@ template <int dim>
 void
 test()
 {
-  const unsigned int fe_degree = 1;
+  const unsigned int fe_degree           = 1;
+  const unsigned int fe_degree_level_set = 1;
 
   const Functions::ConstantFunction<dim> rhs_function(4.0);
   const Functions::ConstantFunction<dim> boundary_condition(1.0);
 
   Triangulation<dim> triangulation;
 
-  const FE_Q<dim> fe_level_set(fe_degree);
+  const FE_Q<dim> fe_level_set(fe_degree_level_set);
   DoFHandler<dim> level_set_dof_handler(triangulation);
   Vector<double>  level_set;
 
