@@ -43,9 +43,26 @@
 #include <fstream>
 #include <vector>
 
+
+using namespace dealii;
+
+template <int dim>
+class AnalyticalSolution : public Function<dim>
+{
+public:
+  double
+  value(const Point<dim>  &point,
+        const unsigned int component = 0) const override
+  {
+    AssertIndexRange(component, this->n_components);
+    (void)component;
+
+    return 1. - 2. / dim * (point.norm_square() - 1.);
+  }
+};
+
 namespace Step85
 {
-  using namespace dealii;
 
   template <int dim>
   class LaplaceSolver
@@ -443,30 +460,6 @@ namespace Step85
     data_out.build_patches();
     std::ofstream output("step-85.vtu");
     data_out.write_vtu(output);
-  }
-
-
-
-  template <int dim>
-  class AnalyticalSolution : public Function<dim>
-  {
-  public:
-    double
-    value(const Point<dim>  &point,
-          const unsigned int component = 0) const override;
-  };
-
-
-
-  template <int dim>
-  double
-  AnalyticalSolution<dim>::value(const Point<dim>  &point,
-                                 const unsigned int component) const
-  {
-    AssertIndexRange(component, this->n_components);
-    (void)component;
-
-    return 1. - 2. / dim * (point.norm_square() - 1.);
   }
 
 
