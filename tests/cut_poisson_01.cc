@@ -130,6 +130,8 @@ namespace Step85
     const typename Triangulation<dim>::active_cell_iterator &cell,
     const unsigned int                                       face_index) const
   {
+    return false;
+
     if (cell->at_boundary(face_index))
       return false;
 
