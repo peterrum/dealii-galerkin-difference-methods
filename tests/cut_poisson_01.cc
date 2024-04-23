@@ -1,23 +1,4 @@
-/* ------------------------------------------------------------------------
- *
- * SPDX-License-Identifier: LGPL-2.1-or-later
- * Copyright (C) 2022 - 2024 by the deal.II authors
- *
- * This file is part of the deal.II library.
- *
- * Part of the source code is dual licensed under Apache-2.0 WITH
- * LLVM-exception OR LGPL-2.1-or-later. Detailed license information
- * governing the source code and code contributions can be found in
- * LICENSE.md and CONTRIBUTING.md at the top level directory of deal.II.
- *
- * ------------------------------------------------------------------------
- *
- * Author: Simon Sticko, Uppsala University, 2021
- */
-
-// @sect3{Include files}
-
-// The first include files have all been treated in previous examples.
+// Test cut Poisson problem: serial, FEM.
 
 #include <deal.II/base/function.h>
 
@@ -58,17 +39,11 @@
 #include <fstream>
 #include <vector>
 
-// The first new header contains some common level set functions.
-// For example, the spherical geometry that we use here.
 #include <deal.II/base/function_signed_distance.h>
 
-// We also need 3 new headers from the NonMatching namespace.
 #include <deal.II/non_matching/fe_immersed_values.h>
 #include <deal.II/non_matching/fe_values.h>
 #include <deal.II/non_matching/mesh_classifier.h>
-
-// @sect3{The LaplaceSolver class Template}
-// We then define the main class that solves the Laplace problem.
 
 namespace Step85
 {
@@ -110,14 +85,10 @@ namespace Step85
 
     Triangulation<dim> triangulation;
 
-    // We need two separate DoFHandlers. The first manages the DoFs for the
-    // discrete level set function that describes the geometry of the domain.
     const FE_Q<dim> fe_level_set;
     DoFHandler<dim> level_set_dof_handler;
     Vector<double>  level_set;
 
-    // The second DoFHandler manages the DoFs for the solution of the Poisson
-    // equation.
     hp::FECollection<dim> fe_collection;
     DoFHandler<dim>       dof_handler;
     Vector<double>        solution;
@@ -144,10 +115,6 @@ namespace Step85
 
 
 
-  // @sect3{Setting up the Background Mesh}
-  // We generate a background mesh with perfectly Cartesian cells. Our domain is
-  // a unit disc centered at the origin, so we need to make the background mesh
-  // a bit larger than $[-1, 1]^{\text{dim}}$ to completely cover $\Omega$.
   template <int dim>
   void LaplaceSolver<dim>::make_grid()
   {
@@ -159,11 +126,6 @@ namespace Step85
 
 
 
-  // @sect3{Setting up the Discrete Level Set Function}
-  // The discrete level set function is defined on the whole background mesh.
-  // Thus, to set up the DoFHandler for the level set function, we distribute
-  // DoFs over all elements in $\mathcal{T}_h$. We then set up the discrete
-  // level set function by interpolating onto this finite element space.
   template <int dim>
   void LaplaceSolver<dim>::setup_discrete_level_set()
   {
@@ -180,19 +142,12 @@ namespace Step85
 
 
 
-  // @sect3{Setting up the Finite Element Space}
-  // To set up the finite element space $V_\Omega^h$, we will use 2 different
-  // elements: FE_Q and FE_Nothing. For better readability we define an enum for
-  // the indices in the order we store them in the hp::FECollection.
   enum ActiveFEIndex
   {
     lagrange = 0,
     nothing  = 1
   };
 
-  // We then use the MeshClassifier to check LocationToLevelSet for each cell in
-  // the mesh and tell the DoFHandler to use FE_Q on elements that are inside or
-  // intersected, and FE_Nothing on the elements that are outside.
   template <int dim>
   void LaplaceSolver<dim>::distribute_dofs()
   {
@@ -217,17 +172,6 @@ namespace Step85
 
 
 
-  // @sect3{Sparsity Pattern}
-  // The added ghost penalty results in a sparsity pattern similar to a DG
-  // method with a symmetric-interior-penalty term. Thus, we can use the
-  // make_flux_sparsity_pattern() function to create it. However, since the
-  // ghost-penalty terms only act on the faces in $\mathcal{F}_h$, we can pass
-  // in a lambda function that tells make_flux_sparsity_pattern() over which
-  // faces the flux-terms appear. This gives us a sparsity pattern with minimal
-  // number of entries. When passing a lambda function,
-  // make_flux_sparsity_pattern requires us to also pass cell and face coupling
-  // tables to it. If the problem was vector-valued, these tables would allow us
-  // to couple only some of the vector components. This is discussed in step-46.
   template <int dim>
   void LaplaceSolver<dim>::initialize_matrices()
   {
@@ -266,9 +210,6 @@ namespace Step85
 
 
 
-  // The following function describes which faces are part of the set
-  // $\mathcal{F}_h$. That is, it returns true if the face of the incoming cell
-  // belongs to the set $\mathcal{F}_h$.
   template <int dim>
   bool LaplaceSolver<dim>::face_has_ghost_penalty(
     const typename Triangulation<dim>::active_cell_iterator &cell,
@@ -296,7 +237,6 @@ namespace Step85
 
 
 
-  // @sect3{Assembling the System}
   template <int dim>
   void LaplaceSolver<dim>::assemble_system()
   {
@@ -310,8 +250,6 @@ namespace Step85
     const double ghost_parameter   = 0.5;
     const double nitsche_parameter = 5 * (fe_degree + 1) * fe_degree;
 
-    // Since the ghost penalty is similar to a DG flux term, the simplest way to
-    // assemble it is to use an FEInterfaceValues object.
     const QGauss<dim - 1>  face_quadrature(fe_degree + 1);
     FEInterfaceValues<dim> fe_interface_values(fe_collection[0],
                                                face_quadrature,
@@ -320,28 +258,6 @@ namespace Step85
                                                  update_normal_vectors);
 
 
-    // As we iterate over the cells in the mesh, we would in principle have to
-    // do the following on each cell, $T$,
-    //
-    // 1. Construct one quadrature rule to integrate over the intersection with
-    // the domain, $T \cap \Omega$, and one quadrature rule to integrate over
-    // the intersection with the boundary, $T \cap \Gamma$.
-    // 2. Create FEValues-like objects with the new quadratures.
-    // 3. Assemble the local matrix using the created FEValues-objects.
-    //
-    // To make the assembly easier, we use the class NonMatching::FEValues,
-    // which does the above steps 1 and 2 for us. The algorithm @cite saye_2015
-    // that is used to generate the quadrature rules on the intersected cells
-    // uses a 1-dimensional quadrature rule as base. Thus, we pass a 1d
-    // Gauss--Legendre quadrature to the constructor of NonMatching::FEValues.
-    // On the non-intersected cells, a tensor product of this 1d-quadrature will
-    // be used.
-    //
-    // As stated in the introduction, each cell has 3 different regions: inside,
-    // surface, and outside, where the level set function in each region is
-    // negative, zero, and positive. We need an UpdateFlags variable for each
-    // such region. These are stored on an object of type
-    // NonMatching::RegionUpdateFlags, which we pass to NonMatching::FEValues.
     const QGauss<1> quadrature_1D(fe_degree + 1);
 
     NonMatching::RegionUpdateFlags region_update_flags;
@@ -358,9 +274,6 @@ namespace Step85
                                                       level_set_dof_handler,
                                                       level_set);
 
-    // As we iterate over the cells, we don't need to do anything on the cells
-    // that have FENothing elements. To disregard them we use an iterator
-    // filter.
     for (const auto &cell :
          dof_handler.active_cell_iterators() |
            IteratorFilters::ActiveFEIndexEqualTo(ActiveFEIndex::lagrange))
@@ -370,32 +283,8 @@ namespace Step85
 
         const double cell_side_length = cell->minimum_vertex_distance();
 
-        // First, we call the reinit function of our NonMatching::FEValues
-        // object. In the background, NonMatching::FEValues uses the
-        // MeshClassifier passed to its constructor to check if the incoming
-        // cell is intersected. If that is the case, NonMatching::FEValues calls
-        // the NonMatching::QuadratureGenerator in the background to create the
-        // immersed quadrature rules.
         non_matching_fe_values.reinit(cell);
 
-        // After calling reinit, we can retrieve a FEValues object with
-        // quadrature points that corresponds to integrating over the inside
-        // region of the cell. This is the object we use to do the local
-        // assembly. This is similar to how hp::FEValues builds FEValues
-        // objects. However, one difference here is that the FEValues
-        // object is returned as an optional. This is a type that wraps an
-        // object that may or may not be present. This requires us to add an
-        // if-statement to check if the returned optional contains a value,
-        // before we use it. This might seem odd at first. Why does the function
-        // not just return a reference to a const FEValues<dim>? The reason is
-        // that in an immersed method, we have essentially no control of how the
-        // cuts occur. Even if the cell is formally intersected: $T \cap \Omega
-        // \neq \emptyset$, it might be that the cut is only of floating point
-        // size $|T \cap \Omega| \sim \epsilon$. When this is the case, we can
-        // not expect that the algorithm that generates the quadrature rule
-        // produces anything useful. It can happen that the algorithm produces 0
-        // quadrature points. When this happens, the returned optional will not
-        // contain a value, even if the cell is formally intersected.
         const std::optional<FEValues<dim>> &inside_fe_values =
           non_matching_fe_values.get_inside_fe_values();
 
@@ -419,21 +308,6 @@ namespace Step85
                 }
             }
 
-        // In the same way, we can use NonMatching::FEValues to retrieve an
-        // FEFaceValues-like object to integrate over $T \cap \Gamma$. The only
-        // thing that is new here is the type of the object. The transformation
-        // from quadrature weights to JxW-values is different for surfaces, so
-        // we need a new class: NonMatching::FEImmersedSurfaceValues. In
-        // addition to the ordinary functions shape_value(..), shape_grad(..),
-        // etc., one can use its normal_vector(..)-function to get an outward
-        // normal to the immersed surface, $\Gamma$. In terms of the level set
-        // function, this normal reads
-        // @f{equation*}{
-        //   n = \frac{\nabla \psi}{\| \nabla \psi \|}.
-        // @f}
-        // An additional benefit of std::optional is that we do not need any
-        // other check for whether we are on intersected cells: In case we are
-        // on an inside cell, we get an empty object here.
         const std::optional<NonMatching::FEImmersedSurfaceValues<dim>>
           &surface_fe_values = non_matching_fe_values.get_surface_fe_values();
 
@@ -476,12 +350,6 @@ namespace Step85
         stiffness_matrix.add(local_dof_indices, local_stiffness);
         rhs.add(local_dof_indices, local_rhs);
 
-        // The assembly of the ghost penalty term is straight forward. As we
-        // iterate over the local faces, we first check if the current face
-        // belongs to the set $\mathcal{F}_h$. The actual assembly is simple
-        // using FEInterfaceValues. Assembling in this we will traverse each
-        // internal face in the mesh twice, so in order to get the penalty
-        // constant we expect, we multiply the penalty term with a factor 1/2.
         for (const unsigned int f : cell->face_indices())
           if (face_has_ghost_penalty(cell, f))
             {
@@ -527,7 +395,6 @@ namespace Step85
   }
 
 
-  // @sect3{Solving the System}
   template <int dim>
   void LaplaceSolver<dim>::solve()
   {
@@ -541,12 +408,6 @@ namespace Step85
 
 
 
-  // @sect3{Data Output}
-  // Since both DoFHandler instances use the same triangulation, we can add both
-  // the level set function and the solution to the same vtu-file. Further, we
-  // do not want to output the cells that have LocationToLevelSet value outside.
-  // To disregard them, we write a small lambda function and use the
-  // set_cell_selection function of the DataOut class.
   template <int dim>
   void LaplaceSolver<dim>::output_results() const
   {
@@ -570,15 +431,6 @@ namespace Step85
 
 
 
-  // @sect3{L2-Error}
-  // To test that the implementation works as expected, we want to compute the
-  // error in the solution in the $L^2$-norm. The analytical solution to the
-  // Poisson problem stated in the introduction reads
-  // @f{align*}{
-  //  u(x) = 1 - \frac{2}{\text{dim}}(\| x \|^2 - 1) , \qquad x \in
-  //  \overline{\Omega}.
-  // @f}
-  // We first create a function corresponding to the analytical solution:
   template <int dim>
   class AnalyticalSolution : public Function<dim>
   {
@@ -601,10 +453,6 @@ namespace Step85
 
 
 
-  // Of course, the analytical solution, and thus also the error, is only
-  // defined in $\overline{\Omega}$. Thus, to compute the $L^2$-error we must
-  // proceed in the same way as when we assembled the linear system. We first
-  // create an NonMatching::FEValues object.
   template <int dim>
   double LaplaceSolver<dim>::compute_L2_error() const
   {
@@ -623,9 +471,6 @@ namespace Step85
                                                       level_set_dof_handler,
                                                       level_set);
 
-    // We then iterate iterate over the cells that have LocationToLevelSetValue
-    // value inside or intersected again. For each quadrature point, we compute
-    // the pointwise error and use this to compute the integral.
     AnalyticalSolution<dim> analytical_solution;
     double                  error_L2_squared = 0;
 
@@ -659,11 +504,6 @@ namespace Step85
 
 
 
-  // @sect3{A Convergence Study}
-  // Finally, we do a convergence study to check that the $L^2$-error decreases
-  // with the expected rate. We refine the background mesh a few times. In each
-  // refinement cycle, we solve the problem, compute the error, and add the
-  // $L^2$-error and the mesh size to a ConvergenceTable.
   template <int dim>
   void LaplaceSolver<dim>::run()
   {
@@ -702,11 +542,10 @@ namespace Step85
       }
   }
 
-} // namespace Step85
+}
 
 
 
-// @sect3{The main() function}
 int main()
 {
   const int dim = 2;
