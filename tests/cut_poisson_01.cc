@@ -74,30 +74,6 @@ namespace Step85
     run();
 
   private:
-    void
-    make_grid();
-
-    void
-    setup_discrete_level_set();
-
-    void
-    distribute_dofs();
-
-    void
-    initialize_matrices();
-
-    void
-    assemble_system();
-
-    void
-    solve();
-
-    void
-    output_results() const;
-
-    double
-    compute_L2_error() const;
-
     bool
     face_has_ghost_penalty(
       const typename Triangulation<dim>::active_cell_iterator &cell,
@@ -140,102 +116,11 @@ namespace Step85
 
 
 
-  template <int dim>
-  void
-  LaplaceSolver<dim>::make_grid()
-  {
-    std::cout << "Creating background mesh" << std::endl;
-
-    GridGenerator::hyper_cube(triangulation, -1.21, 1.21);
-    triangulation.refine_global(2);
-  }
-
-
-
-  template <int dim>
-  void
-  LaplaceSolver<dim>::setup_discrete_level_set()
-  {
-    std::cout << "Setting up discrete level set function" << std::endl;
-
-    level_set_dof_handler.distribute_dofs(fe_level_set);
-    level_set.reinit(level_set_dof_handler.n_dofs());
-
-    const Functions::SignedDistance::Sphere<dim> signed_distance_sphere;
-    VectorTools::interpolate(level_set_dof_handler,
-                             signed_distance_sphere,
-                             level_set);
-  }
-
-
-
   enum ActiveFEIndex
   {
     lagrange = 0,
     nothing  = 1
   };
-
-  template <int dim>
-  void
-  LaplaceSolver<dim>::distribute_dofs()
-  {
-    std::cout << "Distributing degrees of freedom" << std::endl;
-
-    fe_collection.push_back(FE_Q<dim>(fe_degree));
-    fe_collection.push_back(FE_Nothing<dim>());
-
-    for (const auto &cell : dof_handler.active_cell_iterators())
-      {
-        const NonMatching::LocationToLevelSet cell_location =
-          mesh_classifier.location_to_level_set(cell);
-
-        if (cell_location == NonMatching::LocationToLevelSet::outside)
-          cell->set_active_fe_index(ActiveFEIndex::nothing);
-        else
-          cell->set_active_fe_index(ActiveFEIndex::lagrange);
-      }
-
-    dof_handler.distribute_dofs(fe_collection);
-  }
-
-
-
-  template <int dim>
-  void
-  LaplaceSolver<dim>::initialize_matrices()
-  {
-    std::cout << "Initializing matrices" << std::endl;
-
-    const auto face_has_flux_coupling = [&](const auto        &cell,
-                                            const unsigned int face_index) {
-      return this->face_has_ghost_penalty(cell, face_index);
-    };
-
-    DynamicSparsityPattern dsp(dof_handler.n_dofs(), dof_handler.n_dofs());
-
-    const unsigned int           n_components = fe_collection.n_components();
-    Table<2, DoFTools::Coupling> cell_coupling(n_components, n_components);
-    Table<2, DoFTools::Coupling> face_coupling(n_components, n_components);
-    cell_coupling[0][0] = DoFTools::always;
-    face_coupling[0][0] = DoFTools::always;
-
-    const AffineConstraints<double> constraints;
-    const bool                      keep_constrained_dofs = true;
-
-    DoFTools::make_flux_sparsity_pattern(dof_handler,
-                                         dsp,
-                                         constraints,
-                                         keep_constrained_dofs,
-                                         cell_coupling,
-                                         face_coupling,
-                                         numbers::invalid_subdomain_id,
-                                         face_has_flux_coupling);
-    sparsity_pattern.copy_from(dsp);
-
-    stiffness_matrix.reinit(sparsity_pattern);
-    solution.reinit(dof_handler.n_dofs());
-    rhs.reinit(dof_handler.n_dofs());
-  }
 
 
 
@@ -269,8 +154,82 @@ namespace Step85
 
   template <int dim>
   void
-  LaplaceSolver<dim>::assemble_system()
+  LaplaceSolver<dim>::run()
   {
+    ConvergenceTable   convergence_table;
+    const unsigned int n_refinements = 4;
+
+    std::cout << "Creating background mesh" << std::endl;
+
+    GridGenerator::hyper_cube(triangulation, -1.21, 1.21);
+    triangulation.refine_global(2);
+    triangulation.refine_global(n_refinements);
+
+    std::cout << "Setting up discrete level set function" << std::endl;
+
+    level_set_dof_handler.distribute_dofs(fe_level_set);
+    level_set.reinit(level_set_dof_handler.n_dofs());
+
+    const Functions::SignedDistance::Sphere<dim> signed_distance_sphere;
+    VectorTools::interpolate(level_set_dof_handler,
+                             signed_distance_sphere,
+                             level_set);
+
+    std::cout << "Classifying cells" << std::endl;
+    mesh_classifier.reclassify();
+
+
+    std::cout << "Distributing degrees of freedom" << std::endl;
+
+    fe_collection.push_back(FE_Q<dim>(fe_degree));
+    fe_collection.push_back(FE_Nothing<dim>());
+
+    for (const auto &cell : dof_handler.active_cell_iterators())
+      {
+        const NonMatching::LocationToLevelSet cell_location =
+          mesh_classifier.location_to_level_set(cell);
+
+        if (cell_location == NonMatching::LocationToLevelSet::outside)
+          cell->set_active_fe_index(ActiveFEIndex::nothing);
+        else
+          cell->set_active_fe_index(ActiveFEIndex::lagrange);
+      }
+
+    dof_handler.distribute_dofs(fe_collection);
+
+    std::cout << "Initializing matrices" << std::endl;
+
+    const auto face_has_flux_coupling = [&](const auto        &cell,
+                                            const unsigned int face_index) {
+      return this->face_has_ghost_penalty(cell, face_index);
+    };
+
+    DynamicSparsityPattern dsp(dof_handler.n_dofs(), dof_handler.n_dofs());
+
+    const unsigned int           n_components = fe_collection.n_components();
+    Table<2, DoFTools::Coupling> cell_coupling(n_components, n_components);
+    Table<2, DoFTools::Coupling> face_coupling(n_components, n_components);
+    cell_coupling[0][0] = DoFTools::always;
+    face_coupling[0][0] = DoFTools::always;
+
+    const AffineConstraints<double> constraints;
+    const bool                      keep_constrained_dofs = true;
+
+    DoFTools::make_flux_sparsity_pattern(dof_handler,
+                                         dsp,
+                                         constraints,
+                                         keep_constrained_dofs,
+                                         cell_coupling,
+                                         face_coupling,
+                                         numbers::invalid_subdomain_id,
+                                         face_has_flux_coupling);
+    sparsity_pattern.copy_from(dsp);
+
+    stiffness_matrix.reinit(sparsity_pattern);
+    solution.reinit(dof_handler.n_dofs());
+    rhs.reinit(dof_handler.n_dofs());
+
+
     std::cout << "Assembling" << std::endl;
 
     const unsigned int n_dofs_per_cell = fe_collection[0].dofs_per_cell;
@@ -423,27 +382,14 @@ namespace Step85
                                    local_stabilization);
             }
       }
-  }
 
-
-  template <int dim>
-  void
-  LaplaceSolver<dim>::solve()
-  {
     std::cout << "Solving system" << std::endl;
 
     const unsigned int max_iterations = solution.size();
     SolverControl      solver_control(max_iterations);
     SolverCG<>         solver(solver_control);
     solver.solve(stiffness_matrix, solution, rhs, PreconditionIdentity());
-  }
 
-
-
-  template <int dim>
-  void
-  LaplaceSolver<dim>::output_results() const
-  {
     std::cout << "Writing vtu file" << std::endl;
 
     DataOut<dim> data_out;
@@ -460,28 +406,23 @@ namespace Step85
     data_out.build_patches();
     std::ofstream output("step-85.vtu");
     data_out.write_vtu(output);
-  }
 
 
-
-  template <int dim>
-  double
-  LaplaceSolver<dim>::compute_L2_error() const
-  {
     std::cout << "Computing L2 error" << std::endl;
 
-    const QGauss<1> quadrature_1D(fe_degree + 1);
+    const QGauss<1> quadrature_1D_error(fe_degree + 1);
 
-    NonMatching::RegionUpdateFlags region_update_flags;
-    region_update_flags.inside =
+    NonMatching::RegionUpdateFlags region_update_flags_error;
+    region_update_flags_error.inside =
       update_values | update_JxW_values | update_quadrature_points;
 
-    NonMatching::FEValues<dim> non_matching_fe_values(fe_collection,
-                                                      quadrature_1D,
-                                                      region_update_flags,
-                                                      mesh_classifier,
-                                                      level_set_dof_handler,
-                                                      level_set);
+    NonMatching::FEValues<dim> non_matching_fe_values_error(
+      fe_collection,
+      quadrature_1D_error,
+      region_update_flags_error,
+      mesh_classifier,
+      level_set_dof_handler,
+      level_set);
 
     AnalyticalSolution<dim> analytical_solution;
     double                  error_L2_squared = 0;
@@ -490,10 +431,10 @@ namespace Step85
          dof_handler.active_cell_iterators() |
            IteratorFilters::ActiveFEIndexEqualTo(ActiveFEIndex::lagrange))
       {
-        non_matching_fe_values.reinit(cell);
+        non_matching_fe_values_error.reinit(cell);
 
         const std::optional<FEValues<dim>> &fe_values =
-          non_matching_fe_values.get_inside_fe_values();
+          non_matching_fe_values_error.get_inside_fe_values();
 
         if (fe_values)
           {
@@ -511,29 +452,7 @@ namespace Step85
           }
       }
 
-    return std::sqrt(error_L2_squared);
-  }
-
-
-
-  template <int dim>
-  void
-  LaplaceSolver<dim>::run()
-  {
-    ConvergenceTable   convergence_table;
-    const unsigned int n_refinements = 4;
-
-    make_grid();
-    triangulation.refine_global(n_refinements);
-    setup_discrete_level_set();
-    std::cout << "Classifying cells" << std::endl;
-    mesh_classifier.reclassify();
-    distribute_dofs();
-    initialize_matrices();
-    assemble_system();
-    solve();
-    output_results();
-    const double error_L2 = compute_L2_error();
+    const double error_L2 = std::sqrt(error_L2_squared);
     const double cell_side_length =
       triangulation.begin_active()->minimum_vertex_distance();
 
