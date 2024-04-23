@@ -66,9 +66,9 @@ template <int dim>
 void
 test()
 {
+  const unsigned int n_subdivisions      = 64;
   const unsigned int fe_degree           = 1;
   const unsigned int fe_degree_level_set = 1;
-  const unsigned int n_refinements       = 4;
 
   ConvergenceTable convergence_table;
 
@@ -77,10 +77,8 @@ test()
 
   // solution system
   Triangulation<dim> triangulation;
-
-  GridGenerator::hyper_cube(triangulation, -1.21, 1.21);
-  triangulation.refine_global(2);
-  triangulation.refine_global(n_refinements);
+  GridGenerator::subdivided_hyper_cube(
+    triangulation, n_subdivisions, -1.21, 1.21, true);
 
   hp::FECollection<dim> fe;
   fe.push_back(FE_Q<dim>(fe_degree));
