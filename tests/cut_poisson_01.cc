@@ -10,7 +10,6 @@
 
 #include <deal.II/dofs/dof_tools.h>
 
-#include <deal.II/fe/fe_interface_values.h>
 #include <deal.II/fe/fe_nothing.h>
 #include <deal.II/fe/fe_q.h>
 #include <deal.II/fe/fe_update_flags.h>
@@ -131,14 +130,6 @@ test()
   std::vector<types::global_dof_index> local_dof_indices(n_dofs_per_cell);
 
   const double nitsche_parameter = 5 * (fe_degree + 1) * fe_degree;
-
-  const QGauss<dim - 1>  face_quadrature(fe_degree + 1);
-  FEInterfaceValues<dim> fe_interface_values(fe[0],
-                                             face_quadrature,
-                                             update_gradients |
-                                               update_JxW_values |
-                                               update_normal_vectors);
-
 
   const QGauss<1> quadrature_1D(fe_degree + 1);
 
