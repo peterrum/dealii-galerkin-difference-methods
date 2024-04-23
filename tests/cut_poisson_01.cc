@@ -74,39 +74,12 @@ namespace Step85
     run();
 
   private:
-    const unsigned int fe_degree;
-
-    const Functions::ConstantFunction<dim> rhs_function;
-    const Functions::ConstantFunction<dim> boundary_condition;
-
-    Triangulation<dim> triangulation;
-
-    const FE_Q<dim> fe_level_set;
-    DoFHandler<dim> level_set_dof_handler;
-    Vector<double>  level_set;
-
-    hp::FECollection<dim> fe_collection;
-    DoFHandler<dim>       dof_handler;
-    Vector<double>        solution;
-
-    NonMatching::MeshClassifier<dim> mesh_classifier;
-
-    SparsityPattern      sparsity_pattern;
-    SparseMatrix<double> stiffness_matrix;
-    Vector<double>       rhs;
   };
 
 
 
   template <int dim>
   LaplaceSolver<dim>::LaplaceSolver()
-    : fe_degree(1)
-    , rhs_function(4.0)
-    , boundary_condition(1.0)
-    , fe_level_set(fe_degree)
-    , level_set_dof_handler(triangulation)
-    , dof_handler(triangulation)
-    , mesh_classifier(level_set_dof_handler, level_set)
   {}
 
 
@@ -123,6 +96,28 @@ namespace Step85
   void
   LaplaceSolver<dim>::run()
   {
+    const unsigned int fe_degree = 1;
+
+    const Functions::ConstantFunction<dim> rhs_function(4.0);
+    const Functions::ConstantFunction<dim> boundary_condition(1.0);
+
+    Triangulation<dim> triangulation;
+
+    const FE_Q<dim> fe_level_set(fe_degree);
+    DoFHandler<dim> level_set_dof_handler(triangulation);
+    Vector<double>  level_set;
+
+    hp::FECollection<dim> fe_collection;
+    DoFHandler<dim>       dof_handler(triangulation);
+    Vector<double>        solution;
+
+    NonMatching::MeshClassifier<dim> mesh_classifier(level_set_dof_handler,
+                                                     level_set);
+
+    SparsityPattern      sparsity_pattern;
+    SparseMatrix<double> stiffness_matrix;
+    Vector<double>       rhs;
+
     ConvergenceTable   convergence_table;
     const unsigned int n_refinements = 4;
 
@@ -303,7 +298,7 @@ namespace Step85
     data_out.add_data_vector(level_set_dof_handler, level_set, "level_set");
 
     data_out.set_cell_selection(
-      [this](const typename Triangulation<dim>::cell_iterator &cell) {
+      [&](const typename Triangulation<dim>::cell_iterator &cell) {
         return cell->is_active() &&
                mesh_classifier.location_to_level_set(cell) !=
                  NonMatching::LocationToLevelSet::outside;
