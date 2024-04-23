@@ -78,9 +78,8 @@ test()
   DoFHandler<dim> level_set_dof_handler(triangulation);
   Vector<double>  level_set;
 
-  hp::FECollection<dim> fe_collection;
-  DoFHandler<dim>       dof_handler(triangulation);
-  Vector<double>        solution;
+  DoFHandler<dim> dof_handler(triangulation);
+  Vector<double>  solution;
 
   NonMatching::MeshClassifier<dim> mesh_classifier(level_set_dof_handler,
                                                    level_set);
@@ -114,9 +113,10 @@ test()
 
   std::cout << "Distributing degrees of freedom" << std::endl;
 
-  fe_collection.push_back(FE_Q<dim>(fe_degree));
+  hp::FECollection<dim> fe;
+  fe.push_back(FE_Q<dim>(fe_degree));
 
-  dof_handler.distribute_dofs(fe_collection);
+  dof_handler.distribute_dofs(fe);
 
   std::cout << "Initializing matrices" << std::endl;
 
@@ -135,7 +135,7 @@ test()
 
   std::cout << "Assembling" << std::endl;
 
-  const unsigned int n_dofs_per_cell = fe_collection[0].dofs_per_cell;
+  const unsigned int n_dofs_per_cell = fe[0].dofs_per_cell;
   FullMatrix<double> local_stiffness(n_dofs_per_cell, n_dofs_per_cell);
   Vector<double>     local_rhs(n_dofs_per_cell);
   std::vector<types::global_dof_index> local_dof_indices(n_dofs_per_cell);
@@ -143,7 +143,7 @@ test()
   const double nitsche_parameter = 5 * (fe_degree + 1) * fe_degree;
 
   const QGauss<dim - 1>  face_quadrature(fe_degree + 1);
-  FEInterfaceValues<dim> fe_interface_values(fe_collection[0],
+  FEInterfaceValues<dim> fe_interface_values(fe[0],
                                              face_quadrature,
                                              update_gradients |
                                                update_JxW_values |
@@ -159,7 +159,7 @@ test()
                                 update_JxW_values | update_quadrature_points |
                                 update_normal_vectors;
 
-  NonMatching::FEValues<dim> non_matching_fe_values(fe_collection,
+  NonMatching::FEValues<dim> non_matching_fe_values(fe,
                                                     quadrature_1D,
                                                     region_update_flags,
                                                     mesh_classifier,
@@ -276,7 +276,7 @@ test()
     update_values | update_JxW_values | update_quadrature_points;
 
   NonMatching::FEValues<dim> non_matching_fe_values_error(
-    fe_collection,
+    fe,
     quadrature_1D_error,
     region_update_flags_error,
     mesh_classifier,
