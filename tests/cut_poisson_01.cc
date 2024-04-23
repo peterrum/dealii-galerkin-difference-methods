@@ -63,14 +63,6 @@ public:
 
 
 
-enum ActiveFEIndex
-{
-  lagrange = 0,
-  nothing  = 1
-};
-
-
-
 template <int dim>
 void
 test()
@@ -123,18 +115,6 @@ test()
   std::cout << "Distributing degrees of freedom" << std::endl;
 
   fe_collection.push_back(FE_Q<dim>(fe_degree));
-  fe_collection.push_back(FE_Nothing<dim>());
-
-  for (const auto &cell : dof_handler.active_cell_iterators())
-    {
-      const NonMatching::LocationToLevelSet cell_location =
-        mesh_classifier.location_to_level_set(cell);
-
-      if (cell_location == NonMatching::LocationToLevelSet::outside)
-        cell->set_active_fe_index(ActiveFEIndex::nothing);
-      else
-        cell->set_active_fe_index(ActiveFEIndex::lagrange);
-    }
 
   dof_handler.distribute_dofs(fe_collection);
 
@@ -186,80 +166,88 @@ test()
                                                     level_set_dof_handler,
                                                     level_set);
 
-  for (const auto &cell :
-       dof_handler.active_cell_iterators() |
-         IteratorFilters::ActiveFEIndexEqualTo(ActiveFEIndex::lagrange))
-    {
-      local_stiffness = 0;
-      local_rhs       = 0;
+  for (const auto &cell : dof_handler.active_cell_iterators())
+    if (mesh_classifier.location_to_level_set(cell) !=
+        NonMatching::LocationToLevelSet::outside)
+      {
+        local_stiffness = 0;
+        local_rhs       = 0;
 
-      const double cell_side_length = cell->minimum_vertex_distance();
+        const double cell_side_length = cell->minimum_vertex_distance();
 
-      non_matching_fe_values.reinit(cell);
+        non_matching_fe_values.reinit(cell);
 
-      const std::optional<FEValues<dim>> &inside_fe_values =
-        non_matching_fe_values.get_inside_fe_values();
+        const std::optional<FEValues<dim>> &inside_fe_values =
+          non_matching_fe_values.get_inside_fe_values();
 
-      if (inside_fe_values)
-        for (const unsigned int q :
-             inside_fe_values->quadrature_point_indices())
+        if (inside_fe_values)
+          for (const unsigned int q :
+               inside_fe_values->quadrature_point_indices())
+            {
+              const Point<dim> &point = inside_fe_values->quadrature_point(q);
+              for (const unsigned int i : inside_fe_values->dof_indices())
+                {
+                  for (const unsigned int j : inside_fe_values->dof_indices())
+                    {
+                      local_stiffness(i, j) +=
+                        inside_fe_values->shape_grad(i, q) *
+                        inside_fe_values->shape_grad(j, q) *
+                        inside_fe_values->JxW(q);
+                    }
+                  local_rhs(i) += rhs_function.value(point) *
+                                  inside_fe_values->shape_value(i, q) *
+                                  inside_fe_values->JxW(q);
+                }
+            }
+
+        const std::optional<NonMatching::FEImmersedSurfaceValues<dim>>
+          &surface_fe_values = non_matching_fe_values.get_surface_fe_values();
+
+        if (surface_fe_values)
           {
-            const Point<dim> &point = inside_fe_values->quadrature_point(q);
-            for (const unsigned int i : inside_fe_values->dof_indices())
+            for (const unsigned int q :
+                 surface_fe_values->quadrature_point_indices())
               {
-                for (const unsigned int j : inside_fe_values->dof_indices())
+                const Point<dim> &point =
+                  surface_fe_values->quadrature_point(q);
+                const Tensor<1, dim> &normal =
+                  surface_fe_values->normal_vector(q);
+                for (const unsigned int i : surface_fe_values->dof_indices())
                   {
-                    local_stiffness(i, j) +=
-                      inside_fe_values->shape_grad(i, q) *
-                      inside_fe_values->shape_grad(j, q) *
-                      inside_fe_values->JxW(q);
+                    for (const unsigned int j :
+                         surface_fe_values->dof_indices())
+                      {
+                        local_stiffness(i, j) +=
+                          (-normal * surface_fe_values->shape_grad(i, q) *
+                             surface_fe_values->shape_value(j, q) +
+                           -normal * surface_fe_values->shape_grad(j, q) *
+                             surface_fe_values->shape_value(i, q) +
+                           nitsche_parameter / cell_side_length *
+                             surface_fe_values->shape_value(i, q) *
+                             surface_fe_values->shape_value(j, q)) *
+                          surface_fe_values->JxW(q);
+                      }
+                    local_rhs(i) +=
+                      boundary_condition.value(point) *
+                      (nitsche_parameter / cell_side_length *
+                         surface_fe_values->shape_value(i, q) -
+                       normal * surface_fe_values->shape_grad(i, q)) *
+                      surface_fe_values->JxW(q);
                   }
-                local_rhs(i) += rhs_function.value(point) *
-                                inside_fe_values->shape_value(i, q) *
-                                inside_fe_values->JxW(q);
               }
           }
 
-      const std::optional<NonMatching::FEImmersedSurfaceValues<dim>>
-        &surface_fe_values = non_matching_fe_values.get_surface_fe_values();
+        cell->get_dof_indices(local_dof_indices);
 
-      if (surface_fe_values)
-        {
-          for (const unsigned int q :
-               surface_fe_values->quadrature_point_indices())
-            {
-              const Point<dim> &point = surface_fe_values->quadrature_point(q);
-              const Tensor<1, dim> &normal =
-                surface_fe_values->normal_vector(q);
-              for (const unsigned int i : surface_fe_values->dof_indices())
-                {
-                  for (const unsigned int j : surface_fe_values->dof_indices())
-                    {
-                      local_stiffness(i, j) +=
-                        (-normal * surface_fe_values->shape_grad(i, q) *
-                           surface_fe_values->shape_value(j, q) +
-                         -normal * surface_fe_values->shape_grad(j, q) *
-                           surface_fe_values->shape_value(i, q) +
-                         nitsche_parameter / cell_side_length *
-                           surface_fe_values->shape_value(i, q) *
-                           surface_fe_values->shape_value(j, q)) *
-                        surface_fe_values->JxW(q);
-                    }
-                  local_rhs(i) +=
-                    boundary_condition.value(point) *
-                    (nitsche_parameter / cell_side_length *
-                       surface_fe_values->shape_value(i, q) -
-                     normal * surface_fe_values->shape_grad(i, q)) *
-                    surface_fe_values->JxW(q);
-                }
-            }
-        }
+        stiffness_matrix.add(local_dof_indices, local_stiffness);
+        rhs.add(local_dof_indices, local_rhs);
+      }
 
-      cell->get_dof_indices(local_dof_indices);
-
-      stiffness_matrix.add(local_dof_indices, local_stiffness);
-      rhs.add(local_dof_indices, local_rhs);
-    }
+  for (auto &entry : stiffness_matrix)
+    if ((entry.row() == entry.column()) && (entry.value() == 0.0))
+      {
+        entry.value() = 1.0;
+      }
 
   std::cout << "Solving system" << std::endl;
 
@@ -304,30 +292,30 @@ test()
   AnalyticalSolution<dim> analytical_solution;
   double                  error_L2_squared = 0;
 
-  for (const auto &cell :
-       dof_handler.active_cell_iterators() |
-         IteratorFilters::ActiveFEIndexEqualTo(ActiveFEIndex::lagrange))
-    {
-      non_matching_fe_values_error.reinit(cell);
+  for (const auto &cell : dof_handler.active_cell_iterators())
+    if (mesh_classifier.location_to_level_set(cell) !=
+        NonMatching::LocationToLevelSet::outside)
+      {
+        non_matching_fe_values_error.reinit(cell);
 
-      const std::optional<FEValues<dim>> &fe_values =
-        non_matching_fe_values_error.get_inside_fe_values();
+        const std::optional<FEValues<dim>> &fe_values =
+          non_matching_fe_values_error.get_inside_fe_values();
 
-      if (fe_values)
-        {
-          std::vector<double> solution_values(fe_values->n_quadrature_points);
-          fe_values->get_function_values(solution, solution_values);
+        if (fe_values)
+          {
+            std::vector<double> solution_values(fe_values->n_quadrature_points);
+            fe_values->get_function_values(solution, solution_values);
 
-          for (const unsigned int q : fe_values->quadrature_point_indices())
-            {
-              const Point<dim> &point = fe_values->quadrature_point(q);
-              const double      error_at_point =
-                solution_values.at(q) - analytical_solution.value(point);
-              error_L2_squared +=
-                Utilities::fixed_power<2>(error_at_point) * fe_values->JxW(q);
-            }
-        }
-    }
+            for (const unsigned int q : fe_values->quadrature_point_indices())
+              {
+                const Point<dim> &point = fe_values->quadrature_point(q);
+                const double      error_at_point =
+                  solution_values.at(q) - analytical_solution.value(point);
+                error_L2_squared +=
+                  Utilities::fixed_power<2>(error_at_point) * fe_values->JxW(q);
+              }
+          }
+      }
 
   const double error_L2 = std::sqrt(error_L2_squared);
   const double cell_side_length =
