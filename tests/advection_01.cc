@@ -162,7 +162,7 @@ test()
                                          dof_indices,
                                          quadrature_gradients);
 
-        std::vector<Number> fluxes(n_dofs_per_cell);
+        std::vector<Number> fluxes(n_dofs_per_cell, 0);
 
         for (const auto q : fe_values.quadrature_point_indices())
           {
