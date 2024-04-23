@@ -74,11 +74,6 @@ namespace Step85
     run();
 
   private:
-    bool
-    face_has_ghost_penalty(
-      const typename Triangulation<dim>::active_cell_iterator &cell,
-      const unsigned int face_index) const;
-
     const unsigned int fe_degree;
 
     const Functions::ConstantFunction<dim> rhs_function;
@@ -121,36 +116,6 @@ namespace Step85
     lagrange = 0,
     nothing  = 1
   };
-
-
-
-  template <int dim>
-  bool
-  LaplaceSolver<dim>::face_has_ghost_penalty(
-    const typename Triangulation<dim>::active_cell_iterator &cell,
-    const unsigned int                                       face_index) const
-  {
-    return false;
-
-    if (cell->at_boundary(face_index))
-      return false;
-
-    const NonMatching::LocationToLevelSet cell_location =
-      mesh_classifier.location_to_level_set(cell);
-
-    const NonMatching::LocationToLevelSet neighbor_location =
-      mesh_classifier.location_to_level_set(cell->neighbor(face_index));
-
-    if (cell_location == NonMatching::LocationToLevelSet::intersected &&
-        neighbor_location != NonMatching::LocationToLevelSet::outside)
-      return true;
-
-    if (neighbor_location == NonMatching::LocationToLevelSet::intersected &&
-        cell_location != NonMatching::LocationToLevelSet::outside)
-      return true;
-
-    return false;
-  }
 
 
 
@@ -201,30 +166,12 @@ namespace Step85
 
     std::cout << "Initializing matrices" << std::endl;
 
-    const auto face_has_flux_coupling = [&](const auto        &cell,
-                                            const unsigned int face_index) {
-      return this->face_has_ghost_penalty(cell, face_index);
-    };
-
     DynamicSparsityPattern dsp(dof_handler.n_dofs(), dof_handler.n_dofs());
 
-    const unsigned int           n_components = fe_collection.n_components();
-    Table<2, DoFTools::Coupling> cell_coupling(n_components, n_components);
-    Table<2, DoFTools::Coupling> face_coupling(n_components, n_components);
-    cell_coupling[0][0] = DoFTools::always;
-    face_coupling[0][0] = DoFTools::always;
-
     const AffineConstraints<double> constraints;
-    const bool                      keep_constrained_dofs = true;
 
-    DoFTools::make_flux_sparsity_pattern(dof_handler,
-                                         dsp,
-                                         constraints,
-                                         keep_constrained_dofs,
-                                         cell_coupling,
-                                         face_coupling,
-                                         numbers::invalid_subdomain_id,
-                                         face_has_flux_coupling);
+    DoFTools::make_sparsity_pattern(dof_handler, dsp, constraints);
+
     sparsity_pattern.copy_from(dsp);
 
     stiffness_matrix.reinit(sparsity_pattern);
@@ -239,7 +186,6 @@ namespace Step85
     Vector<double>     local_rhs(n_dofs_per_cell);
     std::vector<types::global_dof_index> local_dof_indices(n_dofs_per_cell);
 
-    const double ghost_parameter   = 0.5;
     const double nitsche_parameter = 5 * (fe_degree + 1) * fe_degree;
 
     const QGauss<dim - 1>  face_quadrature(fe_degree + 1);
@@ -341,48 +287,6 @@ namespace Step85
 
         stiffness_matrix.add(local_dof_indices, local_stiffness);
         rhs.add(local_dof_indices, local_rhs);
-
-        for (const unsigned int f : cell->face_indices())
-          if (face_has_ghost_penalty(cell, f))
-            {
-              const unsigned int invalid_subface =
-                numbers::invalid_unsigned_int;
-
-              fe_interface_values.reinit(cell,
-                                         f,
-                                         invalid_subface,
-                                         cell->neighbor(f),
-                                         cell->neighbor_of_neighbor(f),
-                                         invalid_subface);
-
-              const unsigned int n_interface_dofs =
-                fe_interface_values.n_current_interface_dofs();
-              FullMatrix<double> local_stabilization(n_interface_dofs,
-                                                     n_interface_dofs);
-              for (unsigned int q = 0;
-                   q < fe_interface_values.n_quadrature_points;
-                   ++q)
-                {
-                  const Tensor<1, dim> normal = fe_interface_values.normal(q);
-                  for (unsigned int i = 0; i < n_interface_dofs; ++i)
-                    for (unsigned int j = 0; j < n_interface_dofs; ++j)
-                      {
-                        local_stabilization(i, j) +=
-                          .5 * ghost_parameter * cell_side_length * normal *
-                          fe_interface_values.jump_in_shape_gradients(i, q) *
-                          normal *
-                          fe_interface_values.jump_in_shape_gradients(j, q) *
-                          fe_interface_values.JxW(q);
-                      }
-                }
-
-              const std::vector<types::global_dof_index>
-                local_interface_dof_indices =
-                  fe_interface_values.get_interface_dof_indices();
-
-              stiffness_matrix.add(local_interface_dof_indices,
-                                   local_stabilization);
-            }
       }
 
     std::cout << "Solving system" << std::endl;
