@@ -121,8 +121,41 @@ test()
 
   SparseMatrix<Number> sparse_matrix;
   sparse_matrix.reinit(sparsity_pattern);
-  MatrixCreator::create_mass_matrix<dim, dim>(
-    mapping, dof_handler, quadrature, sparse_matrix, nullptr, constraints);
+
+  {
+    FEValues<dim> fe_values(mapping,
+                            fe,
+                            quadrature,
+                            update_values | update_JxW_values);
+
+    std::vector<types::global_dof_index> dof_indices;
+    for (const auto &cell : dof_handler.active_cell_iterators())
+      {
+        fe_values.reinit(cell);
+
+        const unsigned int dofs_per_cell = fe_values.get_fe().n_dofs_per_cell();
+
+        // get indices
+        dof_indices.resize(dofs_per_cell);
+        cell->get_dof_indices(dof_indices);
+
+        // compute element stiffness matrix
+        FullMatrix<Number> cell_matrix(dofs_per_cell, dofs_per_cell);
+        for (const unsigned int q_index : fe_values.quadrature_point_indices())
+          {
+            for (const unsigned int i : fe_values.dof_indices())
+              for (const unsigned int j : fe_values.dof_indices())
+                cell_matrix(i, j) += fe_values.shape_value(i, q_index) *
+                                     fe_values.shape_value(j, q_index) *
+                                     fe_values.JxW(q_index);
+          }
+
+        // assemble
+        constraints.distribute_local_to_global(cell_matrix,
+                                               dof_indices,
+                                               sparse_matrix);
+      }
+  }
 
   // set up initial condition
   VectorType solution(dof_handler.n_dofs());
