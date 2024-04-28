@@ -1,4 +1,8 @@
 // Solve cut advection problem (FEM).
+//
+// Setup as in:
+// DoD stabilization for higher-order advection in two dimensions
+// by Florian Streitbürger, Gunnar Birke, Christian Engwer, Sandra May
 
 #include <deal.II/base/discrete_time.h>
 #include <deal.II/base/function.h>
@@ -35,13 +39,10 @@ class ExactSolution : public dealii::Function<dim, Number>
 public:
   ExactSolution(const double time = 0.)
     : dealii::Function<dim, Number>(1, time)
-    , wave_number(2.)
+    , phi(numbers::PI / 8.0)
   {
-    advection[0] = 1.0;
-    if (dim > 1)
-      advection[1] = 0.15;
-    if (dim > 2)
-      advection[2] = -0.05;
+    advection[0] = 2.0 * std::cos(phi);
+    advection[1] = 2.0 * std::sin(phi);
   }
 
   virtual double
@@ -49,10 +50,11 @@ public:
   {
     double                       t        = this->get_time();
     const dealii::Tensor<1, dim> position = p - t * advection;
-    double result = std::sin(wave_number * position[0] * dealii::numbers::PI);
-    for (unsigned int d = 1; d < dim; ++d)
-      result *= std::cos(wave_number * position[d] * dealii::numbers::PI);
-    return result;
+
+    const double x_hat =
+      std::cos(phi) * (position[0] - 0.2001) + std::sin(phi) * position[1];
+
+    return std::sin(std::sqrt(2.0) * numbers::PI * x_hat / (1.0 - 0.2001));
   }
 
   const dealii::Tensor<1, dim> &
@@ -63,7 +65,7 @@ public:
 
 private:
   dealii::Tensor<1, dim> advection;
-  const double           wave_number;
+  const double           phi;
 };
 
 
@@ -76,11 +78,12 @@ test()
   using VectorType = Vector<Number>;
 
   // settings
-  const unsigned int fe_degree         = 3;
+  const unsigned int fe_degree         = 1;
   const unsigned int n_subdivisions_1D = 40;
-  const double       delta_t           = 1.0 / n_subdivisions_1D * 0.25;
-  const double       start_t           = 0.0;
-  const double       end_t             = 0.1;
+  const double       delta_t =
+    (1.0 / n_subdivisions_1D) * 0.4 * 1.0 / (2 * fe_degree + 1) / 2.0;
+  const double                           start_t = 0.0;
+  const double                           end_t   = 0.1;
   const TimeStepping::runge_kutta_method runge_kutta_method =
     TimeStepping::runge_kutta_method::RK_CLASSIC_FOURTH_ORDER;
 
