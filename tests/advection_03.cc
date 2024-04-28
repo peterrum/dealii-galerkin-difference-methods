@@ -39,7 +39,7 @@ public:
   {
     advection[0] = 1.0;
     if (dim > 1)
-      advection[1] = 0.15;
+      advection[1] = 1.0;
     if (dim > 2)
       advection[2] = -0.05;
   }
@@ -78,7 +78,7 @@ test()
   // settings
   const unsigned int fe_degree         = 3;
   const unsigned int n_subdivisions_1D = 40;
-  const double       delta_t           = 1.0 / n_subdivisions_1D * 0.5;
+  const double       delta_t           = 1.0 / n_subdivisions_1D * 0.2;
   const double       start_t           = 0.0;
   const double       end_t             = 0.1;
   const TimeStepping::runge_kutta_method runge_kutta_method =
@@ -96,20 +96,13 @@ test()
   Triangulation<dim> tria;
   GridGenerator::subdivided_hyper_cube(tria, n_subdivisions_1D, 0, 1, true);
 
-  std::vector<
-    GridTools::PeriodicFacePair<typename Triangulation<dim>::cell_iterator>>
-    face_pairs;
-  for (unsigned int d = 0; d < dim; ++d)
-    GridTools::collect_periodic_faces(tria, 2 * d, 2 * d + 1, d, face_pairs);
-  tria.add_periodicity(face_pairs);
-
   DoFHandler<dim> dof_handler(tria);
   dof_handler.distribute_dofs(fe);
 
   AffineConstraints<Number> constraints;
   for (unsigned int d = 0; d < dim; ++d)
-    DoFTools::make_periodicity_constraints(
-      dof_handler, 2 * d, 2 * d + 1, d, constraints);
+    VectorTools::interpolate_boundary_values(
+      mapping, dof_handler, d * 2, exact_solution, constraints);
   constraints.close();
 
   // compute mass matrix
@@ -121,6 +114,9 @@ test()
 
   SparseMatrix<Number> sparse_matrix;
   sparse_matrix.reinit(sparsity_pattern);
+
+  VectorType vec_dbc;
+  vec_dbc.reinit(dof_handler.n_dofs());
 
   {
     FEValues<dim> fe_values(mapping,
@@ -150,10 +146,11 @@ test()
                                      fe_values.JxW(q_index);
           }
 
+        Vector<Number> cell_vector(dofs_per_cell);
+
         // assemble
-        constraints.distribute_local_to_global(cell_matrix,
-                                               dof_indices,
-                                               sparse_matrix);
+        constraints.distribute_local_to_global(
+          cell_matrix, cell_vector, dof_indices, sparse_matrix, vec_dbc);
       }
   }
 
@@ -217,6 +214,8 @@ test()
 
         constraints.distribute_local_to_global(cell_vector, dof_indices, vec_1);
       }
+
+    vec_1 += vec_dbc;
 
     // invert mass matrix
     PreconditionJacobi<SparseMatrix<Number>> preconditioner;
