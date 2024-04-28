@@ -1,4 +1,4 @@
-// Test cut Poisson problem: serial, FEM.
+// Test cut Poisson problem: serial, GDM.
 
 #include <deal.II/base/convergence_table.h>
 #include <deal.II/base/function.h>
