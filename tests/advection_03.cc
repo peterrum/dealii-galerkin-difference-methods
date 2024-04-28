@@ -26,6 +26,7 @@
 #include <deal.II/lac/solver_cg.h>
 #include <deal.II/lac/sparse_matrix.h>
 
+#include <deal.II/non_matching/fe_immersed_values.h>
 #include <deal.II/non_matching/fe_values.h>
 #include <deal.II/non_matching/mesh_classifier.h>
 
@@ -98,9 +99,10 @@ test()
     exact_solution.get_transport_direction().begin_raw(), dim);
 
   // create system
-  MappingQ1<dim> mapping;
-  FE_Q<dim>      fe(fe_degree);
-  QGauss<dim>    quadrature(fe_degree + 1);
+  MappingQ1<dim>        mapping;
+  hp::FECollection<dim> fe;
+  fe.push_back(FE_Q<dim>(fe_degree));
+  QGauss<dim> quadrature(fe_degree + 1);
 
   Triangulation<dim> tria;
   GridGenerator::subdivided_hyper_cube(tria, n_subdivisions_1D, 0, 1, true);
@@ -121,8 +123,8 @@ test()
 
   const Point<dim> point = {0.2001, 0.0};
   Tensor<1, dim>   normal;
-  normal[0] = -std::sin(phi);
-  normal[1] = +std::cos(phi);
+  normal[0] = +std::sin(phi);
+  normal[1] = -std::cos(phi);
   const Functions::SignedDistance::Plane<dim> signed_distance_sphere(point,
                                                                      normal);
   VectorTools::interpolate(level_set_dof_handler,
@@ -162,42 +164,74 @@ test()
   sparse_matrix_homogeneous.reinit(sparsity_pattern_homogeneous);
 
   {
-    FEValues<dim> fe_values(mapping,
-                            fe,
-                            quadrature,
-                            update_values | update_JxW_values);
+    const QGauss<1> quadrature_1D(fe_degree + 1);
+
+    NonMatching::RegionUpdateFlags region_update_flags;
+    region_update_flags.inside = update_values | update_gradients |
+                                 update_JxW_values | update_quadrature_points;
+    region_update_flags.surface = update_values | update_gradients |
+                                  update_JxW_values | update_quadrature_points |
+                                  update_normal_vectors;
+
+    NonMatching::FEValues<dim> non_matching_fe_values(fe,
+                                                      quadrature_1D,
+                                                      region_update_flags,
+                                                      mesh_classifier,
+                                                      level_set_dof_handler,
+                                                      level_set);
 
     std::vector<types::global_dof_index> dof_indices;
     for (const auto &cell : dof_handler.active_cell_iterators())
-      {
-        fe_values.reinit(cell);
+      if (mesh_classifier.location_to_level_set(cell) !=
+          NonMatching::LocationToLevelSet::outside)
+        {
+          non_matching_fe_values.reinit(cell);
 
-        const unsigned int dofs_per_cell = fe_values.get_fe().n_dofs_per_cell();
+          const auto &fe_values = non_matching_fe_values.get_inside_fe_values();
 
-        // get indices
-        dof_indices.resize(dofs_per_cell);
-        cell->get_dof_indices(dof_indices);
+          const unsigned int dofs_per_cell = cell->get_fe().n_dofs_per_cell();
 
-        // compute element stiffness matrix
-        FullMatrix<Number> cell_matrix(dofs_per_cell, dofs_per_cell);
-        for (const unsigned int q_index : fe_values.quadrature_point_indices())
-          {
-            for (const unsigned int i : fe_values.dof_indices())
-              for (const unsigned int j : fe_values.dof_indices())
-                cell_matrix(i, j) += fe_values.shape_value(i, q_index) *
-                                     fe_values.shape_value(j, q_index) *
-                                     fe_values.JxW(q_index);
-          }
+          // get indices
+          dof_indices.resize(dofs_per_cell);
+          cell->get_dof_indices(dof_indices);
 
-        // assemble
-        constraints.distribute_local_to_global(cell_matrix,
-                                               dof_indices,
-                                               sparse_matrix);
+          // compute element stiffness matrix
+          FullMatrix<Number> cell_matrix(dofs_per_cell, dofs_per_cell);
 
-        constraints_homogeneous.distribute_local_to_global(
-          cell_matrix, dof_indices, sparse_matrix_homogeneous);
-      }
+          if (fe_values)
+            {
+              for (const unsigned int q_index :
+                   fe_values->quadrature_point_indices())
+                {
+                  for (const unsigned int i : fe_values->dof_indices())
+                    for (const unsigned int j : fe_values->dof_indices())
+                      cell_matrix(i, j) += fe_values->shape_value(i, q_index) *
+                                           fe_values->shape_value(j, q_index) *
+                                           fe_values->JxW(q_index);
+                }
+            }
+
+          // assemble
+          constraints.distribute_local_to_global(cell_matrix,
+                                                 dof_indices,
+                                                 sparse_matrix);
+
+          constraints_homogeneous.distribute_local_to_global(
+            cell_matrix, dof_indices, sparse_matrix_homogeneous);
+        }
   }
+
+  for (auto &entry : sparse_matrix)
+    if ((entry.row() == entry.column()) && (entry.value() == 0.0))
+      {
+        entry.value() = 1.0;
+      }
+
+  for (auto &entry : sparse_matrix_homogeneous)
+    if ((entry.row() == entry.column()) && (entry.value() == 0.0))
+      {
+        entry.value() = 1.0;
+      }
 
   // set up initial condition
   VectorType solution(dof_handler.n_dofs());
@@ -223,51 +257,72 @@ test()
     // apply constraints
     constraints.distribute(vec_0);
 
-    FEValues<dim> fe_values(mapping,
-                            fe,
-                            quadrature,
-                            update_values | update_gradients |
-                              update_quadrature_points | update_JxW_values);
+    const QGauss<1> quadrature_1D(fe_degree + 1);
+
+    NonMatching::RegionUpdateFlags region_update_flags;
+    region_update_flags.inside = update_values | update_gradients |
+                                 update_JxW_values | update_quadrature_points;
+    region_update_flags.surface = update_values | update_gradients |
+                                  update_JxW_values | update_quadrature_points |
+                                  update_normal_vectors;
+
+    NonMatching::FEValues<dim> non_matching_fe_values(fe,
+                                                      quadrature_1D,
+                                                      region_update_flags,
+                                                      mesh_classifier,
+                                                      level_set_dof_handler,
+                                                      level_set);
 
     advection.set_time(time);
 
     for (const auto &cell : dof_handler.active_cell_iterators())
-      {
-        fe_values.reinit(cell);
+      if (mesh_classifier.location_to_level_set(cell) !=
+          NonMatching::LocationToLevelSet::outside)
+        {
+          non_matching_fe_values.reinit(cell);
 
-        const unsigned int n_dofs_per_cell = cell->get_fe().n_dofs_per_cell();
+          const auto &fe_values = non_matching_fe_values.get_inside_fe_values();
 
-        std::vector<types::global_dof_index> dof_indices(n_dofs_per_cell);
-        cell->get_dof_indices(dof_indices);
+          const unsigned int n_dofs_per_cell = cell->get_fe().n_dofs_per_cell();
 
-        std::vector<Tensor<1, dim, Number>> quadrature_gradients(
-          n_dofs_per_cell);
-        fe_values.get_function_gradients(vec_0,
-                                         dof_indices,
-                                         quadrature_gradients);
+          std::vector<types::global_dof_index> dof_indices(n_dofs_per_cell);
+          cell->get_dof_indices(dof_indices);
 
-        std::vector<Number> fluxes(n_dofs_per_cell, 0);
+          Vector<Number> cell_vector(n_dofs_per_cell);
 
-        for (const auto q : fe_values.quadrature_point_indices())
-          {
-            const auto point = fe_values.quadrature_point(q);
+          if (fe_values)
+            {
+              std::vector<Tensor<1, dim, Number>> quadrature_gradients(
+                fe_values->n_quadrature_points);
+              fe_values->get_function_gradients(vec_0,
+                                                dof_indices,
+                                                quadrature_gradients);
 
-            for (unsigned int d = 0; d < dim; ++d)
-              {
-                fluxes[q] +=
-                  quadrature_gradients[q][d] * advection.value(point, d);
-              }
-          }
+              std::vector<Number> fluxes(fe_values->n_quadrature_points, 0);
 
-        Vector<Number> cell_vector(n_dofs_per_cell);
-        for (const unsigned int q_index : fe_values.quadrature_point_indices())
-          for (const unsigned int i : fe_values.dof_indices())
-            cell_vector(i) -= fluxes[q_index] *
-                              fe_values.shape_value(i, q_index) *
-                              fe_values.JxW(q_index);
+              for (const auto q : fe_values->quadrature_point_indices())
+                {
+                  const auto point = fe_values->quadrature_point(q);
 
-        constraints.distribute_local_to_global(cell_vector, dof_indices, vec_1);
-      }
+                  for (unsigned int d = 0; d < dim; ++d)
+                    {
+                      fluxes[q] +=
+                        quadrature_gradients[q][d] * advection.value(point, d);
+                    }
+                }
+
+              for (const unsigned int q_index :
+                   fe_values->quadrature_point_indices())
+                for (const unsigned int i : fe_values->dof_indices())
+                  cell_vector(i) -= fluxes[q_index] *
+                                    fe_values->shape_value(i, q_index) *
+                                    fe_values->JxW(q_index);
+            }
+
+          constraints.distribute_local_to_global(cell_vector,
+                                                 dof_indices,
+                                                 vec_1);
+        }
 
     VectorType vec_dbc, vec_dbc_in;
     vec_dbc.reinit(solution);
@@ -296,18 +351,51 @@ test()
     // compute error
     exact_solution.set_time(time);
 
-    Vector<Number> cell_wise_error;
-    VectorTools::integrate_difference(mapping,
-                                      dof_handler,
-                                      solution,
-                                      exact_solution,
-                                      cell_wise_error,
-                                      quadrature,
-                                      VectorTools::NormType::L2_norm);
-    const auto error =
-      VectorTools::compute_global_error(tria,
-                                        cell_wise_error,
-                                        VectorTools::NormType::L2_norm);
+    // compute error
+    const QGauss<1> quadrature_1D_error(fe_degree + 1);
+
+    NonMatching::RegionUpdateFlags region_update_flags_error;
+    region_update_flags_error.inside =
+      update_values | update_JxW_values | update_quadrature_points;
+
+    NonMatching::FEValues<dim> non_matching_fe_values_error(
+      fe,
+      quadrature_1D_error,
+      region_update_flags_error,
+      mesh_classifier,
+      level_set_dof_handler,
+      level_set);
+
+    double error_L2_squared = 0;
+
+    for (const auto &cell : dof_handler.active_cell_iterators())
+      if (mesh_classifier.location_to_level_set(cell) !=
+          NonMatching::LocationToLevelSet::outside)
+        {
+          non_matching_fe_values_error.reinit(cell);
+
+          const std::optional<FEValues<dim>> &fe_values =
+            non_matching_fe_values_error.get_inside_fe_values();
+
+          if (fe_values)
+            {
+              std::vector<double> solution_values(
+                fe_values->n_quadrature_points);
+              fe_values->get_function_values(solution, solution_values);
+
+              for (const unsigned int q : fe_values->quadrature_point_indices())
+                {
+                  const Point<dim> &point = fe_values->quadrature_point(q);
+                  const double      error_at_point =
+                    solution_values.at(q) - exact_solution.value(point);
+                  error_L2_squared +=
+                    Utilities::fixed_power<2>(error_at_point) *
+                    fe_values->JxW(q);
+                }
+            }
+        }
+
+    const double error = std::sqrt(error_L2_squared);
 
     std::cout << time << " " << error << std::endl;
 
