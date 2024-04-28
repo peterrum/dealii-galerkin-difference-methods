@@ -34,6 +34,10 @@
 #include <deal.II/numerics/matrix_creator.h>
 #include <deal.II/numerics/vector_tools.h>
 
+#include <gdm/data_out.h>
+#include <gdm/system.h>
+#include <gdm/vector_tools.h>
+
 #include <fstream>
 
 using namespace dealii;
@@ -83,12 +87,15 @@ test()
   using VectorType = Vector<Number>;
 
   // settings
-  const double       phi                 = numbers::PI / 8.0; // TODO
-  const unsigned int fe_degree           = 1;
-  const unsigned int fe_degree_level_set = 1;
-  const unsigned int n_subdivisions_1D   = 40;
-  const double       delta_t =
-    (1.0 / n_subdivisions_1D) * 0.4 * 1.0 / (2 * fe_degree + 1) / 2.0;
+  const double       phi                    = numbers::PI / 8.0; // TODO
+  const unsigned int n_components           = 1;
+  const unsigned int fe_degree              = 3;
+  const unsigned int fe_degree_time_stepper = fe_degree;
+  const unsigned int fe_degree_level_set    = 1;
+  const unsigned int n_subdivisions_1D      = 40;
+  const unsigned int fe_degree_output       = 2;
+  const double       delta_t = (1.0 / n_subdivisions_1D) * 0.4 * 1.0 /
+                         (2 * fe_degree_time_stepper + 1) / 2.0;
   const double                           start_t = 0.0;
   const double                           end_t   = 0.1;
   const TimeStepping::runge_kutta_method runge_kutta_method =
@@ -98,17 +105,23 @@ test()
   Functions::ConstantFunction<dim, Number> advection(
     exact_solution.get_transport_direction().begin_raw(), dim);
 
-  // create system
-  MappingQ1<dim>        mapping;
-  hp::FECollection<dim> fe;
-  fe.push_back(FE_Q<dim>(fe_degree));
-  QGauss<dim> quadrature(fe_degree + 1);
+  // Create GDM system
+  GDM::System<dim> system(fe_degree, n_components);
 
-  Triangulation<dim> tria;
-  GridGenerator::subdivided_hyper_cube(tria, n_subdivisions_1D, 0, 1, true);
+  // Create mesh
+  system.subdivided_hyper_cube(n_subdivisions_1D, 0, 1);
 
-  DoFHandler<dim> dof_handler(tria);
-  dof_handler.distribute_dofs(fe);
+  // Create finite elements
+  const auto &fe = system.get_fe();
+
+  // Create mapping
+  hp::MappingCollection<dim> mapping;
+  mapping.push_back(MappingQ1<dim>());
+
+  // Categorize cells
+  system.categorize();
+
+  const auto &tria = system.get_triangulation();
 
   // level set and classify cells
   const FE_Q<dim> fe_level_set(fe_degree_level_set);
@@ -135,16 +148,18 @@ test()
 
   AffineConstraints<Number> constraints;
   for (unsigned int d = 0; d < dim; ++d)
-    VectorTools::interpolate_boundary_values(
-      mapping, dof_handler, d * 2, exact_solution, constraints);
+    system.interpolate_boundary_values(mapping,
+                                       d * 2,
+                                       exact_solution,
+                                       constraints);
   constraints.close();
 
   AffineConstraints<Number> constraints_homogeneous;
   constraints_homogeneous.close();
 
   // compute mass matrix
-  DynamicSparsityPattern dsp(dof_handler.n_dofs());
-  DoFTools::make_sparsity_pattern(dof_handler, dsp, constraints);
+  DynamicSparsityPattern dsp(system.n_dofs());
+  system.create_sparsity_pattern(constraints, dsp);
 
   SparsityPattern sparsity_pattern;
   sparsity_pattern.copy_from(dsp);
@@ -152,10 +167,8 @@ test()
   SparseMatrix<Number> sparse_matrix;
   sparse_matrix.reinit(sparsity_pattern);
 
-  DynamicSparsityPattern dsp_homogeneous(dof_handler.n_dofs());
-  DoFTools::make_sparsity_pattern(dof_handler,
-                                  dsp_homogeneous,
-                                  constraints_homogeneous);
+  DynamicSparsityPattern dsp_homogeneous(system.n_dofs());
+  system.create_sparsity_pattern(constraints_homogeneous, dsp_homogeneous);
 
   SparsityPattern sparsity_pattern_homogeneous;
   sparsity_pattern_homogeneous.copy_from(dsp_homogeneous);
@@ -181,15 +194,18 @@ test()
                                                       level_set);
 
     std::vector<types::global_dof_index> dof_indices;
-    for (const auto &cell : dof_handler.active_cell_iterators())
-      if (mesh_classifier.location_to_level_set(cell) !=
+    for (const auto &cell : system.locally_active_cell_iterators())
+      if (mesh_classifier.location_to_level_set(cell->dealii_iterator()) !=
           NonMatching::LocationToLevelSet::outside)
         {
-          non_matching_fe_values.reinit(cell);
+          non_matching_fe_values.reinit(cell->dealii_iterator(),
+                                        numbers::invalid_unsigned_int,
+                                        numbers::invalid_unsigned_int,
+                                        cell->active_fe_index());
 
           const auto &fe_values = non_matching_fe_values.get_inside_fe_values();
 
-          const unsigned int dofs_per_cell = cell->get_fe().n_dofs_per_cell();
+          const unsigned int dofs_per_cell = fe[0].dofs_per_cell;
 
           // get indices
           dof_indices.resize(dofs_per_cell);
@@ -234,8 +250,8 @@ test()
       }
 
   // set up initial condition
-  VectorType solution(dof_handler.n_dofs());
-  VectorTools::interpolate(dof_handler, exact_solution, solution);
+  VectorType solution(system.n_dofs());
+  GDM::VectorTools::interpolate(mapping, system, exact_solution, solution);
 
   const auto fu_rhs = [&](const double time, const VectorType &solution) {
     VectorType vec_0, vec_1, vec_2;
@@ -250,8 +266,10 @@ test()
 
     constraints.clear();
     for (unsigned int d = 0; d < dim; ++d)
-      VectorTools::interpolate_boundary_values(
-        mapping, dof_handler, d * 2, exact_solution, constraints);
+      system.interpolate_boundary_values(mapping,
+                                         d * 2,
+                                         exact_solution,
+                                         constraints);
     constraints.close();
 
     // apply constraints
@@ -275,15 +293,18 @@ test()
 
     advection.set_time(time);
 
-    for (const auto &cell : dof_handler.active_cell_iterators())
-      if (mesh_classifier.location_to_level_set(cell) !=
+    for (const auto &cell : system.locally_active_cell_iterators())
+      if (mesh_classifier.location_to_level_set(cell->dealii_iterator()) !=
           NonMatching::LocationToLevelSet::outside)
         {
-          non_matching_fe_values.reinit(cell);
+          non_matching_fe_values.reinit(cell->dealii_iterator(),
+                                        numbers::invalid_unsigned_int,
+                                        numbers::invalid_unsigned_int,
+                                        cell->active_fe_index());
 
           const auto &fe_values = non_matching_fe_values.get_inside_fe_values();
 
-          const unsigned int n_dofs_per_cell = cell->get_fe().n_dofs_per_cell();
+          const unsigned int n_dofs_per_cell = fe[0].dofs_per_cell;
 
           std::vector<types::global_dof_index> dof_indices(n_dofs_per_cell);
           cell->get_dof_indices(dof_indices);
@@ -368,20 +389,30 @@ test()
 
     double error_L2_squared = 0;
 
-    for (const auto &cell : dof_handler.active_cell_iterators())
-      if (mesh_classifier.location_to_level_set(cell) !=
+    for (const auto &cell : system.locally_active_cell_iterators())
+      if (mesh_classifier.location_to_level_set(cell->dealii_iterator()) !=
           NonMatching::LocationToLevelSet::outside)
         {
-          non_matching_fe_values_error.reinit(cell);
+          non_matching_fe_values_error.reinit(cell->dealii_iterator(),
+                                              numbers::invalid_unsigned_int,
+                                              numbers::invalid_unsigned_int,
+                                              cell->active_fe_index());
 
           const std::optional<FEValues<dim>> &fe_values =
             non_matching_fe_values_error.get_inside_fe_values();
+
+
+          std::vector<types::global_dof_index> local_dof_indices(
+            fe[0].dofs_per_cell);
+          cell->get_dof_indices(local_dof_indices);
 
           if (fe_values)
             {
               std::vector<double> solution_values(
                 fe_values->n_quadrature_points);
-              fe_values->get_function_values(solution, solution_values);
+              fe_values->get_function_values(solution,
+                                             local_dof_indices,
+                                             solution_values);
 
               for (const unsigned int q : fe_values->quadrature_point_indices())
                 {
@@ -400,10 +431,9 @@ test()
     std::cout << time << " " << error << std::endl;
 
     // output result -> Paraview
-    dealii::DataOut<dim> data_out;
-    data_out.add_data_vector(dof_handler, solution, "solution");
-    data_out.add_data_vector(level_set_dof_handler, level_set, "level_set");
-    data_out.build_patches(mapping, fe_degree);
+    GDM::DataOut<dim> data_out(system, mapping, fe_degree_output);
+    data_out.add_data_vector(solution, "solution");
+    data_out.build_patches();
 
     std::string   file_name = "solution_" + std::to_string(counter) + ".vtu";
     std::ofstream file(file_name);

@@ -83,12 +83,13 @@ test()
   using VectorType = Vector<Number>;
 
   // settings
-  const double       phi                 = numbers::PI / 8.0; // TODO
-  const unsigned int fe_degree           = 1;
-  const unsigned int fe_degree_level_set = 1;
-  const unsigned int n_subdivisions_1D   = 40;
-  const double       delta_t =
-    (1.0 / n_subdivisions_1D) * 0.4 * 1.0 / (2 * fe_degree + 1) / 2.0;
+  const double       phi                    = numbers::PI / 8.0; // TODO
+  const unsigned int fe_degree              = 1;
+  const unsigned int fe_degree_time_stepper = 3;
+  const unsigned int fe_degree_level_set    = 1;
+  const unsigned int n_subdivisions_1D      = 40;
+  const double       delta_t = (1.0 / n_subdivisions_1D) * 0.4 * 1.0 /
+                         (2 * fe_degree_time_stepper + 1) / 2.0;
   const double                           start_t = 0.0;
   const double                           end_t   = 0.1;
   const TimeStepping::runge_kutta_method runge_kutta_method =
