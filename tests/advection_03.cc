@@ -6,6 +6,7 @@
 
 #include <deal.II/base/discrete_time.h>
 #include <deal.II/base/function.h>
+#include <deal.II/base/function_signed_distance.h>
 #include <deal.II/base/quadrature_lib.h>
 #include <deal.II/base/time_stepping.h>
 
@@ -24,6 +25,9 @@
 #include <deal.II/lac/precondition.h>
 #include <deal.II/lac/solver_cg.h>
 #include <deal.II/lac/sparse_matrix.h>
+
+#include <deal.II/non_matching/fe_values.h>
+#include <deal.II/non_matching/mesh_classifier.h>
 
 #include <deal.II/numerics/data_out.h>
 #include <deal.II/numerics/matrix_creator.h>
@@ -78,8 +82,10 @@ test()
   using VectorType = Vector<Number>;
 
   // settings
-  const unsigned int fe_degree         = 1;
-  const unsigned int n_subdivisions_1D = 40;
+  const double       phi                 = numbers::PI / 8.0; // TODO
+  const unsigned int fe_degree           = 1;
+  const unsigned int fe_degree_level_set = 1;
+  const unsigned int n_subdivisions_1D   = 40;
   const double       delta_t =
     (1.0 / n_subdivisions_1D) * 0.4 * 1.0 / (2 * fe_degree + 1) / 2.0;
   const double                           start_t = 0.0;
@@ -101,6 +107,29 @@ test()
 
   DoFHandler<dim> dof_handler(tria);
   dof_handler.distribute_dofs(fe);
+
+  // level set and classify cells
+  const FE_Q<dim> fe_level_set(fe_degree_level_set);
+  DoFHandler<dim> level_set_dof_handler(tria);
+  level_set_dof_handler.distribute_dofs(fe_level_set);
+
+  Vector<double> level_set;
+  level_set.reinit(level_set_dof_handler.n_dofs());
+
+  NonMatching::MeshClassifier<dim> mesh_classifier(level_set_dof_handler,
+                                                   level_set);
+
+  const Point<dim> point = {0.2001, 0.0};
+  Tensor<1, dim>   normal;
+  normal[0] = -std::sin(phi);
+  normal[1] = +std::cos(phi);
+  const Functions::SignedDistance::Plane<dim> signed_distance_sphere(point,
+                                                                     normal);
+  VectorTools::interpolate(level_set_dof_handler,
+                           signed_distance_sphere,
+                           level_set);
+
+  mesh_classifier.reclassify();
 
   AffineConstraints<Number> constraints;
   for (unsigned int d = 0; d < dim; ++d)
@@ -285,6 +314,7 @@ test()
     // output result -> Paraview
     dealii::DataOut<dim> data_out;
     data_out.add_data_vector(dof_handler, solution, "solution");
+    data_out.add_data_vector(level_set_dof_handler, level_set, "level_set");
     data_out.build_patches(mapping, fe_degree);
 
     std::string   file_name = "solution_" + std::to_string(counter) + ".vtu";
