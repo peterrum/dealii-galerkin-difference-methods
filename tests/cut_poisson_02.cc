@@ -169,6 +169,8 @@ test()
           cell->dealii_iterator()->minimum_vertex_distance();
 
         non_matching_fe_values.reinit(cell->dealii_iterator(),
+                                      numbers::invalid_unsigned_int,
+                                      numbers::invalid_unsigned_int,
                                       cell->active_fe_index());
 
         const std::optional<FEValues<dim>> &inside_fe_values =
@@ -281,6 +283,8 @@ test()
         NonMatching::LocationToLevelSet::outside)
       {
         non_matching_fe_values_error.reinit(cell->dealii_iterator(),
+                                            numbers::invalid_unsigned_int,
+                                            numbers::invalid_unsigned_int,
                                             cell->active_fe_index());
 
         const std::optional<FEValues<dim>> &fe_values =
