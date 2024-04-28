@@ -39,7 +39,7 @@ public:
   {
     advection[0] = 1.0;
     if (dim > 1)
-      advection[1] = 1.0;
+      advection[1] = 0.15;
     if (dim > 2)
       advection[2] = -0.05;
   }
@@ -78,7 +78,7 @@ test()
   // settings
   const unsigned int fe_degree         = 3;
   const unsigned int n_subdivisions_1D = 40;
-  const double       delta_t           = 1.0 / n_subdivisions_1D * 0.2;
+  const double       delta_t           = 1.0 / n_subdivisions_1D * 0.25;
   const double       start_t           = 0.0;
   const double       end_t             = 0.1;
   const TimeStepping::runge_kutta_method runge_kutta_method =
@@ -105,6 +105,9 @@ test()
       mapping, dof_handler, d * 2, exact_solution, constraints);
   constraints.close();
 
+  AffineConstraints<Number> constraints_homogeneous;
+  constraints_homogeneous.close();
+
   // compute mass matrix
   DynamicSparsityPattern dsp(dof_handler.n_dofs());
   DoFTools::make_sparsity_pattern(dof_handler, dsp, constraints);
@@ -115,8 +118,16 @@ test()
   SparseMatrix<Number> sparse_matrix;
   sparse_matrix.reinit(sparsity_pattern);
 
-  VectorType vec_dbc;
-  vec_dbc.reinit(dof_handler.n_dofs());
+  DynamicSparsityPattern dsp_homogeneous(dof_handler.n_dofs());
+  DoFTools::make_sparsity_pattern(dof_handler,
+                                  dsp_homogeneous,
+                                  constraints_homogeneous);
+
+  SparsityPattern sparsity_pattern_homogeneous;
+  sparsity_pattern_homogeneous.copy_from(dsp_homogeneous);
+
+  SparseMatrix<Number> sparse_matrix_homogeneous;
+  sparse_matrix_homogeneous.reinit(sparsity_pattern_homogeneous);
 
   {
     FEValues<dim> fe_values(mapping,
@@ -146,11 +157,13 @@ test()
                                      fe_values.JxW(q_index);
           }
 
-        Vector<Number> cell_vector(dofs_per_cell);
-
         // assemble
-        constraints.distribute_local_to_global(
-          cell_matrix, cell_vector, dof_indices, sparse_matrix, vec_dbc);
+        constraints.distribute_local_to_global(cell_matrix,
+                                               dof_indices,
+                                               sparse_matrix);
+
+        constraints_homogeneous.distribute_local_to_global(
+          cell_matrix, dof_indices, sparse_matrix_homogeneous);
       }
   }
 
@@ -165,6 +178,15 @@ test()
     vec_2.reinit(solution); // result of inversion mass matrix
 
     vec_0 = solution;
+
+    // update constraints
+    exact_solution.set_time(time);
+
+    constraints.clear();
+    for (unsigned int d = 0; d < dim; ++d)
+      VectorTools::interpolate_boundary_values(
+        mapping, dof_handler, d * 2, exact_solution, constraints);
+    constraints.close();
 
     // apply constraints
     constraints.distribute(vec_0);
@@ -215,7 +237,15 @@ test()
         constraints.distribute_local_to_global(cell_vector, dof_indices, vec_1);
       }
 
-    vec_1 += vec_dbc;
+    VectorType vec_dbc, vec_dbc_in;
+    vec_dbc.reinit(solution);
+    vec_dbc_in.reinit(solution);
+
+    constraints.distribute(vec_dbc_in);
+    sparse_matrix_homogeneous.vmult(vec_dbc, vec_dbc_in);
+    constraints.set_zero(vec_dbc);
+
+    vec_1 -= vec_dbc;
 
     // invert mass matrix
     PreconditionJacobi<SparseMatrix<Number>> preconditioner;
