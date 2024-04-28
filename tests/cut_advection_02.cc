@@ -433,6 +433,14 @@ test()
     // output result -> Paraview
     GDM::DataOut<dim> data_out(system, mapping, fe_degree_output);
     data_out.add_data_vector(solution, "solution");
+
+    data_out.set_cell_selection(
+      [&](const typename Triangulation<dim>::cell_iterator &cell) {
+        return cell->is_active() &&
+               mesh_classifier.location_to_level_set(cell) !=
+                 NonMatching::LocationToLevelSet::outside;
+      });
+
     data_out.build_patches();
 
     std::string   file_name = "solution_" + std::to_string(counter) + ".vtu";
