@@ -88,6 +88,13 @@ namespace GDM
       data_out.add_data_vector(solution_output, label);
     }
 
+    void
+    set_cell_selection(
+      const FilteredIterator<typename Triangulation<dim>::cell_iterator>
+        &filtered_iterator)
+    {
+      data_out.set_cell_selection(filtered_iterator);
+    }
 
     void
     build_patches()
