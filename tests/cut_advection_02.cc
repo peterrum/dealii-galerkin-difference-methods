@@ -4,6 +4,7 @@
 // DoD stabilization for higher-order advection in two dimensions
 // by Florian Streitbürger, Gunnar Birke, Christian Engwer, Sandra May
 
+#include <deal.II/base/conditional_ostream.h>
 #include <deal.II/base/discrete_time.h>
 #include <deal.II/base/function.h>
 #include <deal.II/base/function_signed_distance.h>
@@ -101,6 +102,8 @@ test()
   const TimeStepping::runge_kutta_method runge_kutta_method =
     TimeStepping::runge_kutta_method::RK_CLASSIC_FOURTH_ORDER;
 
+  ConditionalOStream cout_detail(std::cout, false);
+
   ExactSolution<dim>                       exact_solution;
   Functions::ConstantFunction<dim, Number> advection(
     exact_solution.get_transport_direction().begin_raw(), dim);
@@ -120,6 +123,8 @@ test()
 
   // Categorize cells
   system.categorize();
+
+  cout_detail << " - " << system.n_dofs() << " DoFs" << std::endl;
 
   const auto &tria = system.get_triangulation();
 
@@ -362,6 +367,8 @@ test()
     ReductionControl     solver_control(100, 1.e-10, 1.e-8);
     SolverCG<VectorType> solver(solver_control);
     solver.solve(sparse_matrix, vec_2, vec_1, preconditioner);
+
+    cout_detail << " [L] solved in " << solver_control.last_step() << std::endl;
 
     return vec_2;
   };
