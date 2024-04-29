@@ -64,7 +64,7 @@ public:
 
 template <int dim>
 void
-test()
+test(const bool do_ghost_penalty = false)
 {
   const unsigned int n_subdivisions      = 64;
   const unsigned int fe_degree           = 1;
@@ -104,12 +104,61 @@ test()
 
   mesh_classifier.reclassify();
 
+  const auto face_has_ghost_penalty = [&](const auto        &cell,
+                                          const unsigned int face_index) {
+    if (!do_ghost_penalty)
+      return false;
+
+    if (cell->at_boundary(face_index))
+      return false;
+
+    const NonMatching::LocationToLevelSet cell_location =
+      mesh_classifier.location_to_level_set(cell);
+
+    const NonMatching::LocationToLevelSet neighbor_location =
+      mesh_classifier.location_to_level_set(cell->neighbor(face_index));
+
+    if (cell_location == NonMatching::LocationToLevelSet::intersected &&
+        neighbor_location != NonMatching::LocationToLevelSet::outside)
+      return true;
+
+    if (neighbor_location == NonMatching::LocationToLevelSet::intersected &&
+        cell_location != NonMatching::LocationToLevelSet::outside)
+      return true;
+
+    return false;
+  };
+
   // allocate memory
   DynamicSparsityPattern dsp(dof_handler.n_dofs(), dof_handler.n_dofs());
 
   const AffineConstraints<double> constraints;
 
-  DoFTools::make_sparsity_pattern(dof_handler, dsp, constraints);
+  if (do_ghost_penalty)
+    {
+      const auto face_has_flux_coupling = [&](const auto        &cell,
+                                              const unsigned int face_index) {
+        return face_has_ghost_penalty(cell, face_index);
+      };
+
+      Table<2, DoFTools::Coupling> cell_coupling(1, 1);
+      Table<2, DoFTools::Coupling> face_coupling(1, 1);
+      cell_coupling[0][0] = DoFTools::always;
+      face_coupling[0][0] = DoFTools::always;
+
+      DoFTools::make_flux_sparsity_pattern(dof_handler,
+                                           dsp,
+                                           constraints,
+                                           true,
+                                           cell_coupling,
+                                           face_coupling,
+                                           numbers::invalid_subdomain_id,
+                                           face_has_flux_coupling);
+    }
+  else
+    {
+      DoFTools::make_sparsity_pattern(dof_handler, dsp, constraints);
+    }
 
   SparsityPattern sparsity_pattern;
   sparsity_pattern.copy_from(dsp);
@@ -127,6 +176,7 @@ test()
   Vector<double>     local_rhs(n_dofs_per_cell);
   std::vector<types::global_dof_index> local_dof_indices(n_dofs_per_cell);
 
+  const double ghost_parameter   = 0.5;
   const double nitsche_parameter = 5 * (fe_degree + 1) * fe_degree;
 
   const QGauss<1> quadrature_1D(fe_degree + 1);
@@ -144,6 +194,16 @@ test()
                                                     mesh_classifier,
                                                     level_set_dof_handler,
                                                     level_set);
+
+  hp::FEFaceValues<dim> hp_fe_face_values_m(
+    fe,
+    hp::QCollection<dim - 1>(QGauss<dim - 1>(fe_degree + 1)),
+    update_gradients | update_JxW_values | update_normal_vectors);
+
+  hp::FEFaceValues<dim> hp_fe_face_values_p(fe,
+                                            hp::QCollection<dim - 1>(
+                                              QGauss<dim - 1>(fe_degree + 1)),
+                                            update_gradients);
 
   for (const auto &cell : dof_handler.active_cell_iterators())
     if (mesh_classifier.location_to_level_set(cell) !=
@@ -215,6 +275,96 @@ test()
                   }
               }
           }
+
+        for (const unsigned int f : cell->face_indices())
+          if (face_has_ghost_penalty(cell, f))
+            {
+              hp_fe_face_values_m.reinit(cell, f);
+              hp_fe_face_values_p.reinit(cell->neighbor(f),
+                                         cell->neighbor_of_neighbor(f));
+
+              const auto &fe_face_values_m =
+                hp_fe_face_values_m.get_present_fe_values();
+              const auto &fe_face_values_p =
+                hp_fe_face_values_p.get_present_fe_values();
+
+              FullMatrix<double> local_stabilization_mm(
+                fe_face_values_m.dofs_per_cell, fe_face_values_m.dofs_per_cell);
+              FullMatrix<double> local_stabilization_pm(
+                fe_face_values_p.dofs_per_cell, fe_face_values_m.dofs_per_cell);
+              FullMatrix<double> local_stabilization_mp(
+                fe_face_values_m.dofs_per_cell, fe_face_values_p.dofs_per_cell);
+              FullMatrix<double> local_stabilization_pp(
+                fe_face_values_p.dofs_per_cell, fe_face_values_p.dofs_per_cell);
+
+              for (const unsigned int q :
+                   fe_face_values_m.quadrature_point_indices())
+                {
+                  const Tensor<1, dim> normal =
+                    fe_face_values_m.normal_vector(q);
+
+                  for (const auto i : fe_face_values_m.dof_indices())
+                    for (const auto j : fe_face_values_m.dof_indices())
+                      {
+                        local_stabilization_mm(i, j) +=
+                          .5 * ghost_parameter * cell_side_length * normal *
+                          fe_face_values_m.shape_grad(i, q) * normal *
+                          fe_face_values_m.shape_grad(j, q) *
+                          fe_face_values_m.JxW(q);
+                      }
+
+                  for (const auto i : fe_face_values_p.dof_indices())
+                    for (const auto j : fe_face_values_m.dof_indices())
+                      {
+                        local_stabilization_pm(i, j) -=
+                          .5 * ghost_parameter * cell_side_length * normal *
+                          fe_face_values_p.shape_grad(i, q) * normal *
+                          fe_face_values_m.shape_grad(j, q) *
+                          fe_face_values_m.JxW(q);
+                      }
+
+                  for (const auto i : fe_face_values_m.dof_indices())
+                    for (const auto j : fe_face_values_p.dof_indices())
+                      {
+                        local_stabilization_mp(i, j) -=
+                          .5 * ghost_parameter * cell_side_length * normal *
+                          fe_face_values_m.shape_grad(i, q) * normal *
+                          fe_face_values_p.shape_grad(j, q) *
+                          fe_face_values_m.JxW(q);
+                      }
+
+                  for (const auto i : fe_face_values_m.dof_indices())
+                    for (const auto j : fe_face_values_m.dof_indices())
+                      {
+                        local_stabilization_pp(i, j) +=
+                          .5 * ghost_parameter * cell_side_length * normal *
+                          fe_face_values_p.shape_grad(i, q) * normal *
+                          fe_face_values_p.shape_grad(j, q) *
+                          fe_face_values_m.JxW(q);
+                      }
+                }
+
+              std::vector<types::global_dof_index> local_dof_indices_m(
+                fe_face_values_m.dofs_per_cell);
+              std::vector<types::global_dof_index> local_dof_indices_p(
+                fe_face_values_p.dofs_per_cell);
+
+              cell->get_dof_indices(local_dof_indices_m);
+              cell->neighbor(f)->get_dof_indices(local_dof_indices_p);
+
+              stiffness_matrix.add(local_dof_indices_m,
+                                   local_dof_indices_m,
+                                   local_stabilization_mm);
+              stiffness_matrix.add(local_dof_indices_p,
+                                   local_dof_indices_m,
+                                   local_stabilization_pm);
+              stiffness_matrix.add(local_dof_indices_m,
+                                   local_dof_indices_p,
+                                   local_stabilization_mp);
+              stiffness_matrix.add(local_dof_indices_p,
+                                   local_dof_indices_p,
+                                   local_stabilization_pp);
+            }
 
         cell->get_dof_indices(local_dof_indices);
 
@@ -306,5 +456,6 @@ test()
 int
 main()
 {
-  test<2>();
+  test<2>(false);
+  test<2>(true);
 }
