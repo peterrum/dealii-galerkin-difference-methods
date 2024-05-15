@@ -335,9 +335,9 @@ test(const bool do_ghost_penalty = true)
                       for (const auto j : fe_face_values_m.dof_indices())
                         {
                           local_stabilization_mm(i, j) +=
-                            .5 * ghost_parameter * cell_side_length * normal *
-                            fe_face_values_m.shape_grad(i, q) * normal *
-                            fe_face_values_m.shape_grad(j, q) *
+                            .5 * ghost_parameter * cell_side_length *
+                            (normal * fe_face_values_m.shape_grad(i, q)) *
+                            (normal * fe_face_values_m.shape_grad(j, q)) *
                             fe_face_values_m.JxW(q);
                         }
 
@@ -345,9 +345,9 @@ test(const bool do_ghost_penalty = true)
                       for (const auto j : fe_face_values_m.dof_indices())
                         {
                           local_stabilization_pm(i, j) -=
-                            .5 * ghost_parameter * cell_side_length * normal *
-                            fe_face_values_p.shape_grad(i, q) * normal *
-                            fe_face_values_m.shape_grad(j, q) *
+                            .5 * ghost_parameter * cell_side_length *
+                            (normal * fe_face_values_p.shape_grad(i, q)) *
+                            (normal * fe_face_values_m.shape_grad(j, q)) *
                             fe_face_values_m.JxW(q);
                         }
 
@@ -355,9 +355,9 @@ test(const bool do_ghost_penalty = true)
                       for (const auto j : fe_face_values_p.dof_indices())
                         {
                           local_stabilization_mp(i, j) -=
-                            .5 * ghost_parameter * cell_side_length * normal *
-                            fe_face_values_m.shape_grad(i, q) * normal *
-                            fe_face_values_p.shape_grad(j, q) *
+                            .5 * ghost_parameter * cell_side_length *
+                            (normal * fe_face_values_m.shape_grad(i, q)) *
+                            (normal * fe_face_values_p.shape_grad(j, q)) *
                             fe_face_values_m.JxW(q);
                         }
 
@@ -365,9 +365,9 @@ test(const bool do_ghost_penalty = true)
                       for (const auto j : fe_face_values_m.dof_indices())
                         {
                           local_stabilization_pp(i, j) +=
-                            .5 * ghost_parameter * cell_side_length * normal *
-                            fe_face_values_p.shape_grad(i, q) * normal *
-                            fe_face_values_p.shape_grad(j, q) *
+                            .5 * ghost_parameter * cell_side_length *
+                            (normal * fe_face_values_p.shape_grad(i, q)) *
+                            (normal * fe_face_values_p.shape_grad(j, q)) *
                             fe_face_values_m.JxW(q);
                         }
                   }
