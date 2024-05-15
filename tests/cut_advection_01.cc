@@ -42,9 +42,12 @@ template <int dim, typename Number = double>
 class ExactSolution : public dealii::Function<dim, Number>
 {
 public:
-  ExactSolution(const double time = 0.)
+  ExactSolution(const double x_shift, 
+                const double phi, 
+  const double time = 0.)
     : dealii::Function<dim, Number>(1, time)
-    , phi(numbers::PI / 8.0)
+    , x_shift(x_shift)
+    , phi(phi)
   {
     advection[0] = 2.0 * std::cos(phi);
     advection[1] = 2.0 * std::sin(phi);
@@ -57,9 +60,9 @@ public:
     const dealii::Tensor<1, dim> position = p - t * advection;
 
     const double x_hat =
-      std::cos(phi) * (position[0] - 0.2001) + std::sin(phi) * position[1];
+      std::cos(phi) * (position[0] - x_shift) + std::sin(phi) * position[1];
 
-    return std::sin(std::sqrt(2.0) * numbers::PI * x_hat / (1.0 - 0.2001));
+    return std::sin(std::sqrt(2.0) * numbers::PI * x_hat / (1.0 - x_shift));
   }
 
   const dealii::Tensor<1, dim> &
@@ -70,6 +73,7 @@ public:
 
 private:
   dealii::Tensor<1, dim> advection;
+  const double           x_shift;
   const double           phi;
 };
 
@@ -84,6 +88,7 @@ test(const bool do_ghost_penalty = true)
 
   // settings
   const double       phi                    = numbers::PI / 8.0; // TODO
+  const double       x_shift                = 0.2000; // 0.2001
   const unsigned int fe_degree              = 1;
   const unsigned int fe_degree_time_stepper = 3;
   const unsigned int fe_degree_level_set    = 1;
@@ -96,7 +101,7 @@ test(const bool do_ghost_penalty = true)
   const TimeStepping::runge_kutta_method runge_kutta_method =
     TimeStepping::runge_kutta_method::RK_CLASSIC_FOURTH_ORDER;
 
-  ExactSolution<dim>                       exact_solution;
+  ExactSolution<dim>                       exact_solution(x_shift, phi);
   Functions::ConstantFunction<dim, Number> advection(
     exact_solution.get_transport_direction().begin_raw(), dim);
 
@@ -108,6 +113,12 @@ test(const bool do_ghost_penalty = true)
 
   Triangulation<dim> tria;
   GridGenerator::subdivided_hyper_cube(tria, n_subdivisions_1D, 0, 1, true);
+
+  for(const auto & cell: tria.active_cell_iterators())
+    for(const auto f : cell->face_indices())
+      if(cell->at_boundary(f) && (cell->face(f)->boundary_id() == 2))
+        if(cell->face(f)->center()[0] > x_shift)
+          cell->face(f)->set_boundary_id(2*dim);
 
   DoFHandler<dim> dof_handler(tria);
   dof_handler.distribute_dofs(fe);
@@ -123,7 +134,7 @@ test(const bool do_ghost_penalty = true)
   NonMatching::MeshClassifier<dim> mesh_classifier(level_set_dof_handler,
                                                    level_set);
 
-  const Point<dim> point = {0.2001, 0.0};
+  const Point<dim> point = {x_shift, 0.0};
   Tensor<1, dim>   normal;
   normal[0] = +std::sin(phi);
   normal[1] = -std::cos(phi);
@@ -267,6 +278,12 @@ test(const bool do_ghost_penalty = true)
                                                 QGauss<dim - 1>(fe_degree + 1)),
                                               update_gradients);
 
+    FEInterfaceValues<dim> fe_interface_values(fe[0],
+                                                QGauss<dim - 1>(fe_degree + 1),
+                                                 update_gradients |
+                                                   update_JxW_values |
+                                                   update_normal_vectors);
+
     std::vector<types::global_dof_index> dof_indices;
     for (const auto &cell : dof_handler.active_cell_iterators())
       if (mesh_classifier.location_to_level_set(cell) !=
@@ -301,7 +318,7 @@ test(const bool do_ghost_penalty = true)
             }
 
           for (const unsigned int f : cell->face_indices())
-            if (face_has_ghost_penalty(cell, f))
+            if (false && face_has_ghost_penalty(cell, f))
               {
                 hp_fe_face_values_m.reinit(cell, f);
                 hp_fe_face_values_p.reinit(cell->neighbor(f),
@@ -417,6 +434,52 @@ test(const bool do_ghost_penalty = true)
                   local_dof_indices_p,
                   local_dof_indices_p,
                   sparse_matrix_homogeneous);
+              }
+              else if (face_has_ghost_penalty(cell, f))
+              {
+                const unsigned int invalid_subface =
+                  numbers::invalid_unsigned_int;
+  
+                fe_interface_values.reinit(cell,
+                                           f,
+                                           invalid_subface,
+                                           cell->neighbor(f),
+                                           cell->neighbor_of_neighbor(f),
+                                           invalid_subface);
+  
+                const unsigned int n_interface_dofs =
+                  fe_interface_values.n_current_interface_dofs();
+                FullMatrix<double> local_stabilization(n_interface_dofs,
+                                                       n_interface_dofs);
+                for (unsigned int q = 0;
+                     q < fe_interface_values.n_quadrature_points;
+                     ++q)
+                  {
+                    const Tensor<1, dim> normal = fe_interface_values.normal(q);
+                    for (unsigned int i = 0; i < n_interface_dofs; ++i)
+                      for (unsigned int j = 0; j < n_interface_dofs; ++j)
+                        {
+                          local_stabilization(i, j) +=
+                            .5 * ghost_parameter * cell_side_length * normal *
+                            fe_interface_values.jump_in_shape_gradients(i, q) *
+                            normal *
+                            fe_interface_values.jump_in_shape_gradients(j, q) *
+                            fe_interface_values.JxW(q);
+                        }
+                  }
+  
+                const std::vector<types::global_dof_index>
+                  local_interface_dof_indices =
+                    fe_interface_values.get_interface_dof_indices();
+
+                constraints.distribute_local_to_global(local_stabilization,
+                                                       local_interface_dof_indices,
+                                                       sparse_matrix);
+
+                constraints_homogeneous.distribute_local_to_global(
+                  local_stabilization,
+                  local_interface_dof_indices,
+                  sparse_matrix);
               }
 
           // assemble
