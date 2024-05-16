@@ -42,9 +42,7 @@ template <int dim, typename Number = double>
 class ExactSolution : public dealii::Function<dim, Number>
 {
 public:
-  ExactSolution(const double x_shift, 
-                const double phi, 
-  const double time = 0.)
+  ExactSolution(const double x_shift, const double phi, const double time = 0.)
     : dealii::Function<dim, Number>(1, time)
     , x_shift(x_shift)
     , phi(phi)
@@ -88,7 +86,7 @@ test(const bool do_ghost_penalty = true)
 
   // settings
   const double       phi                    = numbers::PI / 8.0; // TODO
-  const double       x_shift                = 0.2000; // 0.2001
+  const double       x_shift                = 0.2000;            // 0.2001
   const unsigned int fe_degree              = 1;
   const unsigned int fe_degree_time_stepper = 3;
   const unsigned int fe_degree_level_set    = 1;
@@ -114,11 +112,11 @@ test(const bool do_ghost_penalty = true)
   Triangulation<dim> tria;
   GridGenerator::subdivided_hyper_cube(tria, n_subdivisions_1D, 0, 1, true);
 
-  for(const auto & cell: tria.active_cell_iterators())
-    for(const auto f : cell->face_indices())
-      if(cell->at_boundary(f) && (cell->face(f)->boundary_id() == 2))
-        if(cell->face(f)->center()[0] > x_shift)
-          cell->face(f)->set_boundary_id(2*dim);
+  for (const auto &cell : tria.active_cell_iterators())
+    for (const auto f : cell->face_indices())
+      if (cell->at_boundary(f) && (cell->face(f)->boundary_id() == 2))
+        if (cell->face(f)->center()[0] > x_shift)
+          cell->face(f)->set_boundary_id(2 * dim);
 
   DoFHandler<dim> dof_handler(tria);
   dof_handler.distribute_dofs(fe);
@@ -279,10 +277,10 @@ test(const bool do_ghost_penalty = true)
                                               update_gradients);
 
     FEInterfaceValues<dim> fe_interface_values(fe[0],
-                                                QGauss<dim - 1>(fe_degree + 1),
-                                                 update_gradients |
-                                                   update_JxW_values |
-                                                   update_normal_vectors);
+                                               QGauss<dim - 1>(fe_degree + 1),
+                                               update_gradients |
+                                                 update_JxW_values |
+                                                 update_normal_vectors);
 
     std::vector<types::global_dof_index> dof_indices;
     for (const auto &cell : dof_handler.active_cell_iterators())
@@ -435,18 +433,18 @@ test(const bool do_ghost_penalty = true)
                   local_dof_indices_p,
                   sparse_matrix_homogeneous);
               }
-              else if (face_has_ghost_penalty(cell, f))
+            else if (face_has_ghost_penalty(cell, f))
               {
                 const unsigned int invalid_subface =
                   numbers::invalid_unsigned_int;
-  
+
                 fe_interface_values.reinit(cell,
                                            f,
                                            invalid_subface,
                                            cell->neighbor(f),
                                            cell->neighbor_of_neighbor(f),
                                            invalid_subface);
-  
+
                 const unsigned int n_interface_dofs =
                   fe_interface_values.n_current_interface_dofs();
                 FullMatrix<double> local_stabilization(n_interface_dofs,
@@ -467,14 +465,15 @@ test(const bool do_ghost_penalty = true)
                             fe_interface_values.JxW(q);
                         }
                   }
-  
+
                 const std::vector<types::global_dof_index>
                   local_interface_dof_indices =
                     fe_interface_values.get_interface_dof_indices();
 
-                constraints.distribute_local_to_global(local_stabilization,
-                                                       local_interface_dof_indices,
-                                                       sparse_matrix);
+                constraints.distribute_local_to_global(
+                  local_stabilization,
+                  local_interface_dof_indices,
+                  sparse_matrix);
 
                 constraints_homogeneous.distribute_local_to_global(
                   local_stabilization,
@@ -674,6 +673,12 @@ test(const bool do_ghost_penalty = true)
     dealii::DataOut<dim> data_out;
     data_out.add_data_vector(dof_handler, solution, "solution");
     data_out.add_data_vector(level_set_dof_handler, level_set, "level_set");
+
+    VectorType analytical_solution(dof_handler.n_dofs());
+    VectorTools::interpolate(dof_handler, exact_solution, analytical_solution);
+    data_out.add_data_vector(dof_handler,
+                             analytical_solution,
+                             "analytical_solution");
 
     data_out.set_cell_selection(
       [&](const typename Triangulation<dim>::cell_iterator &cell) {
