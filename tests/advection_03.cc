@@ -81,6 +81,7 @@ test()
   const double       delta_t           = 1.0 / n_subdivisions_1D * 0.2;
   const double       start_t           = 0.0;
   const double       end_t             = 0.1;
+  const double       alpha             = 0.0;
   const TimeStepping::runge_kutta_method runge_kutta_method =
     TimeStepping::runge_kutta_method::RK_CLASSIC_FOURTH_ORDER;
 
@@ -155,13 +156,17 @@ test()
         std::vector<types::global_dof_index> dof_indices(n_dofs_per_cell);
         cell->get_dof_indices(dof_indices);
 
+        std::vector<Number> quadrature_values(n_dofs_per_cell);
+        fe_values.get_function_values(vec_0, dof_indices, quadrature_values);
+
         std::vector<Tensor<1, dim, Number>> quadrature_gradients(
           n_dofs_per_cell);
         fe_values.get_function_gradients(vec_0,
                                          dof_indices,
                                          quadrature_gradients);
 
-        std::vector<Number> fluxes(n_dofs_per_cell, 0);
+        std::vector<Number>                 fluxes_value(n_dofs_per_cell, 0);
+        std::vector<Tensor<1, dim, Number>> fluxes_gradient(n_dofs_per_cell);
 
         for (const auto q : fe_values.quadrature_point_indices())
           {
@@ -169,17 +174,22 @@ test()
 
             for (unsigned int d = 0; d < dim; ++d)
               {
-                fluxes[q] +=
+                fluxes_value[q] +=
                   quadrature_gradients[q][d] * advection.value(point, d);
+                fluxes_gradient[q][d] =
+                  quadrature_values[q] * advection.value(point, d);
               }
           }
 
         Vector<Number> cell_vector(n_dofs_per_cell);
         for (const unsigned int q_index : fe_values.quadrature_point_indices())
           for (const unsigned int i : fe_values.dof_indices())
-            cell_vector(i) -= fluxes[q_index] *
-                              fe_values.shape_value(i, q_index) *
-                              fe_values.JxW(q_index);
+            cell_vector(i) += alpha * (-fluxes_value[q_index] *
+                                       fe_values.shape_value(i, q_index) *
+                                       fe_values.JxW(q_index)) +
+                              (1 - alpha) * (fluxes_gradient[q_index] *
+                                             fe_values.shape_grad(i, q_index) *
+                                             fe_values.JxW(q_index));
 
         for (const auto f : cell->face_indices())
           if (cell->face(f)->at_boundary())
@@ -218,7 +228,7 @@ test()
                 for (const unsigned int i : fe_face_values.dof_indices())
                   cell_vector(i) +=
                     fluxes[q_index] *
-                    (quadrature_values[q_index] -
+                    (alpha * quadrature_values[q_index] -
                      ((fluxes[q_index] >= 0.0) ? quadrature_values[q_index] :
                                                  u_plus[q_index])) *
                     fe_face_values.shape_value(i, q_index) *
