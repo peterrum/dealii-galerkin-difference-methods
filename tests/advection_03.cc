@@ -78,7 +78,7 @@ test()
   // settings
   const unsigned int fe_degree         = 3;
   const unsigned int n_subdivisions_1D = 40;
-  const double       delta_t           = 1.0 / n_subdivisions_1D * 0.5;
+  const double       delta_t           = 1.0 / n_subdivisions_1D * 0.2;
   const double       start_t           = 0.0;
   const double       end_t             = 0.1;
   const TimeStepping::runge_kutta_method runge_kutta_method =
@@ -89,27 +89,18 @@ test()
     exact_solution.get_transport_direction().begin_raw(), dim);
 
   // create system
-  MappingQ1<dim> mapping;
-  FE_Q<dim>      fe(fe_degree);
-  QGauss<dim>    quadrature(fe_degree + 1);
+  MappingQ1<dim>  mapping;
+  FE_Q<dim>       fe(fe_degree);
+  QGauss<dim>     quadrature(fe_degree + 1);
+  QGauss<dim - 1> face_quadrature(fe_degree + 1);
 
   Triangulation<dim> tria;
   GridGenerator::subdivided_hyper_cube(tria, n_subdivisions_1D, 0, 1, true);
-
-  std::vector<
-    GridTools::PeriodicFacePair<typename Triangulation<dim>::cell_iterator>>
-    face_pairs;
-  for (unsigned int d = 0; d < dim; ++d)
-    GridTools::collect_periodic_faces(tria, 2 * d, 2 * d + 1, d, face_pairs);
-  tria.add_periodicity(face_pairs);
 
   DoFHandler<dim> dof_handler(tria);
   dof_handler.distribute_dofs(fe);
 
   AffineConstraints<Number> constraints;
-  for (unsigned int d = 0; d < dim; ++d)
-    DoFTools::make_periodicity_constraints(
-      dof_handler, 2 * d, 2 * d + 1, d, constraints);
   constraints.close();
 
   // compute mass matrix
@@ -144,6 +135,14 @@ test()
                             quadrature,
                             update_values | update_gradients |
                               update_quadrature_points | update_JxW_values);
+
+    FEFaceValues<dim> fe_face_values(mapping,
+                                     fe,
+                                     face_quadrature,
+                                     update_values | update_gradients |
+                                       update_quadrature_points |
+                                       update_JxW_values |
+                                       update_normal_vectors);
 
     advection.set_time(time);
 
@@ -181,6 +180,50 @@ test()
             cell_vector(i) -= fluxes[q_index] *
                               fe_values.shape_value(i, q_index) *
                               fe_values.JxW(q_index);
+
+        for (const auto f : cell->face_indices())
+          if (cell->face(f)->at_boundary())
+            {
+              fe_face_values.reinit(cell, f);
+
+              std::vector<Number> quadrature_values(
+                fe_face_values.n_quadrature_points);
+              fe_face_values.get_function_values(vec_0,
+                                                 dof_indices,
+                                                 quadrature_values);
+
+              std::vector<Number> fluxes(n_dofs_per_cell, 0);
+
+              for (const auto q : fe_face_values.quadrature_point_indices())
+                {
+                  const auto normal = fe_face_values.normal_vector(q);
+                  const auto point  = fe_face_values.quadrature_point(q);
+
+                  for (unsigned int d = 0; d < dim; ++d)
+                    {
+                      fluxes[q] += normal[d] * advection.value(point, d);
+                    }
+                }
+
+              std::vector<Number> u_plus(n_dofs_per_cell, 0);
+
+              for (const auto q : fe_face_values.quadrature_point_indices())
+                {
+                  const auto point = fe_face_values.quadrature_point(q);
+                  u_plus[q]        = exact_solution.value(point);
+                }
+
+              for (const unsigned int q_index :
+                   fe_face_values.quadrature_point_indices())
+                for (const unsigned int i : fe_face_values.dof_indices())
+                  cell_vector(i) +=
+                    fluxes[q_index] *
+                    (quadrature_values[q_index] -
+                     ((fluxes[q_index] >= 0.0) ? quadrature_values[q_index] :
+                                                 u_plus[q_index])) *
+                    fe_face_values.shape_value(i, q_index) *
+                    fe_face_values.JxW(q_index);
+            }
 
         constraints.distribute_local_to_global(cell_vector, dof_indices, vec_1);
       }
