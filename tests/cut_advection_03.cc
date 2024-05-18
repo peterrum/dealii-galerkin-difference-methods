@@ -99,7 +99,7 @@ test()
                          (2 * fe_degree_time_stepper + 1) / 2.0;
   const double                           start_t = 0.0;
   const double                           end_t   = 0.1;
-  const double                           alpha   = 0.0;
+  const double                           alpha   = 1.0;
   const TimeStepping::runge_kutta_method runge_kutta_method =
     TimeStepping::runge_kutta_method::RK_CLASSIC_FOURTH_ORDER;
 
@@ -237,6 +237,9 @@ test()
     NonMatching::RegionUpdateFlags region_update_flags;
     region_update_flags.inside = update_values | update_gradients |
                                  update_JxW_values | update_quadrature_points;
+    region_update_flags.surface = update_values | update_gradients |
+                                  update_JxW_values | update_quadrature_points |
+                                  update_normal_vectors;
 
     NonMatching::FEValues<dim> non_matching_fe_values(fe,
                                                       quadrature_1D,
@@ -268,6 +271,9 @@ test()
 
           const auto &fe_values_ptr =
             non_matching_fe_values.get_inside_fe_values();
+
+          const auto &surface_fe_values_ptr =
+            non_matching_fe_values.get_surface_fe_values();
 
           const unsigned int n_dofs_per_cell = cell->get_fe().n_dofs_per_cell();
 
@@ -320,6 +326,49 @@ test()
                     (1 - alpha) * (fluxes_gradient[q_index] *
                                    fe_values.shape_grad(i, q_index) *
                                    fe_values.JxW(q_index));
+            }
+
+          if (surface_fe_values_ptr)
+            {
+              const auto &fe_face_values = *surface_fe_values_ptr;
+
+              std::vector<Number> quadrature_values(
+                fe_face_values.n_quadrature_points);
+              fe_face_values.get_function_values(vec_0,
+                                                 dof_indices,
+                                                 quadrature_values);
+
+              std::vector<Number> fluxes(fe_face_values.n_quadrature_points, 0);
+
+              for (const auto q : fe_face_values.quadrature_point_indices())
+                {
+                  const auto normal = fe_face_values.normal_vector(q);
+                  const auto point  = fe_face_values.quadrature_point(q);
+
+                  for (unsigned int d = 0; d < dim; ++d)
+                    {
+                      fluxes[q] += normal[d] * advection.value(point, d);
+                    }
+                }
+
+              std::vector<Number> u_plus(fe_face_values.n_quadrature_points, 0);
+
+              for (const auto q : fe_face_values.quadrature_point_indices())
+                {
+                  const auto point = fe_face_values.quadrature_point(q);
+                  u_plus[q]        = exact_solution.value(point);
+                }
+
+              for (const unsigned int q_index :
+                   fe_face_values.quadrature_point_indices())
+                for (const unsigned int i : fe_face_values.dof_indices())
+                  cell_vector(i) +=
+                    fluxes[q_index] *
+                    (alpha * quadrature_values[q_index] -
+                     ((fluxes[q_index] >= 0.0) ? quadrature_values[q_index] :
+                                                 u_plus[q_index])) *
+                    fe_face_values.shape_value(i, q_index) *
+                    fe_face_values.JxW(q_index);
             }
 
           for (const auto f : cell->face_indices())
