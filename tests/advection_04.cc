@@ -76,9 +76,10 @@ test(const bool use_mass_lumping)
   const unsigned int fe_degree         = 3;
   const unsigned int n_subdivisions_1D = 40;
   const unsigned int fe_degree_output  = 2;
-  const double       delta_t           = 1.0 / n_subdivisions_1D * 0.5;
+  const double       delta_t           = 1.0 / n_subdivisions_1D * 0.2;
   const double       start_t           = 0.0;
   const double       end_t             = 0.1;
+  const double       alpha             = 1.0;
   const TimeStepping::runge_kutta_method runge_kutta_method =
     TimeStepping::runge_kutta_method::RK_CLASSIC_FOURTH_ORDER;
 
@@ -103,10 +104,11 @@ test(const bool use_mass_lumping)
   hp::QCollection<dim> quadrature;
   quadrature.push_back(QGauss<dim>(fe_degree + 1));
 
+  hp::QCollection<dim - 1> face_quadrature;
+  face_quadrature.push_back(QGauss<dim - 1>(fe_degree + 1));
+
   // Create constraints
   AffineConstraints<Number> constraints;
-  for (unsigned int d = 0; d < dim; ++d)
-    system.make_periodicity_constraints(d, constraints);
   constraints.close();
 
   // Categorize cells
@@ -159,6 +161,15 @@ test(const bool use_mass_lumping)
                                              update_JxW_values |
                                              update_quadrature_points);
 
+    hp::FEFaceValues<dim> fe_face_values_collection(mapping,
+                                                    fe,
+                                                    face_quadrature,
+                                                    update_values |
+                                                      update_gradients |
+                                                      update_quadrature_points |
+                                                      update_JxW_values |
+                                                      update_normal_vectors);
+
     advection.set_time(time);
 
     for (const auto &cell : system.locally_active_cell_iterators())
@@ -176,13 +187,17 @@ test(const bool use_mass_lumping)
         std::vector<types::global_dof_index> dof_indices(n_dofs_per_cell);
         cell->get_dof_indices(dof_indices);
 
+        std::vector<Number> quadrature_values(n_dofs_per_cell);
+        fe_values.get_function_values(vec_0, dof_indices, quadrature_values);
+
         std::vector<Tensor<1, dim, Number>> quadrature_gradients(
           n_dofs_per_cell);
         fe_values.get_function_gradients(vec_0,
                                          dof_indices,
                                          quadrature_gradients);
 
-        std::vector<Number> fluxes(n_dofs_per_cell);
+        std::vector<Number>                 fluxes_value(n_dofs_per_cell);
+        std::vector<Tensor<1, dim, Number>> fluxes_gradient(n_dofs_per_cell);
 
         for (const auto q : fe_values.quadrature_point_indices())
           {
@@ -190,17 +205,73 @@ test(const bool use_mass_lumping)
 
             for (unsigned int d = 0; d < dim; ++d)
               {
-                fluxes[q] +=
+                fluxes_value[q] +=
                   quadrature_gradients[q][d] * advection.value(point, d);
+                fluxes_gradient[q][d] =
+                  quadrature_values[q] * advection.value(point, d);
               }
           }
 
         Vector<Number> cell_vector(n_dofs_per_cell);
         for (const unsigned int q_index : fe_values.quadrature_point_indices())
           for (const unsigned int i : fe_values.dof_indices())
-            cell_vector(i) -= fluxes[q_index] *
-                              fe_values.shape_value(i, q_index) *
-                              fe_values.JxW(q_index);
+            cell_vector(i) += alpha * (-fluxes_value[q_index] *
+                                       fe_values.shape_value(i, q_index) *
+                                       fe_values.JxW(q_index)) +
+                              (1 - alpha) * (fluxes_gradient[q_index] *
+                                             fe_values.shape_grad(i, q_index) *
+                                             fe_values.JxW(q_index));
+
+        for (const auto f : cell->dealii_iterator()->face_indices())
+          if (cell->dealii_iterator()->face(f)->at_boundary())
+            {
+              fe_face_values_collection.reinit(cell->dealii_iterator(),
+                                               f,
+                                               numbers::invalid_unsigned_int,
+                                               numbers::invalid_unsigned_int,
+                                               cell->active_fe_index());
+
+              const auto &fe_face_values =
+                fe_face_values_collection.get_present_fe_values();
+
+              std::vector<Number> quadrature_values(
+                fe_face_values.n_quadrature_points);
+              fe_face_values.get_function_values(vec_0,
+                                                 dof_indices,
+                                                 quadrature_values);
+
+              std::vector<Number> fluxes(n_dofs_per_cell, 0);
+
+              for (const auto q : fe_face_values.quadrature_point_indices())
+                {
+                  const auto normal = fe_face_values.normal_vector(q);
+                  const auto point  = fe_face_values.quadrature_point(q);
+
+                  for (unsigned int d = 0; d < dim; ++d)
+                    {
+                      fluxes[q] += normal[d] * advection.value(point, d);
+                    }
+                }
+
+              std::vector<Number> u_plus(n_dofs_per_cell, 0);
+
+              for (const auto q : fe_face_values.quadrature_point_indices())
+                {
+                  const auto point = fe_face_values.quadrature_point(q);
+                  u_plus[q]        = exact_solution.value(point);
+                }
+
+              for (const unsigned int q_index :
+                   fe_face_values.quadrature_point_indices())
+                for (const unsigned int i : fe_face_values.dof_indices())
+                  cell_vector(i) +=
+                    fluxes[q_index] *
+                    (alpha * quadrature_values[q_index] -
+                     ((fluxes[q_index] >= 0.0) ? quadrature_values[q_index] :
+                                                 u_plus[q_index])) *
+                    fe_face_values.shape_value(i, q_index) *
+                    fe_face_values.JxW(q_index);
+            }
 
         constraints.distribute_local_to_global(cell_vector, dof_indices, vec_1);
       }
