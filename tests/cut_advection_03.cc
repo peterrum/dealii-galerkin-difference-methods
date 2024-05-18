@@ -85,9 +85,9 @@ test()
   using VectorType = Vector<Number>;
 
   // settings
-  const double       phi                    = numbers::PI / 8.0; // TODO
-  const double       x_shift                = 0.2000;            // 0.2001
-  const unsigned int fe_degree              = 1;
+  const double       phi       = std::atan(0.5); // numbers::PI / 8.0; // TODO
+  const double       x_shift   = 0.2000;         // 0.2001
+  const unsigned int fe_degree = 1;
   const unsigned int fe_degree_time_stepper = 1;
   const unsigned int fe_degree_level_set    = 1;
   const unsigned int n_subdivisions_1D      = 40;
