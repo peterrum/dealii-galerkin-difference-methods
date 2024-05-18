@@ -42,13 +42,16 @@ template <int dim, typename Number = double>
 class ExactSolution : public dealii::Function<dim, Number>
 {
 public:
-  ExactSolution(const double x_shift, const double phi, const double time = 0.)
+  ExactSolution(const double x_shift,
+                const double phi,
+                const double phi_add,
+                const double time = 0.)
     : dealii::Function<dim, Number>(1, time)
     , x_shift(x_shift)
     , phi(phi)
   {
-    advection[0] = 2.0 * std::cos(phi);
-    advection[1] = 2.0 * std::sin(phi);
+    advection[0] = 2.0 * std::cos(phi + phi_add);
+    advection[1] = 2.0 * std::sin(phi + phi_add);
   }
 
   virtual double
@@ -86,7 +89,8 @@ test()
 
   // settings
   const double       phi       = std::atan(0.5); // numbers::PI / 8.0; // TODO
-  const double       x_shift   = 0.2000;         // 0.2001
+  const double       phi_add   = numbers::PI / 16.0;
+  const double       x_shift   = 0.2000; // 0.2001
   const unsigned int fe_degree = 1;
   const unsigned int fe_degree_time_stepper = 1;
   const unsigned int fe_degree_level_set    = 1;
@@ -99,7 +103,7 @@ test()
   const TimeStepping::runge_kutta_method runge_kutta_method =
     TimeStepping::runge_kutta_method::RK_CLASSIC_FOURTH_ORDER;
 
-  ExactSolution<dim>                       exact_solution(x_shift, phi);
+  ExactSolution<dim> exact_solution(x_shift, phi, phi_add);
   Functions::ConstantFunction<dim, Number> advection(
     exact_solution.get_transport_direction().begin_raw(), dim);
 
