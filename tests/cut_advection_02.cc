@@ -47,9 +47,10 @@ template <int dim, typename Number = double>
 class ExactSolution : public dealii::Function<dim, Number>
 {
 public:
-  ExactSolution(const double time = 0.)
+  ExactSolution(const double x_shift, const double phi, const double time = 0.)
     : dealii::Function<dim, Number>(1, time)
-    , phi(numbers::PI / 8.0)
+    , x_shift(x_shift)
+    , phi(phi)
   {
     advection[0] = 2.0 * std::cos(phi);
     advection[1] = 2.0 * std::sin(phi);
@@ -62,9 +63,9 @@ public:
     const dealii::Tensor<1, dim> position = p - t * advection;
 
     const double x_hat =
-      std::cos(phi) * (position[0] - 0.2001) + std::sin(phi) * position[1];
+      std::cos(phi) * (position[0] - x_shift) + std::sin(phi) * position[1];
 
-    return std::sin(std::sqrt(2.0) * numbers::PI * x_hat / (1.0 - 0.2001));
+    return std::sin(std::sqrt(2.0) * numbers::PI * x_hat / (1.0 - x_shift));
   }
 
   const dealii::Tensor<1, dim> &
@@ -75,6 +76,7 @@ public:
 
 private:
   dealii::Tensor<1, dim> advection;
+  const double           x_shift;
   const double           phi;
 };
 
@@ -88,7 +90,8 @@ test()
   using VectorType = Vector<Number>;
 
   // settings
-  const double       phi                    = numbers::PI / 8.0; // TODO
+  const double       phi     = std::atan(0.5); // numbers::PI / 8.0; // TODO
+  const double       x_shift = 0.2000;         // 0.2001
   const unsigned int n_components           = 1;
   const unsigned int fe_degree              = 3;
   const unsigned int fe_degree_time_stepper = fe_degree;
@@ -104,7 +107,7 @@ test()
 
   ConditionalOStream cout_detail(std::cout, false);
 
-  ExactSolution<dim>                       exact_solution;
+  ExactSolution<dim>                       exact_solution(x_shift, phi);
   Functions::ConstantFunction<dim, Number> advection(
     exact_solution.get_transport_direction().begin_raw(), dim);
 
@@ -440,6 +443,13 @@ test()
     // output result -> Paraview
     GDM::DataOut<dim> data_out(system, mapping, fe_degree_output);
     data_out.add_data_vector(solution, "solution");
+
+    VectorType analytical_solution(system.n_dofs());
+    GDM::VectorTools::interpolate(mapping,
+                                  system,
+                                  exact_solution,
+                                  analytical_solution);
+    data_out.add_data_vector(analytical_solution, "analytical_solution");
 
     data_out.set_cell_selection(
       [&](const typename Triangulation<dim>::cell_iterator &cell) {
