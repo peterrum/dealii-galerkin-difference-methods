@@ -93,11 +93,13 @@ test(const bool do_ghost_penalty = true)
   const unsigned int n_subdivisions_1D      = 40;
   const double       delta_t = (1.0 / n_subdivisions_1D) * 0.4 * 1.0 /
                          (2 * fe_degree_time_stepper + 1) / 2.0;
-  const double                           start_t         = 0.0;
-  const double                           end_t           = 0.1;
-  const double                           ghost_parameter = 0.5;
+  const double start_t           = 0.0;
+  const double end_t             = 0.1;
+  const double ghost_parameter   = 0.0;
+  const double nitsche_parameter = 0 * (fe_degree + 1) * fe_degree;
   const TimeStepping::runge_kutta_method runge_kutta_method =
     TimeStepping::runge_kutta_method::RK_CLASSIC_FOURTH_ORDER;
+  const bool use_nitsche_method = true;
 
   ExactSolution<dim>                       exact_solution(x_shift, phi);
   Functions::ConstantFunction<dim, Number> advection(
@@ -170,9 +172,10 @@ test(const bool do_ghost_penalty = true)
   };
 
   AffineConstraints<Number> constraints;
-  for (unsigned int d = 0; d < dim; ++d)
-    VectorTools::interpolate_boundary_values(
-      mapping, dof_handler, d * 2, exact_solution, constraints);
+  if (use_nitsche_method == false)
+    for (unsigned int d = 0; d < dim; ++d)
+      VectorTools::interpolate_boundary_values(
+        mapping, dof_handler, d * 2, exact_solution, constraints);
   constraints.close();
 
   AffineConstraints<Number> constraints_homogeneous;
@@ -266,10 +269,12 @@ test(const bool do_ghost_penalty = true)
                                                       level_set_dof_handler,
                                                       level_set);
 
-    hp::FEFaceValues<dim> hp_fe_face_values_m(
-      fe,
-      hp::QCollection<dim - 1>(QGauss<dim - 1>(fe_degree + 1)),
-      update_gradients | update_JxW_values | update_normal_vectors);
+    hp::FEFaceValues<dim> hp_fe_face_values_m(fe,
+                                              hp::QCollection<dim - 1>(
+                                                QGauss<dim - 1>(fe_degree + 1)),
+                                              update_values | update_gradients |
+                                                update_JxW_values |
+                                                update_normal_vectors);
 
     hp::FEFaceValues<dim> hp_fe_face_values_p(fe,
                                               hp::QCollection<dim - 1>(
@@ -313,6 +318,43 @@ test(const bool do_ghost_penalty = true)
                                            fe_values->shape_value(j, q_index) *
                                            fe_values->JxW(q_index);
                 }
+            }
+
+          if (false && use_nitsche_method)
+            {
+              for (const unsigned int f : cell->face_indices())
+                if (cell->face(f)->at_boundary() &&
+                    ((cell->face(f)->boundary_id() == 0) ||
+                     (cell->face(f)->boundary_id() == 2)))
+                  {
+                    hp_fe_face_values_m.reinit(cell, f);
+
+                    const auto &fe_face_values_m =
+                      hp_fe_face_values_m.get_present_fe_values();
+
+                    for (const unsigned int q :
+                         fe_face_values_m.quadrature_point_indices())
+                      {
+                        const Tensor<1, dim> &normal =
+                          fe_face_values_m.normal_vector(q);
+
+                        for (const auto i : fe_face_values_m.dof_indices())
+                          {
+                            for (const auto j : fe_face_values_m.dof_indices())
+                              {
+                                cell_matrix(i, j) +=
+                                  (-normal * fe_face_values_m.shape_grad(i, q) *
+                                     fe_face_values_m.shape_value(j, q) +
+                                   -normal * fe_face_values_m.shape_grad(j, q) *
+                                     fe_face_values_m.shape_value(i, q) +
+                                   nitsche_parameter / cell_side_length *
+                                     fe_face_values_m.shape_value(i, q) *
+                                     fe_face_values_m.shape_value(j, q)) *
+                                  fe_face_values_m.JxW(q);
+                              }
+                          }
+                      }
+                  }
             }
 
           for (const unsigned int f : cell->face_indices())
@@ -519,9 +561,10 @@ test(const bool do_ghost_penalty = true)
     exact_solution.set_time(time);
 
     constraints.clear();
-    for (unsigned int d = 0; d < dim; ++d)
-      VectorTools::interpolate_boundary_values(
-        mapping, dof_handler, d * 2, exact_solution, constraints);
+    if (use_nitsche_method == false)
+      for (unsigned int d = 0; d < dim; ++d)
+        VectorTools::interpolate_boundary_values(
+          mapping, dof_handler, d * 2, exact_solution, constraints);
     constraints.close();
 
     // apply constraints
@@ -543,6 +586,12 @@ test(const bool do_ghost_penalty = true)
                                                       level_set_dof_handler,
                                                       level_set);
 
+    hp::FEFaceValues<dim> hp_fe_face_values_m(
+      fe,
+      hp::QCollection<dim - 1>(QGauss<dim - 1>(fe_degree + 1)),
+      update_values | update_gradients | update_JxW_values |
+        update_normal_vectors | update_quadrature_points);
+
     advection.set_time(time);
 
     for (const auto &cell : dof_handler.active_cell_iterators())
@@ -550,6 +599,8 @@ test(const bool do_ghost_penalty = true)
           NonMatching::LocationToLevelSet::outside)
         {
           non_matching_fe_values.reinit(cell);
+
+          const double cell_side_length = cell->minimum_vertex_distance();
 
           const auto &fe_values = non_matching_fe_values.get_inside_fe_values();
 
@@ -587,6 +638,38 @@ test(const bool do_ghost_penalty = true)
                   cell_vector(i) -= fluxes[q_index] *
                                     fe_values->shape_value(i, q_index) *
                                     fe_values->JxW(q_index);
+
+              if (use_nitsche_method)
+                {
+                  for (const unsigned int f : cell->face_indices())
+                    if (cell->face(f)->at_boundary() &&
+                        ((cell->face(f)->boundary_id() == 0) ||
+                         (cell->face(f)->boundary_id() == 2)))
+                      {
+                        hp_fe_face_values_m.reinit(cell, f);
+
+                        const auto &fe_face_values_m =
+                          hp_fe_face_values_m.get_present_fe_values();
+
+                        for (const unsigned int q :
+                             fe_face_values_m.quadrature_point_indices())
+                          {
+                            const Tensor<1, dim> &normal =
+                              fe_face_values_m.normal_vector(q);
+                            const auto point = fe_values->quadrature_point(q);
+
+                            for (const auto i : fe_face_values_m.dof_indices())
+                              {
+                                cell_vector(i) +=
+                                  exact_solution.value(point) *
+                                  (nitsche_parameter / cell_side_length *
+                                     fe_face_values_m.shape_value(i, q) -
+                                   normal * fe_face_values_m.shape_grad(i, q)) *
+                                  fe_face_values_m.JxW(q);
+                              }
+                          }
+                      }
+                }
             }
 
           constraints.distribute_local_to_global(cell_vector,
@@ -594,21 +677,24 @@ test(const bool do_ghost_penalty = true)
                                                  vec_1);
         }
 
-    VectorType vec_dbc, vec_dbc_in;
-    vec_dbc.reinit(solution);
-    vec_dbc_in.reinit(solution);
+    if (use_nitsche_method == false)
+      {
+        VectorType vec_dbc, vec_dbc_in;
+        vec_dbc.reinit(solution);
+        vec_dbc_in.reinit(solution);
 
-    constraints.distribute(vec_dbc_in);
-    sparse_matrix_homogeneous.vmult(vec_dbc, vec_dbc_in);
-    constraints.set_zero(vec_dbc);
+        constraints.distribute(vec_dbc_in);
+        sparse_matrix_homogeneous.vmult(vec_dbc, vec_dbc_in);
+        constraints.set_zero(vec_dbc);
 
-    vec_1 -= vec_dbc;
+        vec_1 -= vec_dbc;
+      }
 
     // invert mass matrix
     PreconditionJacobi<SparseMatrix<Number>> preconditioner;
     preconditioner.initialize(sparse_matrix);
 
-    ReductionControl     solver_control(1000, 1.e-10, 1.e-8);
+    ReductionControl     solver_control(100000, 1.e-10, 1.e-8);
     SolverCG<VectorType> solver(solver_control);
     solver.solve(sparse_matrix, vec_2, vec_1, preconditioner);
 
