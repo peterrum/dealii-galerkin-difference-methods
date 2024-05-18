@@ -79,27 +79,24 @@ private:
 
 template <int dim>
 void
-test(const bool do_ghost_penalty = true)
+test()
 {
   using Number     = double;
   using VectorType = Vector<Number>;
 
   // settings
-  const double       phi                    = numbers::PI / 8.0; // TODO
-  const double       x_shift                = 0.2000;            // 0.2001
-  const unsigned int fe_degree              = 1;
-  const unsigned int fe_degree_time_stepper = 3;
+  const double       phi       = std::atan(0.5); // numbers::PI / 8.0; // TODO
+  const double       x_shift   = 0.2000;         // 0.2001
+  const unsigned int fe_degree = 1;
+  const unsigned int fe_degree_time_stepper = 1;
   const unsigned int fe_degree_level_set    = 1;
   const unsigned int n_subdivisions_1D      = 40;
   const double       delta_t = (1.0 / n_subdivisions_1D) * 0.4 * 1.0 /
                          (2 * fe_degree_time_stepper + 1) / 2.0;
-  const double start_t           = 0.0;
-  const double end_t             = 0.1;
-  const double ghost_parameter   = 0.0;
-  const double nitsche_parameter = 0 * (fe_degree + 1) * fe_degree;
+  const double                           start_t = 0.0;
+  const double                           end_t   = 0.1;
   const TimeStepping::runge_kutta_method runge_kutta_method =
     TimeStepping::runge_kutta_method::RK_CLASSIC_FOURTH_ORDER;
-  const bool use_nitsche_method = true;
 
   ExactSolution<dim>                       exact_solution(x_shift, phi);
   Functions::ConstantFunction<dim, Number> advection(
@@ -146,36 +143,10 @@ test(const bool do_ghost_penalty = true)
 
   mesh_classifier.reclassify();
 
-  const auto face_has_ghost_penalty = [&](const auto        &cell,
-                                          const unsigned int face_index) {
-    if (!do_ghost_penalty)
-      return false;
-
-    if (cell->at_boundary(face_index))
-      return false;
-
-    const NonMatching::LocationToLevelSet cell_location =
-      mesh_classifier.location_to_level_set(cell);
-
-    const NonMatching::LocationToLevelSet neighbor_location =
-      mesh_classifier.location_to_level_set(cell->neighbor(face_index));
-
-    if (cell_location == NonMatching::LocationToLevelSet::intersected &&
-        neighbor_location != NonMatching::LocationToLevelSet::outside)
-      return true;
-
-    if (neighbor_location == NonMatching::LocationToLevelSet::intersected &&
-        cell_location != NonMatching::LocationToLevelSet::outside)
-      return true;
-
-    return false;
-  };
-
   AffineConstraints<Number> constraints;
-  if (use_nitsche_method == false)
-    for (unsigned int d = 0; d < dim; ++d)
-      VectorTools::interpolate_boundary_values(
-        mapping, dof_handler, d * 2, exact_solution, constraints);
+  for (unsigned int d = 0; d < dim; ++d)
+    VectorTools::interpolate_boundary_values(
+      mapping, dof_handler, d * 2, exact_solution, constraints);
   constraints.close();
 
   AffineConstraints<Number> constraints_homogeneous;
@@ -183,32 +154,7 @@ test(const bool do_ghost_penalty = true)
 
   // compute mass matrix
   DynamicSparsityPattern dsp(dof_handler.n_dofs());
-
-  if (do_ghost_penalty)
-    {
-      const auto face_has_flux_coupling = [&](const auto        &cell,
-                                              const unsigned int face_index) {
-        return face_has_ghost_penalty(cell, face_index);
-      };
-
-      Table<2, DoFTools::Coupling> cell_coupling(1, 1);
-      Table<2, DoFTools::Coupling> face_coupling(1, 1);
-      cell_coupling[0][0] = DoFTools::always;
-      face_coupling[0][0] = DoFTools::always;
-
-      DoFTools::make_flux_sparsity_pattern(dof_handler,
-                                           dsp,
-                                           constraints,
-                                           true,
-                                           cell_coupling,
-                                           face_coupling,
-                                           numbers::invalid_subdomain_id,
-                                           face_has_flux_coupling);
-    }
-  else
-    {
-      DoFTools::make_sparsity_pattern(dof_handler, dsp, constraints);
-    }
+  DoFTools::make_sparsity_pattern(dof_handler, dsp, constraints);
 
   SparsityPattern sparsity_pattern;
   sparsity_pattern.copy_from(dsp);
@@ -217,34 +163,9 @@ test(const bool do_ghost_penalty = true)
   sparse_matrix.reinit(sparsity_pattern);
 
   DynamicSparsityPattern dsp_homogeneous(dof_handler.n_dofs());
-
-  if (do_ghost_penalty)
-    {
-      const auto face_has_flux_coupling = [&](const auto        &cell,
-                                              const unsigned int face_index) {
-        return face_has_ghost_penalty(cell, face_index);
-      };
-
-      Table<2, DoFTools::Coupling> cell_coupling(1, 1);
-      Table<2, DoFTools::Coupling> face_coupling(1, 1);
-      cell_coupling[0][0] = DoFTools::always;
-      face_coupling[0][0] = DoFTools::always;
-
-      DoFTools::make_flux_sparsity_pattern(dof_handler,
-                                           dsp_homogeneous,
-                                           constraints_homogeneous,
-                                           true,
-                                           cell_coupling,
-                                           face_coupling,
-                                           numbers::invalid_subdomain_id,
-                                           face_has_flux_coupling);
-    }
-  else
-    {
-      DoFTools::make_sparsity_pattern(dof_handler,
-                                      dsp_homogeneous,
-                                      constraints_homogeneous);
-    }
+  DoFTools::make_sparsity_pattern(dof_handler,
+                                  dsp_homogeneous,
+                                  constraints_homogeneous);
 
   SparsityPattern sparsity_pattern_homogeneous;
   sparsity_pattern_homogeneous.copy_from(dsp_homogeneous);
@@ -269,32 +190,12 @@ test(const bool do_ghost_penalty = true)
                                                       level_set_dof_handler,
                                                       level_set);
 
-    hp::FEFaceValues<dim> hp_fe_face_values_m(fe,
-                                              hp::QCollection<dim - 1>(
-                                                QGauss<dim - 1>(fe_degree + 1)),
-                                              update_values | update_gradients |
-                                                update_JxW_values |
-                                                update_normal_vectors);
-
-    hp::FEFaceValues<dim> hp_fe_face_values_p(fe,
-                                              hp::QCollection<dim - 1>(
-                                                QGauss<dim - 1>(fe_degree + 1)),
-                                              update_gradients);
-
-    FEInterfaceValues<dim> fe_interface_values(fe[0],
-                                               QGauss<dim - 1>(fe_degree + 1),
-                                               update_gradients |
-                                                 update_JxW_values |
-                                                 update_normal_vectors);
-
     std::vector<types::global_dof_index> dof_indices;
     for (const auto &cell : dof_handler.active_cell_iterators())
       if (mesh_classifier.location_to_level_set(cell) !=
           NonMatching::LocationToLevelSet::outside)
         {
           non_matching_fe_values.reinit(cell);
-
-          const double cell_side_length = cell->minimum_vertex_distance();
 
           const auto &fe_values = non_matching_fe_values.get_inside_fe_values();
 
@@ -319,209 +220,6 @@ test(const bool do_ghost_penalty = true)
                                            fe_values->JxW(q_index);
                 }
             }
-
-          if (false && use_nitsche_method)
-            {
-              for (const unsigned int f : cell->face_indices())
-                if (cell->face(f)->at_boundary() &&
-                    ((cell->face(f)->boundary_id() == 0) ||
-                     (cell->face(f)->boundary_id() == 2)))
-                  {
-                    hp_fe_face_values_m.reinit(cell, f);
-
-                    const auto &fe_face_values_m =
-                      hp_fe_face_values_m.get_present_fe_values();
-
-                    for (const unsigned int q :
-                         fe_face_values_m.quadrature_point_indices())
-                      {
-                        const Tensor<1, dim> &normal =
-                          fe_face_values_m.normal_vector(q);
-
-                        for (const auto i : fe_face_values_m.dof_indices())
-                          {
-                            for (const auto j : fe_face_values_m.dof_indices())
-                              {
-                                cell_matrix(i, j) +=
-                                  (-normal * fe_face_values_m.shape_grad(i, q) *
-                                     fe_face_values_m.shape_value(j, q) +
-                                   -normal * fe_face_values_m.shape_grad(j, q) *
-                                     fe_face_values_m.shape_value(i, q) +
-                                   nitsche_parameter / cell_side_length *
-                                     fe_face_values_m.shape_value(i, q) *
-                                     fe_face_values_m.shape_value(j, q)) *
-                                  fe_face_values_m.JxW(q);
-                              }
-                          }
-                      }
-                  }
-            }
-
-          for (const unsigned int f : cell->face_indices())
-            if (false && face_has_ghost_penalty(cell, f))
-              {
-                hp_fe_face_values_m.reinit(cell, f);
-                hp_fe_face_values_p.reinit(cell->neighbor(f),
-                                           cell->neighbor_of_neighbor(f));
-
-                const auto &fe_face_values_m =
-                  hp_fe_face_values_m.get_present_fe_values();
-                const auto &fe_face_values_p =
-                  hp_fe_face_values_p.get_present_fe_values();
-
-                FullMatrix<double> local_stabilization_mm(
-                  fe_face_values_m.dofs_per_cell,
-                  fe_face_values_m.dofs_per_cell);
-                FullMatrix<double> local_stabilization_pm(
-                  fe_face_values_p.dofs_per_cell,
-                  fe_face_values_m.dofs_per_cell);
-                FullMatrix<double> local_stabilization_mp(
-                  fe_face_values_m.dofs_per_cell,
-                  fe_face_values_p.dofs_per_cell);
-                FullMatrix<double> local_stabilization_pp(
-                  fe_face_values_p.dofs_per_cell,
-                  fe_face_values_p.dofs_per_cell);
-
-                for (const unsigned int q :
-                     fe_face_values_m.quadrature_point_indices())
-                  {
-                    const Tensor<1, dim> normal =
-                      fe_face_values_m.normal_vector(q);
-
-                    for (const auto i : fe_face_values_m.dof_indices())
-                      for (const auto j : fe_face_values_m.dof_indices())
-                        {
-                          local_stabilization_mm(i, j) +=
-                            .5 * ghost_parameter * cell_side_length *
-                            (normal * fe_face_values_m.shape_grad(i, q)) *
-                            (normal * fe_face_values_m.shape_grad(j, q)) *
-                            fe_face_values_m.JxW(q);
-                        }
-
-                    for (const auto i : fe_face_values_p.dof_indices())
-                      for (const auto j : fe_face_values_m.dof_indices())
-                        {
-                          local_stabilization_pm(i, j) -=
-                            .5 * ghost_parameter * cell_side_length *
-                            (normal * fe_face_values_p.shape_grad(i, q)) *
-                            (normal * fe_face_values_m.shape_grad(j, q)) *
-                            fe_face_values_m.JxW(q);
-                        }
-
-                    for (const auto i : fe_face_values_m.dof_indices())
-                      for (const auto j : fe_face_values_p.dof_indices())
-                        {
-                          local_stabilization_mp(i, j) -=
-                            .5 * ghost_parameter * cell_side_length *
-                            (normal * fe_face_values_m.shape_grad(i, q)) *
-                            (normal * fe_face_values_p.shape_grad(j, q)) *
-                            fe_face_values_m.JxW(q);
-                        }
-
-                    for (const auto i : fe_face_values_m.dof_indices())
-                      for (const auto j : fe_face_values_m.dof_indices())
-                        {
-                          local_stabilization_pp(i, j) +=
-                            .5 * ghost_parameter * cell_side_length *
-                            (normal * fe_face_values_p.shape_grad(i, q)) *
-                            (normal * fe_face_values_p.shape_grad(j, q)) *
-                            fe_face_values_m.JxW(q);
-                        }
-                  }
-
-                std::vector<types::global_dof_index> local_dof_indices_m(
-                  fe_face_values_m.dofs_per_cell);
-                std::vector<types::global_dof_index> local_dof_indices_p(
-                  fe_face_values_p.dofs_per_cell);
-
-                cell->get_dof_indices(local_dof_indices_m);
-                cell->neighbor(f)->get_dof_indices(local_dof_indices_p);
-
-                constraints.distribute_local_to_global(local_stabilization_mm,
-                                                       local_dof_indices_m,
-                                                       local_dof_indices_m,
-                                                       sparse_matrix);
-                constraints.distribute_local_to_global(local_stabilization_pm,
-                                                       local_dof_indices_p,
-                                                       local_dof_indices_m,
-                                                       sparse_matrix);
-                constraints.distribute_local_to_global(local_stabilization_mp,
-                                                       local_dof_indices_m,
-                                                       local_dof_indices_p,
-                                                       sparse_matrix);
-                constraints.distribute_local_to_global(local_stabilization_pp,
-                                                       local_dof_indices_p,
-                                                       local_dof_indices_p,
-                                                       sparse_matrix);
-
-                constraints_homogeneous.distribute_local_to_global(
-                  local_stabilization_mm,
-                  local_dof_indices_m,
-                  local_dof_indices_m,
-                  sparse_matrix_homogeneous);
-                constraints_homogeneous.distribute_local_to_global(
-                  local_stabilization_pm,
-                  local_dof_indices_p,
-                  local_dof_indices_m,
-                  sparse_matrix_homogeneous);
-                constraints_homogeneous.distribute_local_to_global(
-                  local_stabilization_mp,
-                  local_dof_indices_m,
-                  local_dof_indices_p,
-                  sparse_matrix_homogeneous);
-                constraints_homogeneous.distribute_local_to_global(
-                  local_stabilization_pp,
-                  local_dof_indices_p,
-                  local_dof_indices_p,
-                  sparse_matrix_homogeneous);
-              }
-            else if (face_has_ghost_penalty(cell, f))
-              {
-                const unsigned int invalid_subface =
-                  numbers::invalid_unsigned_int;
-
-                fe_interface_values.reinit(cell,
-                                           f,
-                                           invalid_subface,
-                                           cell->neighbor(f),
-                                           cell->neighbor_of_neighbor(f),
-                                           invalid_subface);
-
-                const unsigned int n_interface_dofs =
-                  fe_interface_values.n_current_interface_dofs();
-                FullMatrix<double> local_stabilization(n_interface_dofs,
-                                                       n_interface_dofs);
-                for (unsigned int q = 0;
-                     q < fe_interface_values.n_quadrature_points;
-                     ++q)
-                  {
-                    const Tensor<1, dim> normal = fe_interface_values.normal(q);
-                    for (unsigned int i = 0; i < n_interface_dofs; ++i)
-                      for (unsigned int j = 0; j < n_interface_dofs; ++j)
-                        {
-                          local_stabilization(i, j) +=
-                            .5 * ghost_parameter * cell_side_length * normal *
-                            fe_interface_values.jump_in_shape_gradients(i, q) *
-                            normal *
-                            fe_interface_values.jump_in_shape_gradients(j, q) *
-                            fe_interface_values.JxW(q);
-                        }
-                  }
-
-                const std::vector<types::global_dof_index>
-                  local_interface_dof_indices =
-                    fe_interface_values.get_interface_dof_indices();
-
-                constraints.distribute_local_to_global(
-                  local_stabilization,
-                  local_interface_dof_indices,
-                  sparse_matrix);
-
-                constraints_homogeneous.distribute_local_to_global(
-                  local_stabilization,
-                  local_interface_dof_indices,
-                  sparse_matrix);
-              }
 
           // assemble
           constraints.distribute_local_to_global(cell_matrix,
@@ -561,10 +259,9 @@ test(const bool do_ghost_penalty = true)
     exact_solution.set_time(time);
 
     constraints.clear();
-    if (use_nitsche_method == false)
-      for (unsigned int d = 0; d < dim; ++d)
-        VectorTools::interpolate_boundary_values(
-          mapping, dof_handler, d * 2, exact_solution, constraints);
+    for (unsigned int d = 0; d < dim; ++d)
+      VectorTools::interpolate_boundary_values(
+        mapping, dof_handler, d * 2, exact_solution, constraints);
     constraints.close();
 
     // apply constraints
@@ -586,12 +283,6 @@ test(const bool do_ghost_penalty = true)
                                                       level_set_dof_handler,
                                                       level_set);
 
-    hp::FEFaceValues<dim> hp_fe_face_values_m(
-      fe,
-      hp::QCollection<dim - 1>(QGauss<dim - 1>(fe_degree + 1)),
-      update_values | update_gradients | update_JxW_values |
-        update_normal_vectors | update_quadrature_points);
-
     advection.set_time(time);
 
     for (const auto &cell : dof_handler.active_cell_iterators())
@@ -600,9 +291,8 @@ test(const bool do_ghost_penalty = true)
         {
           non_matching_fe_values.reinit(cell);
 
-          const double cell_side_length = cell->minimum_vertex_distance();
-
-          const auto &fe_values = non_matching_fe_values.get_inside_fe_values();
+          const auto &fe_values_ptr =
+            non_matching_fe_values.get_inside_fe_values();
 
           const unsigned int n_dofs_per_cell = cell->get_fe().n_dofs_per_cell();
 
@@ -611,65 +301,36 @@ test(const bool do_ghost_penalty = true)
 
           Vector<Number> cell_vector(n_dofs_per_cell);
 
-          if (fe_values)
+          if (fe_values_ptr)
             {
+              const auto &fe_values = *fe_values_ptr;
+
               std::vector<Tensor<1, dim, Number>> quadrature_gradients(
-                fe_values->n_quadrature_points);
-              fe_values->get_function_gradients(vec_0,
-                                                dof_indices,
-                                                quadrature_gradients);
+                fe_values.n_quadrature_points);
+              fe_values.get_function_gradients(vec_0,
+                                               dof_indices,
+                                               quadrature_gradients);
 
-              std::vector<Number> fluxes(fe_values->n_quadrature_points, 0);
+              std::vector<Number> fluxes_value(fe_values.n_quadrature_points,
+                                               0);
 
-              for (const auto q : fe_values->quadrature_point_indices())
+              for (const auto q : fe_values.quadrature_point_indices())
                 {
-                  const auto point = fe_values->quadrature_point(q);
+                  const auto point = fe_values.quadrature_point(q);
 
                   for (unsigned int d = 0; d < dim; ++d)
                     {
-                      fluxes[q] +=
+                      fluxes_value[q] +=
                         quadrature_gradients[q][d] * advection.value(point, d);
                     }
                 }
 
               for (const unsigned int q_index :
-                   fe_values->quadrature_point_indices())
-                for (const unsigned int i : fe_values->dof_indices())
-                  cell_vector(i) -= fluxes[q_index] *
-                                    fe_values->shape_value(i, q_index) *
-                                    fe_values->JxW(q_index);
-
-              if (use_nitsche_method)
-                {
-                  for (const unsigned int f : cell->face_indices())
-                    if (cell->face(f)->at_boundary() &&
-                        ((cell->face(f)->boundary_id() == 0) ||
-                         (cell->face(f)->boundary_id() == 2)))
-                      {
-                        hp_fe_face_values_m.reinit(cell, f);
-
-                        const auto &fe_face_values_m =
-                          hp_fe_face_values_m.get_present_fe_values();
-
-                        for (const unsigned int q :
-                             fe_face_values_m.quadrature_point_indices())
-                          {
-                            const Tensor<1, dim> &normal =
-                              fe_face_values_m.normal_vector(q);
-                            const auto point = fe_values->quadrature_point(q);
-
-                            for (const auto i : fe_face_values_m.dof_indices())
-                              {
-                                cell_vector(i) +=
-                                  exact_solution.value(point) *
-                                  (nitsche_parameter / cell_side_length *
-                                     fe_face_values_m.shape_value(i, q) -
-                                   normal * fe_face_values_m.shape_grad(i, q)) *
-                                  fe_face_values_m.JxW(q);
-                              }
-                          }
-                      }
-                }
+                   fe_values.quadrature_point_indices())
+                for (const unsigned int i : fe_values.dof_indices())
+                  cell_vector(i) -= fluxes_value[q_index] *
+                                    fe_values.shape_value(i, q_index) *
+                                    fe_values.JxW(q_index);
             }
 
           constraints.distribute_local_to_global(cell_vector,
@@ -677,18 +338,15 @@ test(const bool do_ghost_penalty = true)
                                                  vec_1);
         }
 
-    if (use_nitsche_method == false)
-      {
-        VectorType vec_dbc, vec_dbc_in;
-        vec_dbc.reinit(solution);
-        vec_dbc_in.reinit(solution);
+    VectorType vec_dbc, vec_dbc_in;
+    vec_dbc.reinit(solution);
+    vec_dbc_in.reinit(solution);
 
-        constraints.distribute(vec_dbc_in);
-        sparse_matrix_homogeneous.vmult(vec_dbc, vec_dbc_in);
-        constraints.set_zero(vec_dbc);
+    constraints.distribute(vec_dbc_in);
+    sparse_matrix_homogeneous.vmult(vec_dbc, vec_dbc_in);
+    constraints.set_zero(vec_dbc);
 
-        vec_1 -= vec_dbc;
-      }
+    vec_1 -= vec_dbc;
 
     // invert mass matrix
     PreconditionJacobi<SparseMatrix<Number>> preconditioner;
