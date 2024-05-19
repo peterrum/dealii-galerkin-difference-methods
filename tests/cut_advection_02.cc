@@ -142,7 +142,7 @@ test()
   NonMatching::MeshClassifier<dim> mesh_classifier(level_set_dof_handler,
                                                    level_set);
 
-  const Point<dim> point = {0.2001, 0.0};
+  const Point<dim> point = {x_shift, 0.0};
   Tensor<1, dim>   normal;
   normal[0] = +std::sin(phi);
   normal[1] = -std::cos(phi);
@@ -310,7 +310,8 @@ test()
                                         numbers::invalid_unsigned_int,
                                         cell->active_fe_index());
 
-          const auto &fe_values = non_matching_fe_values.get_inside_fe_values();
+          const auto &fe_values_ptr =
+            non_matching_fe_values.get_inside_fe_values();
 
           const unsigned int n_dofs_per_cell = fe[0].dofs_per_cell;
 
@@ -319,33 +320,36 @@ test()
 
           Vector<Number> cell_vector(n_dofs_per_cell);
 
-          if (fe_values)
+          if (fe_values_ptr)
             {
+              const auto &fe_values = *fe_values_ptr;
+
               std::vector<Tensor<1, dim, Number>> quadrature_gradients(
-                fe_values->n_quadrature_points);
-              fe_values->get_function_gradients(vec_0,
-                                                dof_indices,
-                                                quadrature_gradients);
+                fe_values.n_quadrature_points);
+              fe_values.get_function_gradients(vec_0,
+                                               dof_indices,
+                                               quadrature_gradients);
 
-              std::vector<Number> fluxes(fe_values->n_quadrature_points, 0);
+              std::vector<Number> fluxes_value(fe_values.n_quadrature_points,
+                                               0);
 
-              for (const auto q : fe_values->quadrature_point_indices())
+              for (const auto q : fe_values.quadrature_point_indices())
                 {
-                  const auto point = fe_values->quadrature_point(q);
+                  const auto point = fe_values.quadrature_point(q);
 
                   for (unsigned int d = 0; d < dim; ++d)
                     {
-                      fluxes[q] +=
+                      fluxes_value[q] +=
                         quadrature_gradients[q][d] * advection.value(point, d);
                     }
                 }
 
               for (const unsigned int q_index :
-                   fe_values->quadrature_point_indices())
-                for (const unsigned int i : fe_values->dof_indices())
-                  cell_vector(i) -= fluxes[q_index] *
-                                    fe_values->shape_value(i, q_index) *
-                                    fe_values->JxW(q_index);
+                   fe_values.quadrature_point_indices())
+                for (const unsigned int i : fe_values.dof_indices())
+                  cell_vector(i) -= fluxes_value[q_index] *
+                                    fe_values.shape_value(i, q_index) *
+                                    fe_values.JxW(q_index);
             }
 
           constraints.distribute_local_to_global(cell_vector,
