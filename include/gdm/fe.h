@@ -50,60 +50,79 @@ namespace GDM
   std::vector<std::vector<Polynomials::Polynomial<double>>>
   generate_polynomials_1D(const unsigned int fe_degree)
   {
-    AssertDimension(fe_degree, 3); // TODO: for higher degree
-
     std::vector<std::vector<Polynomials::Polynomial<double>>> all_polynomial;
 
-    {
-      std::vector<std::vector<double>> coefficients = {
-        {{{-1.0 / 6.0, 1.0, -11.0 / 6.0, 1.0}},
-         {{1.0 / 2.0, -5. / 2.0, 3.0, 0.0}},
-         {{-1.0 / 2.0, +2.0, -3.0 / 2.0, 0.0}},
-         {{1.0 / 6.0, -1. / 2., +1. / 3., 0.0}}}};
+    if (fe_degree == 1)
+      {
+        std::vector<std::vector<double>> coefficients = {
+          {{{-1.0, +1.0}}, {{+1.0, +0.0}}}};
 
-      for (unsigned int i = 0; i < coefficients.size(); ++i)
-        std::reverse(coefficients[i].begin(), coefficients[i].end());
+        for (unsigned int i = 0; i < coefficients.size(); ++i)
+          std::reverse(coefficients[i].begin(), coefficients[i].end());
 
-      std::vector<Polynomials::Polynomial<double>> polynomials;
-      for (unsigned int i = 0; i < coefficients.size(); ++i)
-        polynomials.emplace_back(coefficients[i]);
+        std::vector<Polynomials::Polynomial<double>> polynomials;
+        for (unsigned int i = 0; i < coefficients.size(); ++i)
+          polynomials.emplace_back(coefficients[i]);
 
-      all_polynomial.push_back(polynomials);
-    }
+        all_polynomial.push_back(polynomials);
+      }
+    else if (fe_degree == 3)
+      {
+        {
+          std::vector<std::vector<double>> coefficients = {
+            {{{-1.0 / 6.0, 1.0, -11.0 / 6.0, 1.0}},
+             {{1.0 / 2.0, -5. / 2.0, 3.0, 0.0}},
+             {{-1.0 / 2.0, +2.0, -3.0 / 2.0, 0.0}},
+             {{1.0 / 6.0, -1. / 2., +1. / 3., 0.0}}}};
 
-    {
-      std::vector<std::vector<double>> coefficients = {
-        {{{-1.0 / 6.0, 1.0 / 2.0, -1.0 / 3.0, 0.0}},
-         {{1.0 / 2.0, -1.0, -1.0 / 2.0, 1.0}},
-         {{-1.0 / 2.0, +1.0 / 2.0, 1.0, 0.0}},
-         {{1.0 / 6.0, 0.0, -1. / 6., 0.0}}}};
+          for (unsigned int i = 0; i < coefficients.size(); ++i)
+            std::reverse(coefficients[i].begin(), coefficients[i].end());
 
-      for (unsigned int i = 0; i < coefficients.size(); ++i)
-        std::reverse(coefficients[i].begin(), coefficients[i].end());
+          std::vector<Polynomials::Polynomial<double>> polynomials;
+          for (unsigned int i = 0; i < coefficients.size(); ++i)
+            polynomials.emplace_back(coefficients[i]);
 
-      std::vector<Polynomials::Polynomial<double>> polynomials;
-      for (unsigned int i = 0; i < coefficients.size(); ++i)
-        polynomials.emplace_back(coefficients[i]);
+          all_polynomial.push_back(polynomials);
+        }
 
-      all_polynomial.push_back(polynomials);
-    }
+        {
+          std::vector<std::vector<double>> coefficients = {
+            {{{-1.0 / 6.0, 1.0 / 2.0, -1.0 / 3.0, 0.0}},
+             {{1.0 / 2.0, -1.0, -1.0 / 2.0, 1.0}},
+             {{-1.0 / 2.0, +1.0 / 2.0, 1.0, 0.0}},
+             {{1.0 / 6.0, 0.0, -1. / 6., 0.0}}}};
 
-    {
-      std::vector<std::vector<double>> coefficients = {
-        {{{-1.0 / 6.0, 0.0, 1.0 / 6.0, 0.0}},
-         {{1.0 / 2.0, 1.0 / 2.0, -1.0, 0.0}},
-         {{-1.0 / 2.0, -1.0, 1.0 / 2.0, 1.0}},
-         {{1.0 / 6.0, 1.0 / 2.0, 1. / 3., 0.0}}}};
+          for (unsigned int i = 0; i < coefficients.size(); ++i)
+            std::reverse(coefficients[i].begin(), coefficients[i].end());
 
-      for (unsigned int i = 0; i < coefficients.size(); ++i)
-        std::reverse(coefficients[i].begin(), coefficients[i].end());
+          std::vector<Polynomials::Polynomial<double>> polynomials;
+          for (unsigned int i = 0; i < coefficients.size(); ++i)
+            polynomials.emplace_back(coefficients[i]);
 
-      std::vector<Polynomials::Polynomial<double>> polynomials;
-      for (unsigned int i = 0; i < coefficients.size(); ++i)
-        polynomials.emplace_back(coefficients[i]);
+          all_polynomial.push_back(polynomials);
+        }
 
-      all_polynomial.push_back(polynomials);
-    }
+        {
+          std::vector<std::vector<double>> coefficients = {
+            {{{-1.0 / 6.0, 0.0, 1.0 / 6.0, 0.0}},
+             {{1.0 / 2.0, 1.0 / 2.0, -1.0, 0.0}},
+             {{-1.0 / 2.0, -1.0, 1.0 / 2.0, 1.0}},
+             {{1.0 / 6.0, 1.0 / 2.0, 1. / 3., 0.0}}}};
+
+          for (unsigned int i = 0; i < coefficients.size(); ++i)
+            std::reverse(coefficients[i].begin(), coefficients[i].end());
+
+          std::vector<Polynomials::Polynomial<double>> polynomials;
+          for (unsigned int i = 0; i < coefficients.size(); ++i)
+            polynomials.emplace_back(coefficients[i]);
+
+          all_polynomial.push_back(polynomials);
+        }
+      }
+    else
+      {
+        AssertThrow(false, ExcNotImplemented());
+      }
 
     return all_polynomial;
   }
