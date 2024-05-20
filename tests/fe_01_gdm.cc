@@ -10,9 +10,8 @@ using namespace dealii;
 
 template <int dim>
 void
-test()
+test(const unsigned int fe_degree)
 {
-  const unsigned int fe_degree      = 3;
   const unsigned int n_subdivisions = 10;
 
   const QIterated<dim> quadrature(QGaussLobatto<1>(2), n_subdivisions);
@@ -37,7 +36,9 @@ test()
 int
 main()
 {
-  test<1>();
-  test<2>();
-  test<3>();
+  test<1>(3);
+  test<2>(3);
+  test<3>(3);
+
+  test<1>(5);
 }
