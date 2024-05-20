@@ -119,6 +119,248 @@ namespace GDM
           all_polynomial.push_back(polynomials);
         }
       }
+    else if (fe_degree == 5)
+      {
+        {
+          std::vector<std::vector<double>> coefficients = {{{{-1.0 / 120.0,
+                                                              1.0 / 8.0,
+                                                              -17.0 / 24.0,
+                                                              15.0 / 8.0,
+                                                              -137.0 / 60.0,
+                                                              1.0 / 1.0}},
+                                                            {{1.0 / 24.0,
+                                                              -7.0 / 12.0,
+                                                              71.0 / 24.0,
+                                                              -77.0 / 12.0,
+                                                              5.0 / 1.0,
+                                                              0.0 / 1.0}},
+                                                            {{-1.0 / 12.0,
+                                                              13.0 / 12.0,
+                                                              -59.0 / 12.0,
+                                                              107.0 / 12.0,
+                                                              -5.0 / 1.0,
+                                                              0.0 / 1.0}},
+                                                            {{1.0 / 12.0,
+                                                              -1.0 / 1.0,
+                                                              49.0 / 12.0,
+                                                              -13.0 / 2.0,
+                                                              10.0 / 3.0,
+                                                              0.0 / 1.0}},
+                                                            {{-1.0 / 24.0,
+                                                              11.0 / 24.0,
+                                                              -41.0 / 24.0,
+                                                              61.0 / 24.0,
+                                                              -5.0 / 4.0,
+                                                              0.0 / 1.0}},
+                                                            {{1.0 / 120.0,
+                                                              -1.0 / 12.0,
+                                                              7.0 / 24.0,
+                                                              -5.0 / 12.0,
+                                                              1.0 / 5.0,
+                                                              0.0 / 1.0}}}};
+
+          for (unsigned int i = 0; i < coefficients.size(); ++i)
+            std::reverse(coefficients[i].begin(), coefficients[i].end());
+
+          std::vector<Polynomials::Polynomial<double>> polynomials;
+          for (unsigned int i = 0; i < coefficients.size(); ++i)
+            polynomials.emplace_back(coefficients[i]);
+
+          all_polynomial.push_back(polynomials);
+        }
+
+        {
+          std::vector<std::vector<double>> coefficients = {{{{-1.0 / 120.0,
+                                                              1.0 / 12.0,
+                                                              -7.0 / 24.0,
+                                                              5.0 / 12.0,
+                                                              -1.0 / 5.0,
+                                                              0.0 / 1.0}},
+                                                            {{1.0 / 24.0,
+                                                              -3.0 / 8.0,
+                                                              25.0 / 24.0,
+                                                              -5.0 / 8.0,
+                                                              -13.0 / 12.0,
+                                                              1.0 / 1.0}},
+                                                            {{-1.0 / 12.0,
+                                                              2.0 / 3.0,
+                                                              -17.0 / 12.0,
+                                                              -1.0 / 6.0,
+                                                              2.0 / 1.0,
+                                                              0.0 / 1.0}},
+                                                            {{1.0 / 12.0,
+                                                              -7.0 / 12.0,
+                                                              11.0 / 12.0,
+                                                              7.0 / 12.0,
+                                                              -1.0 / 1.0,
+                                                              0.0 / 1.0}},
+                                                            {{-1.0 / 24.0,
+                                                              1.0 / 4.0,
+                                                              -7.0 / 24.0,
+                                                              -1.0 / 4.0,
+                                                              1.0 / 3.0,
+                                                              0.0 / 1.0}},
+                                                            {{1.0 / 120.0,
+                                                              -1.0 / 24.0,
+                                                              1.0 / 24.0,
+                                                              1.0 / 24.0,
+                                                              -1.0 / 20.0,
+                                                              0.0 / 1.0}}}};
+
+          for (unsigned int i = 0; i < coefficients.size(); ++i)
+            std::reverse(coefficients[i].begin(), coefficients[i].end());
+
+          std::vector<Polynomials::Polynomial<double>> polynomials;
+          for (unsigned int i = 0; i < coefficients.size(); ++i)
+            polynomials.emplace_back(coefficients[i]);
+
+          all_polynomial.push_back(polynomials);
+        }
+
+        {
+          std::vector<std::vector<double>> coefficients = {{{{-1.0 / 120.0,
+                                                              1.0 / 24.0,
+                                                              -1.0 / 24.0,
+                                                              -1.0 / 24.0,
+                                                              1.0 / 20.0,
+                                                              0.0 / 1.0}},
+                                                            {{1.0 / 24.0,
+                                                              -1.0 / 6.0,
+                                                              -1.0 / 24.0,
+                                                              2.0 / 3.0,
+                                                              -1.0 / 2.0,
+                                                              0.0 / 1.0}},
+                                                            {{-1.0 / 12.0,
+                                                              1.0 / 4.0,
+                                                              5.0 / 12.0,
+                                                              -5.0 / 4.0,
+                                                              -1.0 / 3.0,
+                                                              1.0 / 1.0}},
+                                                            {{1.0 / 12.0,
+                                                              -1.0 / 6.0,
+                                                              -7.0 / 12.0,
+                                                              2.0 / 3.0,
+                                                              1.0 / 1.0,
+                                                              0.0 / 1.0}},
+                                                            {{-1.0 / 24.0,
+                                                              1.0 / 24.0,
+                                                              7.0 / 24.0,
+                                                              -1.0 / 24.0,
+                                                              -1.0 / 4.0,
+                                                              0.0 / 1.0}},
+                                                            {{1.0 / 120.0,
+                                                              0.0 / 1.0,
+                                                              -1.0 / 24.0,
+                                                              0.0 / 1.0,
+                                                              1.0 / 30.0,
+                                                              0.0 / 1.0}}}};
+
+          for (unsigned int i = 0; i < coefficients.size(); ++i)
+            std::reverse(coefficients[i].begin(), coefficients[i].end());
+
+          std::vector<Polynomials::Polynomial<double>> polynomials;
+          for (unsigned int i = 0; i < coefficients.size(); ++i)
+            polynomials.emplace_back(coefficients[i]);
+
+          all_polynomial.push_back(polynomials);
+        }
+
+        {
+          std::vector<std::vector<double>> coefficients = {{{{-1.0 / 120.0,
+                                                              0.0 / 1.0,
+                                                              1.0 / 24.0,
+                                                              0.0 / 1.0,
+                                                              -1.0 / 30.0,
+                                                              0.0 / 1.0}},
+                                                            {{1.0 / 24.0,
+                                                              1.0 / 24.0,
+                                                              -7.0 / 24.0,
+                                                              -1.0 / 24.0,
+                                                              1.0 / 4.0,
+                                                              0.0 / 1.0}},
+                                                            {{-1.0 / 12.0,
+                                                              -1.0 / 6.0,
+                                                              7.0 / 12.0,
+                                                              2.0 / 3.0,
+                                                              -1.0 / 1.0,
+                                                              0.0 / 1.0}},
+                                                            {{1.0 / 12.0,
+                                                              1.0 / 4.0,
+                                                              -5.0 / 12.0,
+                                                              -5.0 / 4.0,
+                                                              1.0 / 3.0,
+                                                              1.0 / 1.0}},
+                                                            {{-1.0 / 24.0,
+                                                              -1.0 / 6.0,
+                                                              1.0 / 24.0,
+                                                              2.0 / 3.0,
+                                                              1.0 / 2.0,
+                                                              0.0 / 1.0}},
+                                                            {{1.0 / 120.0,
+                                                              1.0 / 24.0,
+                                                              1.0 / 24.0,
+                                                              -1.0 / 24.0,
+                                                              -1.0 / 20.0,
+                                                              0.0 / 1.0}}}};
+
+          for (unsigned int i = 0; i < coefficients.size(); ++i)
+            std::reverse(coefficients[i].begin(), coefficients[i].end());
+
+          std::vector<Polynomials::Polynomial<double>> polynomials;
+          for (unsigned int i = 0; i < coefficients.size(); ++i)
+            polynomials.emplace_back(coefficients[i]);
+
+          all_polynomial.push_back(polynomials);
+        }
+
+        {
+          std::vector<std::vector<double>> coefficients = {{{{-1.0 / 120.0,
+                                                              -1.0 / 24.0,
+                                                              -1.0 / 24.0,
+                                                              1.0 / 24.0,
+                                                              1.0 / 20.0,
+                                                              0.0 / 1.0}},
+                                                            {{1.0 / 24.0,
+                                                              1.0 / 4.0,
+                                                              7.0 / 24.0,
+                                                              -1.0 / 4.0,
+                                                              -1.0 / 3.0,
+                                                              0.0 / 1.0}},
+                                                            {{-1.0 / 12.0,
+                                                              -7.0 / 12.0,
+                                                              -11.0 / 12.0,
+                                                              7.0 / 12.0,
+                                                              1.0 / 1.0,
+                                                              0.0 / 1.0}},
+                                                            {{1.0 / 12.0,
+                                                              2.0 / 3.0,
+                                                              17.0 / 12.0,
+                                                              -1.0 / 6.0,
+                                                              -2.0 / 1.0,
+                                                              0.0 / 1.0}},
+                                                            {{-1.0 / 24.0,
+                                                              -3.0 / 8.0,
+                                                              -25.0 / 24.0,
+                                                              -5.0 / 8.0,
+                                                              13.0 / 12.0,
+                                                              1.0 / 1.0}},
+                                                            {{1.0 / 120.0,
+                                                              1.0 / 12.0,
+                                                              7.0 / 24.0,
+                                                              5.0 / 12.0,
+                                                              1.0 / 5.0,
+                                                              0.0 / 1.0}}}};
+
+          for (unsigned int i = 0; i < coefficients.size(); ++i)
+            std::reverse(coefficients[i].begin(), coefficients[i].end());
+
+          std::vector<Polynomials::Polynomial<double>> polynomials;
+          for (unsigned int i = 0; i < coefficients.size(); ++i)
+            polynomials.emplace_back(coefficients[i]);
+
+          all_polynomial.push_back(polynomials);
+        }
+      }
     else
       {
         AssertThrow(false, ExcNotImplemented());
