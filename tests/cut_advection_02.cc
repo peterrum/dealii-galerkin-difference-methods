@@ -4,6 +4,7 @@
 // DoD stabilization for higher-order advection in two dimensions
 // by Florian Streitbürger, Gunnar Birke, Christian Engwer, Sandra May
 
+#include <deal.II/base/conditional_ostream.h>
 #include <deal.II/base/discrete_time.h>
 #include <deal.II/base/function.h>
 #include <deal.II/base/function_signed_distance.h>
@@ -46,9 +47,10 @@ template <int dim, typename Number = double>
 class ExactSolution : public dealii::Function<dim, Number>
 {
 public:
-  ExactSolution(const double time = 0.)
+  ExactSolution(const double x_shift, const double phi, const double time = 0.)
     : dealii::Function<dim, Number>(1, time)
-    , phi(numbers::PI / 8.0)
+    , x_shift(x_shift)
+    , phi(phi)
   {
     advection[0] = 2.0 * std::cos(phi);
     advection[1] = 2.0 * std::sin(phi);
@@ -61,9 +63,9 @@ public:
     const dealii::Tensor<1, dim> position = p - t * advection;
 
     const double x_hat =
-      std::cos(phi) * (position[0] - 0.2001) + std::sin(phi) * position[1];
+      std::cos(phi) * (position[0] - x_shift) + std::sin(phi) * position[1];
 
-    return std::sin(std::sqrt(2.0) * numbers::PI * x_hat / (1.0 - 0.2001));
+    return std::sin(std::sqrt(2.0) * numbers::PI * x_hat / (1.0 - x_shift));
   }
 
   const dealii::Tensor<1, dim> &
@@ -74,6 +76,7 @@ public:
 
 private:
   dealii::Tensor<1, dim> advection;
+  const double           x_shift;
   const double           phi;
 };
 
@@ -87,7 +90,8 @@ test()
   using VectorType = Vector<Number>;
 
   // settings
-  const double       phi                    = numbers::PI / 8.0; // TODO
+  const double       phi     = std::atan(0.5); // numbers::PI / 8.0; // TODO
+  const double       x_shift = 0.2000;         // 0.2001
   const unsigned int n_components           = 1;
   const unsigned int fe_degree              = 3;
   const unsigned int fe_degree_time_stepper = fe_degree;
@@ -101,7 +105,9 @@ test()
   const TimeStepping::runge_kutta_method runge_kutta_method =
     TimeStepping::runge_kutta_method::RK_CLASSIC_FOURTH_ORDER;
 
-  ExactSolution<dim>                       exact_solution;
+  ConditionalOStream cout_detail(std::cout, false);
+
+  ExactSolution<dim>                       exact_solution(x_shift, phi);
   Functions::ConstantFunction<dim, Number> advection(
     exact_solution.get_transport_direction().begin_raw(), dim);
 
@@ -121,6 +127,8 @@ test()
   // Categorize cells
   system.categorize();
 
+  cout_detail << " - " << system.n_dofs() << " DoFs" << std::endl;
+
   const auto &tria = system.get_triangulation();
 
   // level set and classify cells
@@ -134,7 +142,7 @@ test()
   NonMatching::MeshClassifier<dim> mesh_classifier(level_set_dof_handler,
                                                    level_set);
 
-  const Point<dim> point = {0.2001, 0.0};
+  const Point<dim> point = {x_shift, 0.0};
   Tensor<1, dim>   normal;
   normal[0] = +std::sin(phi);
   normal[1] = -std::cos(phi);
@@ -302,7 +310,8 @@ test()
                                         numbers::invalid_unsigned_int,
                                         cell->active_fe_index());
 
-          const auto &fe_values = non_matching_fe_values.get_inside_fe_values();
+          const auto &fe_values_ptr =
+            non_matching_fe_values.get_inside_fe_values();
 
           const unsigned int n_dofs_per_cell = fe[0].dofs_per_cell;
 
@@ -311,33 +320,36 @@ test()
 
           Vector<Number> cell_vector(n_dofs_per_cell);
 
-          if (fe_values)
+          if (fe_values_ptr)
             {
+              const auto &fe_values = *fe_values_ptr;
+
               std::vector<Tensor<1, dim, Number>> quadrature_gradients(
-                fe_values->n_quadrature_points);
-              fe_values->get_function_gradients(vec_0,
-                                                dof_indices,
-                                                quadrature_gradients);
+                fe_values.n_quadrature_points);
+              fe_values.get_function_gradients(vec_0,
+                                               dof_indices,
+                                               quadrature_gradients);
 
-              std::vector<Number> fluxes(fe_values->n_quadrature_points, 0);
+              std::vector<Number> fluxes_value(fe_values.n_quadrature_points,
+                                               0);
 
-              for (const auto q : fe_values->quadrature_point_indices())
+              for (const auto q : fe_values.quadrature_point_indices())
                 {
-                  const auto point = fe_values->quadrature_point(q);
+                  const auto point = fe_values.quadrature_point(q);
 
                   for (unsigned int d = 0; d < dim; ++d)
                     {
-                      fluxes[q] +=
+                      fluxes_value[q] +=
                         quadrature_gradients[q][d] * advection.value(point, d);
                     }
                 }
 
               for (const unsigned int q_index :
-                   fe_values->quadrature_point_indices())
-                for (const unsigned int i : fe_values->dof_indices())
-                  cell_vector(i) -= fluxes[q_index] *
-                                    fe_values->shape_value(i, q_index) *
-                                    fe_values->JxW(q_index);
+                   fe_values.quadrature_point_indices())
+                for (const unsigned int i : fe_values.dof_indices())
+                  cell_vector(i) -= fluxes_value[q_index] *
+                                    fe_values.shape_value(i, q_index) *
+                                    fe_values.JxW(q_index);
             }
 
           constraints.distribute_local_to_global(cell_vector,
@@ -362,6 +374,8 @@ test()
     ReductionControl     solver_control(100, 1.e-10, 1.e-8);
     SolverCG<VectorType> solver(solver_control);
     solver.solve(sparse_matrix, vec_2, vec_1, preconditioner);
+
+    cout_detail << " [L] solved in " << solver_control.last_step() << std::endl;
 
     return vec_2;
   };
@@ -433,6 +447,13 @@ test()
     // output result -> Paraview
     GDM::DataOut<dim> data_out(system, mapping, fe_degree_output);
     data_out.add_data_vector(solution, "solution");
+
+    VectorType analytical_solution(system.n_dofs());
+    GDM::VectorTools::interpolate(mapping,
+                                  system,
+                                  exact_solution,
+                                  analytical_solution);
+    data_out.add_data_vector(analytical_solution, "analytical_solution");
 
     data_out.set_cell_selection(
       [&](const typename Triangulation<dim>::cell_iterator &cell) {
