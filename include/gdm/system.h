@@ -363,12 +363,11 @@ namespace GDM
           auto indices = index_to_indices<dim>(cell_index, n_subdivisions);
 
           for (unsigned int d = 0; d < dim; ++d)
-            indices[d] =
-              (indices[d] < (fe_degree / 2) ?
-                 indices[d] :
-                 (indices[d] < (n_subdivisions[d] - fe_degree / 2) ?
-                    (fe_degree / 2) :
-                    (2 + indices[d] + fe_degree / 2 - n_subdivisions[d])));
+            indices[d] = (indices[d] < (fe_degree / 2) ?
+                            indices[d] :
+                            (indices[d] < (n_subdivisions[d] - fe_degree / 2) ?
+                               (fe_degree / 2) :
+                               (fe_degree + indices[d] - n_subdivisions[d])));
 
           active_fe_indices[i] = indices_to_index<dim>(indices, fe_degree);
         }
