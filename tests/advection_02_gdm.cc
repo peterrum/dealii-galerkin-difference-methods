@@ -67,26 +67,31 @@ private:
 
 template <int dim>
 void
-test(const bool use_mass_lumping)
+test(const unsigned int fe_degree,
+     const unsigned int n_subdivisions_1D,
+     const double       cfl,
+     const bool         weak_bc)
 {
   using Number     = double;
   using VectorType = Vector<Number>;
 
   // settings
-  const double       phi                    = numbers::PI / 8.0; // TODO
-  const double       x_shift                = 0.2000;            // 0.2001
+  const double       phi     = std::atan(0.5); // numbers::PI / 8.0; // TODO
+  const double       x_shift = 0.2000;         // 0.2001
   const unsigned int n_components           = 1;
-  const unsigned int fe_degree              = 3;
-  const unsigned int fe_degree_time_stepper = fe_degree;
-  const unsigned int n_subdivisions_1D      = 40;
+  const unsigned int fe_degree_time_stepper = 1;
   const unsigned int fe_degree_output       = 2;
-  const double       delta_t = (1.0 / n_subdivisions_1D) * 0.4 * 1.0 /
-                         (2 * fe_degree_time_stepper + 1) / 2.0;
-  const double                           start_t = 0.0;
-  const double                           end_t   = 0.01;
-  const double                           alpha   = 1.0;
+  const double       dx                     = (1.0 / n_subdivisions_1D);
+  const double       max_vel                = 2.0;
+  const double factor  = false ? (1.0 / (2 * fe_degree_time_stepper + 1)) : 1.0;
+  const double delta_t = dx * cfl * factor / max_vel;
+  const double start_t = 0.0;
+  const double end_t   = 0.10;
+  const double alpha   = 1.0;
   const TimeStepping::runge_kutta_method runge_kutta_method =
     TimeStepping::runge_kutta_method::RK_CLASSIC_FOURTH_ORDER;
+
+  AssertThrow((weak_bc == true) || (alpha == 1.0), ExcNotImplemented());
 
   ExactSolution<dim>                       exact_solution(x_shift, phi);
   Functions::ConstantFunction<dim, Number> advection(
@@ -113,35 +118,34 @@ test(const bool use_mass_lumping)
   face_quadrature.push_back(QGauss<dim - 1>(fe_degree + 1));
 
   // Create constraints
-  AffineConstraints<Number> constraints;
-  constraints.close();
+  AffineConstraints<Number> constraints_dbc;
+  if (weak_bc == false)
+    {
+      for (unsigned int d = 0; d < dim; ++d)
+        system.interpolate_boundary_values(mapping,
+                                           d * 2,
+                                           exact_solution,
+                                           constraints_dbc);
+    }
+  constraints_dbc.close();
+
+  AffineConstraints<Number> constraints_dummy;
+  constraints_dummy.close();
 
   // Categorize cells
   system.categorize();
 
   // compute mass matrix
   DynamicSparsityPattern dsp(system.n_dofs());
-  system.create_sparsity_pattern(constraints, dsp);
+  system.create_sparsity_pattern(constraints_dummy, dsp);
 
   SparsityPattern sparsity_pattern;
   sparsity_pattern.copy_from(dsp);
 
-  SparseMatrix<Number>       sparse_matrix;
-  DiagonalMatrix<VectorType> diagonal_matrix;
-
-  if (use_mass_lumping == false)
-    {
-      sparse_matrix.reinit(sparsity_pattern);
-      GDM::MatrixCreator::create_mass_matrix(
-        mapping, system, quadrature, sparse_matrix, constraints);
-    }
-  else
-    {
-      diagonal_matrix.get_vector().reinit(system.n_dofs());
-      GDM::MatrixCreator::create_lumped_mass_matrix(
-        mapping, system, quadrature, diagonal_matrix.get_vector(), constraints);
-    }
-
+  SparseMatrix<Number> sparse_matrix;
+  sparse_matrix.reinit(sparsity_pattern);
+  GDM::MatrixCreator::create_mass_matrix(
+    mapping, system, quadrature, sparse_matrix, constraints_dummy);
 
   // set up initial condition
   VectorType solution(system.n_dofs());
@@ -157,7 +161,22 @@ test(const bool use_mass_lumping)
     vec_0 = solution;
 
     // apply constraints
-    constraints.distribute(vec_0);
+    if (weak_bc == false)
+      {
+        // update constraints
+        exact_solution.set_time(time);
+
+        constraints_dbc.clear();
+        for (unsigned int d = 0; d < dim; ++d)
+          system.interpolate_boundary_values(mapping,
+                                             d * 2,
+                                             exact_solution,
+                                             constraints_dbc);
+        constraints_dbc.close();
+
+        // apply constraints
+        constraints_dbc.distribute(vec_0);
+      }
 
     hp::FEValues<dim> fe_values_collection(mapping,
                                            fe,
@@ -228,7 +247,7 @@ test(const bool use_mass_lumping)
                                              fe_values.JxW(q_index));
 
         for (const auto f : cell->dealii_iterator()->face_indices())
-          if (cell->dealii_iterator()->face(f)->at_boundary())
+          if (weak_bc && cell->dealii_iterator()->face(f)->at_boundary())
             {
               fe_face_values_collection.reinit(cell->dealii_iterator(),
                                                f,
@@ -278,23 +297,20 @@ test(const bool use_mass_lumping)
                     fe_face_values.JxW(q_index);
             }
 
-        constraints.distribute_local_to_global(cell_vector, dof_indices, vec_1);
+        constraints_dummy.distribute_local_to_global(cell_vector,
+                                                     dof_indices,
+                                                     vec_1);
       }
 
-    if (use_mass_lumping == false)
-      {
-        // invert mass matrix
-        PreconditionJacobi<SparseMatrix<Number>> preconditioner;
-        preconditioner.initialize(sparse_matrix);
+    // invert mass matrix
+    PreconditionJacobi<SparseMatrix<Number>> preconditioner;
+    preconditioner.initialize(sparse_matrix);
 
-        ReductionControl     solver_control(100, 1.e-10, 1.e-8);
-        SolverCG<VectorType> solver(solver_control);
-        solver.solve(sparse_matrix, vec_2, vec_1, preconditioner);
-      }
-    else
-      {
-        diagonal_matrix.vmult(vec_2, vec_1);
-      }
+    ReductionControl     solver_control(1000, 1.e-20, 1.e-12);
+    SolverCG<VectorType> solver(solver_control);
+    solver.solve(sparse_matrix, vec_2, vec_1, preconditioner);
+
+    constraints_dbc.set_zero(vec_2);
 
     return vec_2;
   };
@@ -319,11 +335,18 @@ test(const bool use_mass_lumping)
                                         cell_wise_error,
                                         VectorTools::NormType::L2_norm);
 
-    std::cout << time << " " << error << std::endl;
+    printf("%8.5f %14.8f\n", time, error);
 
     // output result -> Paraview
     GDM::DataOut<dim> data_out(system, mapping, fe_degree_output);
     data_out.add_data_vector(solution, "solution");
+
+    VectorType analytical_solution(system.n_dofs());
+    GDM::VectorTools::interpolate(mapping,
+                                  system,
+                                  exact_solution,
+                                  analytical_solution);
+    data_out.add_data_vector(analytical_solution, "analytical_solution");
     data_out.build_patches();
 
     std::ofstream file("solution_" + std::to_string(counter) + ".vtu");
@@ -347,19 +370,39 @@ test(const bool use_mass_lumping)
                               time.get_current_time(),
                               time.get_next_step_size(),
                               solution);
-      time.advance_time();
 
-      constraints.distribute(solution);
+      constraints_dbc.distribute(solution);
 
       // output result
       fu_postprocessing(time.get_current_time() + time.get_next_step_size());
+
+      time.advance_time();
     }
+
+  std::cout << std::endl;
 }
 
 
 int
 main()
 {
-  test<2>(/*use_mass_lumping=*/false);
-  test<2>(/*use_mass_lumping=*/true);
+  if (true)
+    {
+      const unsigned int n_subdivisions_1D = 40;
+      const double       cfl               = 0.4;
+
+      for (const unsigned int fe_degree : {1, 3, 5})
+        test<2>(fe_degree, n_subdivisions_1D, cfl, false);
+
+      for (const unsigned int fe_degree : {1, 3, 5})
+        test<2>(fe_degree, n_subdivisions_1D, cfl, true);
+    }
+  else
+    {
+      const unsigned int fe_degree         = 5;
+      const unsigned int n_subdivisions_1D = 40;
+      const double       cfl               = 0.4;
+
+      test<2>(fe_degree, n_subdivisions_1D, cfl, false);
+    }
 }
