@@ -160,12 +160,11 @@ test(const unsigned int fe_degree,
 
     vec_0 = solution;
 
+    exact_solution.set_time(time);
+
     // apply constraints
     if (weak_bc == false)
       {
-        // update constraints
-        exact_solution.set_time(time);
-
         constraints_dbc.clear();
         for (unsigned int d = 0; d < dim; ++d)
           system.interpolate_boundary_values(mapping,
