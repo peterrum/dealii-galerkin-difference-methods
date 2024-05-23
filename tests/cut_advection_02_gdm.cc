@@ -87,7 +87,9 @@ private:
 
 template <int dim>
 void
-test()
+test(const unsigned int fe_degree,
+     const unsigned int n_subdivisions_1D,
+     const double       cfl)
 {
   using Number     = double;
   using VectorType = Vector<Number>;
@@ -97,16 +99,16 @@ test()
   const double       phi_add = numbers::PI / 16.0;
   const double       x_shift = 0.2000; // 0.2001
   const unsigned int n_components           = 1;
-  const unsigned int fe_degree              = 3;
   const unsigned int fe_degree_time_stepper = fe_degree;
   const unsigned int fe_degree_level_set    = 1;
-  const unsigned int n_subdivisions_1D      = 40;
   const unsigned int fe_degree_output       = 2;
-  const double       delta_t = (1.0 / n_subdivisions_1D) * 0.4 * 1.0 /
-                         (2 * fe_degree_time_stepper + 1) / 2.0;
-  const double                           start_t = 0.0;
-  const double                           end_t   = 0.1;
-  const double                           alpha   = 0.0;
+  const double       dx                     = (1.0 / n_subdivisions_1D);
+  const double       max_vel                = 2.0;
+  const double factor  = false ? (1.0 / (2 * fe_degree_time_stepper + 1)) : 1.0;
+  const double delta_t = dx * cfl * factor / max_vel;
+  const double start_t = 0.0;
+  const double end_t   = 0.1;
+  const double alpha   = 0.0;
   const TimeStepping::runge_kutta_method runge_kutta_method =
     TimeStepping::runge_kutta_method::RK_CLASSIC_FOURTH_ORDER;
 
@@ -248,6 +250,8 @@ test()
 
     vec_0 = solution;
 
+    exact_solution.set_time(time);
+
     // apply constraints
     constraints.distribute(vec_0);
 
@@ -350,7 +354,7 @@ test()
                                    fe_values.JxW(q_index));
             }
 
-          if (surface_fe_values_ptr)
+          if ((phi_add != 0) && surface_fe_values_ptr)
             {
               const auto &fe_face_values = *surface_fe_values_ptr;
 
@@ -465,7 +469,7 @@ test()
     PreconditionJacobi<SparseMatrix<Number>> preconditioner;
     preconditioner.initialize(sparse_matrix);
 
-    ReductionControl     solver_control(100, 1.e-10, 1.e-8);
+    ReductionControl     solver_control(1000, 1.e-10, 1.e-8);
     SolverCG<VectorType> solver(solver_control);
     solver.solve(sparse_matrix, vec_2, vec_1, preconditioner);
 
@@ -536,7 +540,7 @@ test()
 
     const double error = std::sqrt(error_L2_squared);
 
-    std::cout << time << " " << error << std::endl;
+    printf("%8.5f %14.8f\n", time, error);
 
     // output result -> Paraview
     GDM::DataOut<dim> data_out(system, mapping, fe_degree_output);
@@ -580,18 +584,36 @@ test()
                               time.get_current_time(),
                               time.get_next_step_size(),
                               solution);
-      time.advance_time();
 
       constraints.distribute(solution);
 
       // output result
       fu_postprocessing(time.get_current_time() + time.get_next_step_size());
+
+      time.advance_time();
     }
+
+  std::cout << std::endl;
 }
 
 
 int
 main()
 {
-  test<2>();
+  if (true)
+    {
+      const unsigned int n_subdivisions_1D = 20;
+      const double       cfl               = 0.4;
+
+      for (const unsigned int fe_degree : {1, 3, 5})
+        test<2>(fe_degree, n_subdivisions_1D, cfl);
+    }
+  else
+    {
+      const unsigned int fe_degree         = 5;
+      const unsigned int n_subdivisions_1D = 40;
+      const double       cfl               = 0.4;
+
+      test<2>(fe_degree, n_subdivisions_1D, cfl);
+    }
 }
