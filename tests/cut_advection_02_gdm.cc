@@ -90,16 +90,17 @@ void
 test(const unsigned int fe_degree,
      const unsigned int n_subdivisions_1D,
      const double       cfl,
-     const bool         rotate)
+     const bool         rotate,
+     const double       factor = 1.0)
 {
   using Number     = double;
   using VectorType = Vector<Number>;
 
   // settings
-  const double       phi     = std::atan(0.5); // numbers::PI / 8.0; // TODO
-  const double       phi_add = rotate ? (numbers::PI / 16.0) : 0.0;
-  const double       x_shift = 0.2000; // 0.2001
-  const unsigned int n_components           = 1;
+  const double       phi          = (numbers::PI / 8.0) * factor; // TODO
+  const double       phi_add      = rotate ? (numbers::PI / 16.0) : 0.0;
+  const double       x_shift      = 0.2001;
+  const unsigned int n_components = 1;
   const unsigned int fe_degree_time_stepper = fe_degree;
   const unsigned int fe_degree_level_set    = 1;
   const unsigned int fe_degree_output       = 2;
@@ -548,6 +549,13 @@ test(const unsigned int fe_degree,
     GDM::DataOut<dim> data_out(system, mapping, fe_degree_output);
     data_out.add_data_vector(solution, "solution");
 
+    VectorType level_set(system.n_dofs());
+    GDM::VectorTools::interpolate(mapping,
+                                  system,
+                                  signed_distance_sphere,
+                                  level_set);
+    data_out.add_data_vector(level_set, "level_set");
+
     VectorType analytical_solution(system.n_dofs());
     GDM::VectorTools::interpolate(mapping,
                                   system,
@@ -555,12 +563,13 @@ test(const unsigned int fe_degree,
                                   analytical_solution);
     data_out.add_data_vector(analytical_solution, "analytical_solution");
 
-    data_out.set_cell_selection(
-      [&](const typename Triangulation<dim>::cell_iterator &cell) {
-        return cell->is_active() &&
-               mesh_classifier.location_to_level_set(cell) !=
-                 NonMatching::LocationToLevelSet::outside;
-      });
+    if (false)
+      data_out.set_cell_selection(
+        [&](const typename Triangulation<dim>::cell_iterator &cell) {
+          return cell->is_active() &&
+                 mesh_classifier.location_to_level_set(cell) !=
+                   NonMatching::LocationToLevelSet::outside;
+        });
 
     data_out.build_patches();
 
@@ -602,7 +611,7 @@ test(const unsigned int fe_degree,
 int
 main()
 {
-  if (true)
+  if (false)
     {
       const unsigned int n_subdivisions_1D = 20;
       const double       cfl               = 0.4;
@@ -616,9 +625,10 @@ main()
   else
     {
       const unsigned int fe_degree         = 5;
-      const unsigned int n_subdivisions_1D = 40;
+      const unsigned int n_subdivisions_1D = 20;
       const double       cfl               = 0.4;
 
-      test<2>(fe_degree, n_subdivisions_1D, cfl, true);
+      for (double factor = 0.5; factor <= 2.0; factor += 0.1)
+        test<2>(fe_degree, n_subdivisions_1D, cfl, false, factor);
     }
 }
