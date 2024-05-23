@@ -89,14 +89,15 @@ template <int dim>
 void
 test(const unsigned int fe_degree,
      const unsigned int n_subdivisions_1D,
-     const double       cfl)
+     const double       cfl,
+     const bool         rotate)
 {
   using Number     = double;
   using VectorType = Vector<Number>;
 
   // settings
   const double       phi     = std::atan(0.5); // numbers::PI / 8.0; // TODO
-  const double       phi_add = numbers::PI / 16.0;
+  const double       phi_add = rotate ? (numbers::PI / 16.0) : 0.0;
   const double       x_shift = 0.2000; // 0.2001
   const unsigned int n_components           = 1;
   const unsigned int fe_degree_time_stepper = fe_degree;
@@ -606,7 +607,10 @@ main()
       const double       cfl               = 0.4;
 
       for (const unsigned int fe_degree : {1, 3, 5})
-        test<2>(fe_degree, n_subdivisions_1D, cfl);
+        test<2>(fe_degree, n_subdivisions_1D, cfl, false);
+
+      for (const unsigned int fe_degree : {1, 3, 5})
+        test<2>(fe_degree, n_subdivisions_1D, cfl, true);
     }
   else
     {
@@ -614,6 +618,6 @@ main()
       const unsigned int n_subdivisions_1D = 40;
       const double       cfl               = 0.4;
 
-      test<2>(fe_degree, n_subdivisions_1D, cfl);
+      test<2>(fe_degree, n_subdivisions_1D, cfl, true);
     }
 }
