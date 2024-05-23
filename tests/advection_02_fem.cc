@@ -70,24 +70,29 @@ private:
 
 template <int dim>
 void
-test()
+test(const unsigned int fe_degree,
+     const unsigned int n_subdivisions_1D,
+     const double       cfl,
+     const bool         weak_bc)
 {
   using Number     = double;
   using VectorType = Vector<Number>;
 
   // settings
-  const double       phi                    = numbers::PI / 8.0; // TODO
-  const double       x_shift                = 0.2000;            // 0.2001
-  const unsigned int fe_degree              = 1;
-  const unsigned int fe_degree_time_stepper = 1;
-  const unsigned int n_subdivisions_1D      = 40;
-  const double       delta_t = (1.0 / n_subdivisions_1D) * 0.4 * 1.0 /
-                         (2 * fe_degree_time_stepper + 1) / 2.0;
-  const double                           start_t = 0.0;
-  const double                           end_t   = 0.1;
-  const double                           alpha   = 0.0;
+  const double       phi     = std::atan(0.5); // numbers::PI / 8.0; // TODO
+  const double       x_shift = 0.2000;         // 0.2001
+  const unsigned int fe_degree_time_stepper = fe_degree;
+  const double       dx                     = (1.0 / n_subdivisions_1D);
+  const double       max_vel                = 2.0;
+  const double factor  = true ? (1.0 / (2 * fe_degree_time_stepper + 1)) : 1.0;
+  const double delta_t = dx * cfl * factor / max_vel;
+  const double start_t = 0.0;
+  const double end_t   = 0.1;
+  const double alpha   = 1.0;
   const TimeStepping::runge_kutta_method runge_kutta_method =
     TimeStepping::runge_kutta_method::RK_CLASSIC_FOURTH_ORDER;
+
+  AssertThrow((weak_bc == true) || (alpha == 1.0), ExcNotImplemented());
 
   ExactSolution<dim>                       exact_solution(x_shift, phi);
   Functions::ConstantFunction<dim, Number> advection(
@@ -105,20 +110,34 @@ test()
   DoFHandler<dim> dof_handler(tria);
   dof_handler.distribute_dofs(fe);
 
-  AffineConstraints<Number> constraints;
-  constraints.close();
+  // Create constraints
+  AffineConstraints<Number> constraints_dbc;
+  if (weak_bc == false)
+    {
+      for (unsigned int d = 0; d < dim; ++d)
+        VectorTools::interpolate_boundary_values(
+          mapping, dof_handler, d * 2, exact_solution, constraints_dbc);
+    }
+  constraints_dbc.close();
+
+  AffineConstraints<Number> constraints_dummy;
+  constraints_dummy.close();
 
   // compute mass matrix
   DynamicSparsityPattern dsp(dof_handler.n_dofs());
-  DoFTools::make_sparsity_pattern(dof_handler, dsp, constraints);
+  DoFTools::make_sparsity_pattern(dof_handler, dsp, constraints_dummy);
 
   SparsityPattern sparsity_pattern;
   sparsity_pattern.copy_from(dsp);
 
   SparseMatrix<Number> sparse_matrix;
   sparse_matrix.reinit(sparsity_pattern);
-  MatrixCreator::create_mass_matrix<dim, dim>(
-    mapping, dof_handler, quadrature, sparse_matrix, nullptr, constraints);
+  MatrixCreator::create_mass_matrix<dim, dim>(mapping,
+                                              dof_handler,
+                                              quadrature,
+                                              sparse_matrix,
+                                              nullptr,
+                                              constraints_dummy);
 
   // set up initial condition
   VectorType solution(dof_handler.n_dofs());
@@ -132,8 +151,20 @@ test()
 
     vec_0 = solution;
 
+    exact_solution.set_time(time);
+
     // apply constraints
-    constraints.distribute(vec_0);
+    if (weak_bc == false)
+      {
+        constraints_dbc.clear();
+        for (unsigned int d = 0; d < dim; ++d)
+          VectorTools::interpolate_boundary_values(
+            mapping, dof_handler, d * 2, exact_solution, constraints_dbc);
+        constraints_dbc.close();
+
+        // apply constraints
+        constraints_dbc.distribute(vec_0);
+      }
 
     FEValues<dim> fe_values(mapping,
                             fe,
@@ -239,7 +270,9 @@ test()
                     fe_face_values.JxW(q_index);
             }
 
-        constraints.distribute_local_to_global(cell_vector, dof_indices, vec_1);
+        constraints_dummy.distribute_local_to_global(cell_vector,
+                                                     dof_indices,
+                                                     vec_1);
       }
 
     // invert mass matrix
@@ -272,7 +305,7 @@ test()
                                         cell_wise_error,
                                         VectorTools::NormType::L2_norm);
 
-    std::cout << time << " " << error << std::endl;
+    printf("%8.5f %14.8f\n", time, error);
 
     // output result -> Paraview
     dealii::DataOut<dim> data_out;
@@ -301,18 +334,39 @@ test()
                               time.get_current_time(),
                               time.get_next_step_size(),
                               solution);
-      time.advance_time();
 
-      constraints.distribute(solution);
+      constraints_dbc.distribute(solution);
 
       // output result
       fu_postprocessing(time.get_current_time() + time.get_next_step_size());
+
+      time.advance_time();
     }
+
+  std::cout << std::endl;
 }
 
 
 int
 main()
 {
-  test<2>();
+  if (true)
+    {
+      const unsigned int n_subdivisions_1D = 20;
+      const double       cfl               = 0.4;
+
+      for (const unsigned int fe_degree : {1, 3, 5})
+        test<2>(fe_degree, n_subdivisions_1D, cfl, false);
+
+      for (const unsigned int fe_degree : {1, 3, 5})
+        test<2>(fe_degree, n_subdivisions_1D, cfl, true);
+    }
+  else
+    {
+      const unsigned int fe_degree         = 5;
+      const unsigned int n_subdivisions_1D = 40;
+      const double       cfl               = 0.4;
+
+      test<2>(fe_degree, n_subdivisions_1D, cfl, false);
+    }
 }
