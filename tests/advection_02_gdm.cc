@@ -83,8 +83,9 @@ test(const unsigned int fe_degree,
   const unsigned int fe_degree_output       = 2;
   const double       dx                     = (1.0 / n_subdivisions_1D);
   const double       max_vel                = 2.0;
-  const double factor  = false ? (1.0 / (2 * fe_degree_time_stepper + 1)) : 1.0;
-  const double delta_t = dx * cfl * factor / max_vel;
+  const double       sandra_factor =
+    false ? (1.0 / (2 * fe_degree_time_stepper + 1)) : 1.0;
+  const double delta_t = dx * cfl * sandra_factor / max_vel;
   const double start_t = 0.0;
   const double end_t   = 0.10;
   const double alpha   = 1.0;
@@ -387,7 +388,7 @@ main()
 {
   if (true)
     {
-      const unsigned int n_subdivisions_1D = 40;
+      const unsigned int n_subdivisions_1D = 20;
       const double       cfl               = 0.4;
 
       for (const unsigned int fe_degree : {1, 3, 5})

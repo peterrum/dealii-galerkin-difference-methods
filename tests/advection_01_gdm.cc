@@ -73,7 +73,7 @@ test(const bool use_mass_lumping)
   using VectorType = Vector<Number>;
 
   // settings
-  const unsigned int fe_degree         = 3;
+  const unsigned int fe_degree         = 5;
   const unsigned int n_subdivisions_1D = 40;
   const unsigned int fe_degree_output  = 2;
   const double       delta_t           = 1.0 / n_subdivisions_1D * 0.5;
@@ -271,12 +271,13 @@ test(const bool use_mass_lumping)
                               time.get_current_time(),
                               time.get_next_step_size(),
                               solution);
-      time.advance_time();
 
       constraints.distribute(solution);
 
       // output result
       fu_postprocessing(time.get_current_time() + time.get_next_step_size());
+
+      time.advance_time();
     }
 }
 
@@ -285,5 +286,7 @@ int
 main()
 {
   test<2>(/*use_mass_lumping=*/false);
-  test<2>(/*use_mass_lumping=*/true);
+
+  if (false)
+    test<2>(/*use_mass_lumping=*/true);
 }

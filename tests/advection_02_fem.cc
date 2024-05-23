@@ -84,8 +84,9 @@ test(const unsigned int fe_degree,
   const unsigned int fe_degree_time_stepper = fe_degree;
   const double       dx                     = (1.0 / n_subdivisions_1D);
   const double       max_vel                = 2.0;
-  const double factor  = true ? (1.0 / (2 * fe_degree_time_stepper + 1)) : 1.0;
-  const double delta_t = dx * cfl * factor / max_vel;
+  const double       sandra_factor =
+    true ? (1.0 / (2 * fe_degree_time_stepper + 1)) : 1.0;
+  const double delta_t = dx * cfl * sandra_factor / max_vel;
   const double start_t = 0.0;
   const double end_t   = 0.1;
   const double alpha   = 1.0;
