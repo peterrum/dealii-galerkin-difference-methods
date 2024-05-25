@@ -306,7 +306,7 @@ test(const unsigned int fe_degree,
     PreconditionJacobi<SparseMatrix<Number>> preconditioner;
     preconditioner.initialize(sparse_matrix);
 
-    ReductionControl     solver_control(1000, 1.e-20, 1.e-12);
+    ReductionControl     solver_control(1000, 1.e-20, 1.e-14);
     SolverCG<VectorType> solver(solver_control);
     solver.solve(sparse_matrix, vec_2, vec_1, preconditioner);
 
@@ -389,7 +389,7 @@ main()
   if (true)
     {
       const unsigned int n_subdivisions_1D = 20;
-      const double       cfl               = 0.4;
+      const double       cfl               = 0.2;
 
       for (const unsigned int fe_degree : {1, 3, 5})
         test<2>(fe_degree, n_subdivisions_1D, cfl, false);

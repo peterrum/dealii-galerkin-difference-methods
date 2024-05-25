@@ -235,6 +235,38 @@ test(const unsigned int fe_degree,
         }
   }
 
+  if (false)
+    {
+      for (auto &entry : sparse_matrix)
+        if ((entry.row() == entry.column()))
+          {
+            std::cout << "(" << entry.row() << ": " << entry.value() << ") "
+                      << std::endl;
+          }
+
+      std::cout << std::endl << std::endl;
+
+      return;
+    }
+
+  if (false)
+    {
+      const double tolerance = 1e-10;
+
+      Vector<double> diagonal(system.n_dofs());
+
+      for (auto &entry : sparse_matrix)
+        if ((entry.row() == entry.column()))
+          {
+            diagonal[entry.row()] = std::abs(entry.value());
+          }
+
+      for (auto &entry : sparse_matrix)
+        if ((diagonal[entry.row()] < tolerance) &&
+            (diagonal[entry.column()] < tolerance))
+          entry.value() = 0.0;
+    }
+
   for (auto &entry : sparse_matrix)
     if ((entry.row() == entry.column()) && (entry.value() == 0.0))
       {
@@ -563,7 +595,7 @@ test(const unsigned int fe_degree,
                                   analytical_solution);
     data_out.add_data_vector(analytical_solution, "analytical_solution");
 
-    if (false)
+    if (true)
       data_out.set_cell_selection(
         [&](const typename Triangulation<dim>::cell_iterator &cell) {
           return cell->is_active() &&
@@ -613,8 +645,8 @@ main()
 {
   if (false)
     {
-      const unsigned int n_subdivisions_1D = 20;
-      const double       cfl               = 0.4;
+      const unsigned int n_subdivisions_1D = 10;
+      const double       cfl               = 0.2;
 
       for (const unsigned int fe_degree : {1, 3, 5})
         test<2>(fe_degree, n_subdivisions_1D, cfl, false);
@@ -625,8 +657,8 @@ main()
   else
     {
       const unsigned int fe_degree         = 5;
-      const unsigned int n_subdivisions_1D = 20;
-      const double       cfl               = 0.4;
+      const unsigned int n_subdivisions_1D = 10;
+      const double       cfl               = 0.1;
 
       for (double factor = 0.5; factor <= 2.0; factor += 0.1)
         test<2>(fe_degree, n_subdivisions_1D, cfl, false, factor);
