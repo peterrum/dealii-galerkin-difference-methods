@@ -98,7 +98,7 @@ test(const unsigned int fe_degree,
     TimeStepping::runge_kutta_method::RK_CLASSIC_FOURTH_ORDER;
   const std::string solver_name = "ILU";
 
-  const MPI_Comm comm MPI_COMM_WORLD;
+  const MPI_Comm comm = MPI_COMM_WORLD;
 
   ConditionalOStream pcout(std::cout,
                            Utilities::MPI::this_mpi_process(comm) == 0);
