@@ -26,6 +26,10 @@
 #include <deal.II/lac/precondition.h>
 #include <deal.II/lac/solver_cg.h>
 #include <deal.II/lac/sparse_matrix.h>
+#include <deal.II/lac/trilinos_precondition.h>
+#include <deal.II/lac/trilinos_solver.h>
+#include <deal.II/lac/trilinos_sparse_matrix.h>
+#include <deal.II/lac/trilinos_sparsity_pattern.h>
 
 #include <deal.II/non_matching/fe_immersed_values.h>
 #include <deal.II/non_matching/fe_values.h>
@@ -94,7 +98,7 @@ test(const unsigned int fe_degree,
      const double       factor = 1.0)
 {
   using Number     = double;
-  using VectorType = Vector<Number>;
+  using VectorType = LinearAlgebra::distributed::Vector<Number>;
 
   // settings
   const double       phi          = (numbers::PI / 8.0) * factor; // TODO
@@ -114,15 +118,21 @@ test(const unsigned int fe_degree,
   const double alpha   = 0.0;
   const TimeStepping::runge_kutta_method runge_kutta_method =
     TimeStepping::runge_kutta_method::RK_CLASSIC_FOURTH_ORDER;
+  const std::string solver_name = "ILU";
 
-  ConditionalOStream cout_detail(std::cout, false);
+  const MPI_Comm comm = MPI_COMM_WORLD;
+
+  ConditionalOStream pcout(std::cout,
+                           Utilities::MPI::this_mpi_process(comm) == 0);
+  ConditionalOStream pcout_detail(
+    std::cout, (Utilities::MPI::this_mpi_process(comm) == 0) && false);
 
   ExactSolution<dim> exact_solution(x_shift, phi, phi_add);
   Functions::ConstantFunction<dim, Number> advection(
     exact_solution.get_transport_direction().begin_raw(), dim);
 
   // Create GDM system
-  GDM::System<dim> system(fe_degree, n_components);
+  GDM::System<dim> system(comm, fe_degree, n_components);
 
   // Create mesh
   system.subdivided_hyper_cube(n_subdivisions_1D, 0, 1);
@@ -137,8 +147,6 @@ test(const unsigned int fe_degree,
   // Categorize cells
   system.categorize();
 
-  cout_detail << " - " << system.n_dofs() << " DoFs" << std::endl;
-
   const auto &tria = system.get_triangulation();
 
   // level set and classify cells
@@ -146,8 +154,11 @@ test(const unsigned int fe_degree,
   DoFHandler<dim> level_set_dof_handler(tria);
   level_set_dof_handler.distribute_dofs(fe_level_set);
 
-  Vector<double> level_set;
-  level_set.reinit(level_set_dof_handler.n_dofs());
+  VectorType level_set;
+  level_set.reinit(level_set_dof_handler.locally_owned_dofs(),
+                   DoFTools::extract_locally_relevant_dofs(
+                     level_set_dof_handler),
+                   comm);
 
   NonMatching::MeshClassifier<dim> mesh_classifier(level_set_dof_handler,
                                                    level_set);
@@ -162,19 +173,19 @@ test(const unsigned int fe_degree,
                            signed_distance_sphere,
                            level_set);
 
+  level_set.update_ghost_values();
   mesh_classifier.reclassify();
 
   AffineConstraints<Number> constraints;
   constraints.close();
 
   // compute mass matrix
-  DynamicSparsityPattern dsp(system.n_dofs());
-  system.create_sparsity_pattern(constraints, dsp);
+  TrilinosWrappers::SparsityPattern sparsity_pattern(
+    system.locally_owned_dofs(), MPI_COMM_WORLD);
+  system.create_sparsity_pattern(constraints, sparsity_pattern);
+  sparsity_pattern.compress();
 
-  SparsityPattern sparsity_pattern;
-  sparsity_pattern.copy_from(dsp);
-
-  SparseMatrix<Number> sparse_matrix;
+  TrilinosWrappers::SparseMatrix sparse_matrix;
   sparse_matrix.reinit(sparsity_pattern);
 
   {
@@ -235,16 +246,18 @@ test(const unsigned int fe_degree,
         }
   }
 
+  sparse_matrix.compress(VectorOperation::values::add);
+
   if (false)
     {
       for (auto &entry : sparse_matrix)
         if ((entry.row() == entry.column()))
           {
-            std::cout << "(" << entry.row() << ": " << entry.value() << ") "
-                      << std::endl;
+            pcout << "(" << entry.row() << ": " << entry.value() << ") "
+                  << std::endl;
           }
 
-      std::cout << std::endl << std::endl;
+      pcout << std::endl << std::endl;
 
       return;
     }
@@ -273,8 +286,26 @@ test(const unsigned int fe_degree,
         entry.value() = 1.0;
       }
 
+  TrilinosWrappers::PreconditionAMG preconditioner_amg;
+  TrilinosWrappers::PreconditionILU preconditioner_ilu;
+  TrilinosWrappers::SolverDirect    solver_direct;
+
+  if (solver_name == "AMG")
+    preconditioner_amg.initialize(sparse_matrix);
+  else if (solver_name == "ILU")
+    preconditioner_ilu.initialize(sparse_matrix);
+  else if (solver_name == "direct")
+    solver_direct.initialize(sparse_matrix);
+  else
+    AssertThrow(false, ExcNotImplemented());
+
   // set up initial condition
-  VectorType solution(system.n_dofs());
+  const auto partitioner =
+    std::make_shared<Utilities::MPI::Partitioner>(system.locally_owned_dofs(),
+                                                  system.locally_relevant_dofs(
+                                                    constraints),
+                                                  comm);
+  VectorType solution(partitioner);
   GDM::VectorTools::interpolate(mapping, system, exact_solution, solution);
 
   const auto fu_rhs = [&](const double time, const VectorType &solution) {
@@ -320,6 +351,8 @@ test(const unsigned int fe_degree,
       level_set);
 
     advection.set_time(time);
+
+    vec_0.update_ghost_values();
 
     for (const auto &cell : system.locally_active_cell_iterators())
       if (mesh_classifier.location_to_level_set(cell->dealii_iterator()) !=
@@ -500,15 +533,32 @@ test(const unsigned int fe_degree,
                                                  vec_1);
         }
 
+    vec_1.compress(VectorOperation::add);
+
     // invert mass matrix
-    PreconditionJacobi<SparseMatrix<Number>> preconditioner;
-    preconditioner.initialize(sparse_matrix);
+    if (solver_name == "AMG" || solver_name == "ILU")
+      {
+        ReductionControl     solver_control(1000, 1.e-20, 1.e-14);
+        SolverCG<VectorType> solver(solver_control);
 
-    ReductionControl     solver_control(1000, 1.e-10, 1.e-8);
-    SolverCG<VectorType> solver(solver_control);
-    solver.solve(sparse_matrix, vec_2, vec_1, preconditioner);
+        if (solver_name == "AMG")
+          solver.solve(sparse_matrix, vec_2, vec_1, preconditioner_amg);
+        else if (solver_name == "ILU")
+          solver.solve(sparse_matrix, vec_2, vec_1, preconditioner_ilu);
+        else
+          AssertThrow(false, ExcNotImplemented());
 
-    cout_detail << " [L] solved in " << solver_control.last_step() << std::endl;
+        pcout_detail << " [L] solved in " << solver_control.last_step()
+                     << std::endl;
+      }
+    else if (solver_name == "direct")
+      {
+        solver_direct.solve(sparse_matrix, vec_2, vec_1);
+      }
+    else
+      {
+        AssertThrow(false, ExcNotImplemented());
+      }
 
     return vec_2;
   };
@@ -536,6 +586,7 @@ test(const unsigned int fe_degree,
 
     double error_L2_squared = 0;
 
+    solution.update_ghost_values();
     for (const auto &cell : system.locally_active_cell_iterators())
       if (mesh_classifier.location_to_level_set(cell->dealii_iterator()) !=
           NonMatching::LocationToLevelSet::outside)
@@ -575,39 +626,42 @@ test(const unsigned int fe_degree,
 
     const double error = std::sqrt(error_L2_squared);
 
-    printf("%8.5f %14.8f\n", time, error);
+    if (pcout.is_active())
+      printf("%8.5f %14.8f\n", time, error);
 
     // output result -> Paraview
     GDM::DataOut<dim> data_out(system, mapping, fe_degree_output);
+    solution.update_ghost_values();
     data_out.add_data_vector(solution, "solution");
 
-    VectorType level_set(system.n_dofs());
+    VectorType level_set(partitioner);
     GDM::VectorTools::interpolate(mapping,
                                   system,
                                   signed_distance_sphere,
                                   level_set);
+    level_set.update_ghost_values();
     data_out.add_data_vector(level_set, "level_set");
 
-    VectorType analytical_solution(system.n_dofs());
+    VectorType analytical_solution(partitioner);
     GDM::VectorTools::interpolate(mapping,
                                   system,
                                   exact_solution,
                                   analytical_solution);
+    analytical_solution.update_ghost_values();
     data_out.add_data_vector(analytical_solution, "analytical_solution");
 
     if (true)
       data_out.set_cell_selection(
         [&](const typename Triangulation<dim>::cell_iterator &cell) {
-          return cell->is_active() &&
+          return cell->is_active() && cell->is_locally_owned() &&
                  mesh_classifier.location_to_level_set(cell) !=
                    NonMatching::LocationToLevelSet::outside;
         });
 
     data_out.build_patches();
 
-    std::string   file_name = "solution_" + std::to_string(counter) + ".vtu";
-    std::ofstream file(file_name);
-    data_out.write_vtu(file);
+    std::string file_name = "solution_" + std::to_string(counter) + ".vtu";
+    data_out.write_vtu_in_parallel(file_name);
 
     counter++;
   };
@@ -636,13 +690,15 @@ test(const unsigned int fe_degree,
       time.advance_time();
     }
 
-  std::cout << std::endl;
+  pcout << std::endl;
 }
 
 
 int
-main()
+main(int argc, char **argv)
 {
+  Utilities::MPI::MPI_InitFinalize mpi(argc, argv, 1);
+
   if (true)
     {
       const unsigned int n_subdivisions_1D = 10;
