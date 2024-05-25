@@ -18,6 +18,7 @@
 #include <deal.II/lac/solver_cg.h>
 #include <deal.II/lac/sparse_matrix.h>
 #include <deal.II/lac/trilinos_precondition.h>
+#include <deal.II/lac/trilinos_solver.h>
 #include <deal.II/lac/trilinos_sparse_matrix.h>
 #include <deal.II/lac/trilinos_sparsity_pattern.h>
 
@@ -95,11 +96,14 @@ test(const unsigned int fe_degree,
   const double alpha   = 1.0;
   const TimeStepping::runge_kutta_method runge_kutta_method =
     TimeStepping::runge_kutta_method::RK_CLASSIC_FOURTH_ORDER;
+  const std::string solver_name = "ILU";
 
   const MPI_Comm comm MPI_COMM_WORLD;
 
   ConditionalOStream pcout(std::cout,
                            Utilities::MPI::this_mpi_process(comm) == 0);
+  ConditionalOStream pcout_detail(
+    std::cout, (Utilities::MPI::this_mpi_process(comm) == 0) && false);
 
   AssertThrow((weak_bc == true) || (alpha == 1.0), ExcNotImplemented());
 
@@ -155,6 +159,19 @@ test(const unsigned int fe_degree,
   sparse_matrix.reinit(sparsity_pattern);
   GDM::MatrixCreator::create_mass_matrix(
     mapping, system, quadrature, sparse_matrix, constraints_dummy);
+
+  TrilinosWrappers::PreconditionAMG preconditioner_amg;
+  TrilinosWrappers::PreconditionILU preconditioner_ilu;
+  TrilinosWrappers::SolverDirect    solver_direct;
+
+  if (solver_name == "AMG")
+    preconditioner_amg.initialize(sparse_matrix);
+  else if (solver_name == "ILU")
+    preconditioner_ilu.initialize(sparse_matrix);
+  else if (solver_name == "direct")
+    solver_direct.initialize(sparse_matrix);
+  else
+    AssertThrow(false, ExcNotImplemented());
 
   // set up initial condition
   const auto partitioner =
@@ -321,12 +338,29 @@ test(const unsigned int fe_degree,
     vec_1.compress(VectorOperation::add);
 
     // invert mass matrix
-    TrilinosWrappers::PreconditionAMG preconditioner;
-    preconditioner.initialize(sparse_matrix);
+    if (solver_name == "AMG" || solver_name == "ILU")
+      {
+        ReductionControl     solver_control(1000, 1.e-20, 1.e-14);
+        SolverCG<VectorType> solver(solver_control);
 
-    ReductionControl     solver_control(1000, 1.e-20, 1.e-14);
-    SolverCG<VectorType> solver(solver_control);
-    solver.solve(sparse_matrix, vec_2, vec_1, preconditioner);
+        if (solver_name == "AMG")
+          solver.solve(sparse_matrix, vec_2, vec_1, preconditioner_amg);
+        else if (solver_name == "ILU")
+          solver.solve(sparse_matrix, vec_2, vec_1, preconditioner_ilu);
+        else
+          AssertThrow(false, ExcNotImplemented());
+
+        pcout_detail << " [L] solved in " << solver_control.last_step()
+                     << std::endl;
+      }
+    else if (solver_name == "direct")
+      {
+        solver_direct.solve(sparse_matrix, vec_2, vec_1);
+      }
+    else
+      {
+        AssertThrow(false, ExcNotImplemented());
+      }
 
     constraints_dbc.set_zero(vec_2);
 
@@ -355,7 +389,7 @@ test(const unsigned int fe_degree,
                                         VectorTools::NormType::L2_norm);
 
     if (pcout.is_active())
-      printf("%8.5f %14.8f\n", time, error);
+      printf("%8.5f %14.8e\n", time, error);
 
     // output result -> Paraview
     GDM::DataOut<dim> data_out(system, mapping, fe_degree_output);
