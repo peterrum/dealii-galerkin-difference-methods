@@ -1,5 +1,6 @@
 // Solve advection problem (GDM).
 
+#include <deal.II/base/conditional_ostream.h>
 #include <deal.II/base/discrete_time.h>
 #include <deal.II/base/function.h>
 #include <deal.II/base/quadrature_lib.h>
@@ -16,6 +17,9 @@
 #include <deal.II/lac/precondition.h>
 #include <deal.II/lac/solver_cg.h>
 #include <deal.II/lac/sparse_matrix.h>
+#include <deal.II/lac/trilinos_precondition.h>
+#include <deal.II/lac/trilinos_sparse_matrix.h>
+#include <deal.II/lac/trilinos_sparsity_pattern.h>
 
 #include <gdm/data_out.h>
 #include <gdm/matrix_creator.h>
@@ -73,7 +77,7 @@ test(const unsigned int fe_degree,
      const bool         weak_bc)
 {
   using Number     = double;
-  using VectorType = Vector<Number>;
+  using VectorType = LinearAlgebra::distributed::Vector<Number>;
 
   // settings
   const double       phi     = std::atan(0.5); // numbers::PI / 8.0; // TODO
@@ -92,6 +96,11 @@ test(const unsigned int fe_degree,
   const TimeStepping::runge_kutta_method runge_kutta_method =
     TimeStepping::runge_kutta_method::RK_CLASSIC_FOURTH_ORDER;
 
+  const MPI_Comm comm MPI_COMM_WORLD;
+
+  ConditionalOStream pcout(std::cout,
+                           Utilities::MPI::this_mpi_process(comm) == 0);
+
   AssertThrow((weak_bc == true) || (alpha == 1.0), ExcNotImplemented());
 
   ExactSolution<dim>                       exact_solution(x_shift, phi);
@@ -99,7 +108,7 @@ test(const unsigned int fe_degree,
     exact_solution.get_transport_direction().begin_raw(), dim);
 
   // Create GDM system
-  GDM::System<dim> system(fe_degree, n_components);
+  GDM::System<dim> system(comm, fe_degree, n_components);
 
   // Create mesh
   system.subdivided_hyper_cube(n_subdivisions_1D);
@@ -119,7 +128,7 @@ test(const unsigned int fe_degree,
   face_quadrature.push_back(QGauss<dim - 1>(fe_degree + 1));
 
   // Create constraints
-  AffineConstraints<Number> constraints_dbc;
+  AffineConstraints<Number> constraints_dbc(system.locally_active_dofs());
   if (weak_bc == false)
     {
       for (unsigned int d = 0; d < dim; ++d)
@@ -130,26 +139,30 @@ test(const unsigned int fe_degree,
     }
   constraints_dbc.close();
 
-  AffineConstraints<Number> constraints_dummy;
+  AffineConstraints<Number> constraints_dummy(system.locally_active_dofs());
   constraints_dummy.close();
 
   // Categorize cells
   system.categorize();
 
   // compute mass matrix
-  DynamicSparsityPattern dsp(system.n_dofs());
-  system.create_sparsity_pattern(constraints_dummy, dsp);
+  TrilinosWrappers::SparsityPattern sparsity_pattern(
+    system.locally_owned_dofs(), MPI_COMM_WORLD);
+  system.create_sparsity_pattern(constraints_dummy, sparsity_pattern);
+  sparsity_pattern.compress();
 
-  SparsityPattern sparsity_pattern;
-  sparsity_pattern.copy_from(dsp);
-
-  SparseMatrix<Number> sparse_matrix;
+  TrilinosWrappers::SparseMatrix sparse_matrix;
   sparse_matrix.reinit(sparsity_pattern);
   GDM::MatrixCreator::create_mass_matrix(
     mapping, system, quadrature, sparse_matrix, constraints_dummy);
 
   // set up initial condition
-  VectorType solution(system.n_dofs());
+  const auto partitioner =
+    std::make_shared<Utilities::MPI::Partitioner>(system.locally_owned_dofs(),
+                                                  system.locally_relevant_dofs(
+                                                    constraints_dummy),
+                                                  comm);
+  VectorType solution(partitioner);
   GDM::VectorTools::interpolate(mapping, system, exact_solution, solution);
 
   // helper function to evaluate right-hand-side vector
@@ -167,6 +180,7 @@ test(const unsigned int fe_degree,
     if (weak_bc == false)
       {
         constraints_dbc.clear();
+        constraints_dbc.reinit(system.locally_active_dofs());
         for (unsigned int d = 0; d < dim; ++d)
           system.interpolate_boundary_values(mapping,
                                              d * 2,
@@ -195,6 +209,8 @@ test(const unsigned int fe_degree,
                                                       update_normal_vectors);
 
     advection.set_time(time);
+
+    vec_0.update_ghost_values();
 
     for (const auto &cell : system.locally_active_cell_iterators())
       {
@@ -302,8 +318,10 @@ test(const unsigned int fe_degree,
                                                      vec_1);
       }
 
+    vec_1.compress(VectorOperation::add);
+
     // invert mass matrix
-    PreconditionJacobi<SparseMatrix<Number>> preconditioner;
+    TrilinosWrappers::PreconditionAMG preconditioner;
     preconditioner.initialize(sparse_matrix);
 
     ReductionControl     solver_control(1000, 1.e-20, 1.e-14);
@@ -323,6 +341,7 @@ test(const unsigned int fe_degree,
     exact_solution.set_time(time);
 
     Vector<Number> cell_wise_error;
+    solution.update_ghost_values();
     GDM::VectorTools::integrate_difference(mapping,
                                            system,
                                            solution,
@@ -335,22 +354,24 @@ test(const unsigned int fe_degree,
                                         cell_wise_error,
                                         VectorTools::NormType::L2_norm);
 
-    printf("%8.5f %14.8f\n", time, error);
+    if (pcout.is_active())
+      printf("%8.5f %14.8f\n", time, error);
 
     // output result -> Paraview
     GDM::DataOut<dim> data_out(system, mapping, fe_degree_output);
     data_out.add_data_vector(solution, "solution");
 
-    VectorType analytical_solution(system.n_dofs());
+    VectorType analytical_solution(partitioner);
     GDM::VectorTools::interpolate(mapping,
                                   system,
                                   exact_solution,
                                   analytical_solution);
+    analytical_solution.update_ghost_values();
     data_out.add_data_vector(analytical_solution, "analytical_solution");
     data_out.build_patches();
 
-    std::ofstream file("solution_" + std::to_string(counter) + ".vtu");
-    data_out.write_vtu(file);
+    data_out.write_vtu_in_parallel("solution_" + std::to_string(counter) +
+                                   ".vtu");
 
     counter++;
   };
@@ -379,13 +400,15 @@ test(const unsigned int fe_degree,
       time.advance_time();
     }
 
-  std::cout << std::endl;
+  pcout << std::endl;
 }
 
 
 int
-main()
+main(int argc, char **argv)
 {
+  Utilities::MPI::MPI_InitFinalize mpi(argc, argv, 1);
+
   if (true)
     {
       const unsigned int n_subdivisions_1D = 10;
