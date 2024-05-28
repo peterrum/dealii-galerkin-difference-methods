@@ -627,7 +627,7 @@ test(const unsigned int fe_degree,
     const double error = std::sqrt(error_L2_squared);
 
     if (pcout.is_active())
-      printf("%8.5f %14.8f\n", time, error);
+      printf("%8.5f %14.8e\n", time, error);
 
     // output result -> Paraview
     GDM::DataOut<dim> data_out(system, mapping, fe_degree_output);
@@ -710,6 +710,7 @@ main(int argc, char **argv)
       for (const unsigned int fe_degree : {1, 3, 5})
         test<2>(fe_degree, n_subdivisions_1D, cfl, true);
     }
+
   if (true)
     {
       const unsigned int fe_degree         = 5;
