@@ -627,7 +627,7 @@ test(const unsigned int fe_degree,
     const double error = std::sqrt(error_L2_squared);
 
     if (pcout.is_active())
-      printf("%8.5f %14.8e\n", time, error);
+      printf("%5d %8.5f %14.8e\n", counter, time, error);
 
     // output result -> Paraview
     GDM::DataOut<dim> data_out(system, mapping, fe_degree_output);
@@ -664,6 +664,8 @@ test(const unsigned int fe_degree,
     data_out.write_vtu_in_parallel(file_name);
 
     counter++;
+
+    return error;
   };
 
   // set up time stepper
@@ -672,10 +674,10 @@ test(const unsigned int fe_degree,
   TimeStepping::ExplicitRungeKutta<VectorType> rk;
   rk.initialize(runge_kutta_method);
 
-  fu_postprocessing(0.0);
+  double error = fu_postprocessing(0.0);
 
   // perform time stepping
-  while (time.is_at_end() == false)
+  while ((time.is_at_end() == false) && (error < 1.0 /*TODO*/))
     {
       rk.evolve_one_time_step(fu_rhs,
                               time.get_current_time(),
@@ -685,7 +687,8 @@ test(const unsigned int fe_degree,
       constraints.distribute(solution);
 
       // output result
-      fu_postprocessing(time.get_current_time() + time.get_next_step_size());
+      error =
+        fu_postprocessing(time.get_current_time() + time.get_next_step_size());
 
       time.advance_time();
     }
