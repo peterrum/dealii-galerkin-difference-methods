@@ -266,13 +266,19 @@ test(const unsigned int fe_degree,
     {
       const double tolerance = 1e-10;
 
-      Vector<double> diagonal(system.n_dofs());
+      IndexSet ghost(system.n_dofs());
+      ghost.add_range(0, system.n_dofs());
+
+      LinearAlgebra::distributed::Vector<double> diagonal(
+        system.locally_owned_dofs(), ghost, comm);
 
       for (auto &entry : sparse_matrix)
         if ((entry.row() == entry.column()))
           {
             diagonal[entry.row()] = std::abs(entry.value());
           }
+
+      diagonal.update_ghost_values();
 
       for (auto &entry : sparse_matrix)
         if ((diagonal[entry.row()] < tolerance) &&
@@ -624,7 +630,8 @@ test(const unsigned int fe_degree,
             }
         }
 
-    const double error = std::sqrt(error_L2_squared);
+    const double error =
+      std::sqrt(Utilities::MPI::sum(error_L2_squared, MPI_COMM_WORLD));
 
     if (pcout.is_active())
       printf("%5d %8.5f %14.8e\n", counter, time, error);
