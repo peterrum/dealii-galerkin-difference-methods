@@ -5,6 +5,7 @@
 // by Florian Streitbürger, Gunnar Birke, Christian Engwer, Sandra May
 
 #include <deal.II/base/conditional_ostream.h>
+#include <deal.II/base/convergence_table.h>
 #include <deal.II/base/discrete_time.h>
 #include <deal.II/base/function.h>
 #include <deal.II/base/function_signed_distance.h>
@@ -91,7 +92,8 @@ private:
 
 template <int dim>
 void
-test(const unsigned int fe_degree,
+test(ConvergenceTable  &table,
+     const unsigned int fe_degree,
      const unsigned int n_subdivisions_1D,
      const double       cfl,
      const bool         rotate,
@@ -123,7 +125,8 @@ test(const unsigned int fe_degree,
   const MPI_Comm comm = MPI_COMM_WORLD;
 
   ConditionalOStream pcout(std::cout,
-                           Utilities::MPI::this_mpi_process(comm) == 0);
+                           (Utilities::MPI::this_mpi_process(comm) == 0) &&
+                             false);
   ConditionalOStream pcout_detail(
     std::cout, (Utilities::MPI::this_mpi_process(comm) == 0) && false);
 
@@ -569,7 +572,8 @@ test(const unsigned int fe_degree,
     return vec_2;
   };
 
-  const auto fu_postprocessing = [&](const double time) {
+  const auto fu_postprocessing =
+    [&](const double time) -> std::array<double, 6> {
     static unsigned int counter = 0;
 
     // compute error
@@ -581,6 +585,8 @@ test(const unsigned int fe_degree,
     NonMatching::RegionUpdateFlags region_update_flags_error;
     region_update_flags_error.inside =
       update_values | update_JxW_values | update_quadrature_points;
+    region_update_flags_error.surface =
+      update_values | update_JxW_values | update_quadrature_points;
 
     NonMatching::FEValues<dim> non_matching_fe_values_error(
       fe,
@@ -590,7 +596,12 @@ test(const unsigned int fe_degree,
       level_set_dof_handler,
       level_set);
 
-    double error_L2_squared = 0;
+    double local_error_Linf            = 0;
+    double local_error_L1              = 0;
+    double local_error_L2_squared      = 0;
+    double local_error_Linf_face       = 0;
+    double local_error_L1_face         = 0;
+    double local_error_L2_face_squared = 0;
 
     solution.update_ghost_values();
     for (const auto &cell : system.locally_active_cell_iterators())
@@ -604,6 +615,10 @@ test(const unsigned int fe_degree,
 
           const std::optional<FEValues<dim>> &fe_values =
             non_matching_fe_values_error.get_inside_fe_values();
+
+          const std::optional<NonMatching::FEImmersedSurfaceValues<dim>>
+            &fe_surface_values =
+              non_matching_fe_values_error.get_surface_fe_values();
 
 
           std::vector<types::global_dof_index> local_dof_indices(
@@ -623,18 +638,72 @@ test(const unsigned int fe_degree,
                   const Point<dim> &point = fe_values->quadrature_point(q);
                   const double      error_at_point =
                     solution_values.at(q) - exact_solution.value(point);
-                  error_L2_squared +=
+
+                  local_error_L2_squared +=
                     Utilities::fixed_power<2>(error_at_point) *
                     fe_values->JxW(q);
+
+                  local_error_L1 +=
+                    std::abs(error_at_point) * fe_values->JxW(q);
+
+                  local_error_Linf =
+                    std::max(local_error_Linf, std::abs(error_at_point));
+                }
+            }
+
+          if (fe_surface_values)
+            {
+              std::vector<double> solution_values(
+                fe_surface_values->n_quadrature_points);
+              fe_surface_values->get_function_values(solution,
+                                                     local_dof_indices,
+                                                     solution_values);
+
+              for (const unsigned int q :
+                   fe_surface_values->quadrature_point_indices())
+                {
+                  const Point<dim> &point =
+                    fe_surface_values->quadrature_point(q);
+                  const double error_at_point =
+                    solution_values.at(q) - exact_solution.value(point);
+
+                  local_error_L2_face_squared +=
+                    Utilities::fixed_power<2>(error_at_point) *
+                    fe_surface_values->JxW(q);
+
+                  local_error_L1_face +=
+                    std::abs(error_at_point) * fe_surface_values->JxW(q);
+
+                  local_error_Linf_face =
+                    std::max(local_error_Linf_face, std::abs(error_at_point));
                 }
             }
         }
 
-    const double error =
-      std::sqrt(Utilities::MPI::sum(error_L2_squared, MPI_COMM_WORLD));
+    const double error_Linf =
+      Utilities::MPI::max(local_error_Linf, MPI_COMM_WORLD);
+
+    const double error_L1 = Utilities::MPI::sum(local_error_L1, MPI_COMM_WORLD);
+
+    const double error_L2 =
+      std::sqrt(Utilities::MPI::sum(local_error_L2_squared, MPI_COMM_WORLD));
+
+    const double error_Linf_face =
+      Utilities::MPI::max(local_error_Linf_face, MPI_COMM_WORLD);
+
+    const double error_L1_face =
+      Utilities::MPI::sum(local_error_L1_face, MPI_COMM_WORLD);
+
+    const double error_L2_face = std::sqrt(
+      Utilities::MPI::sum(local_error_L2_face_squared, MPI_COMM_WORLD));
 
     if (pcout.is_active())
-      printf("%5d %8.5f %14.8e\n", counter, time, error);
+      printf("%5d %8.5f %14.8e %14.8e %14.8e\n",
+             counter,
+             time,
+             error_L2,
+             error_L1,
+             error_Linf);
 
     // output result -> Paraview
     GDM::DataOut<dim> data_out(system, mapping, fe_degree_output);
@@ -672,7 +741,12 @@ test(const unsigned int fe_degree,
 
     counter++;
 
-    return error;
+    return {{error_Linf,
+             error_L1,
+             error_L2,
+             error_Linf_face,
+             error_L1_face,
+             error_L2_face}};
   };
 
   // set up time stepper
@@ -681,10 +755,10 @@ test(const unsigned int fe_degree,
   TimeStepping::ExplicitRungeKutta<VectorType> rk;
   rk.initialize(runge_kutta_method);
 
-  double error = fu_postprocessing(0.0);
+  auto error = fu_postprocessing(0.0);
 
   // perform time stepping
-  while ((time.is_at_end() == false) && (error < 1.0 /*TODO*/))
+  while ((time.is_at_end() == false) && (error[2] < 1.0 /*TODO*/))
     {
       rk.evolve_one_time_step(fu_rhs,
                               time.get_current_time(),
@@ -700,6 +774,22 @@ test(const unsigned int fe_degree,
       time.advance_time();
     }
 
+  table.add_value("fe_degree", fe_degree);
+  table.add_value("cfl", cfl);
+  table.add_value("n_subdivision", n_subdivisions_1D);
+  table.add_value("error_2", error[2]);
+  table.set_scientific("error_2", true);
+  table.add_value("error_1", error[1]);
+  table.set_scientific("error_1", true);
+  table.add_value("error_inf", error[0]);
+  table.set_scientific("error_inf", true);
+  table.add_value("error_2_face", error[5]);
+  table.set_scientific("error_2_face", true);
+  table.add_value("error_1_face", error[4]);
+  table.set_scientific("error_1_face", true);
+  table.add_value("error_inf_face", error[3]);
+  table.set_scientific("error_inf_face", true);
+
   pcout << std::endl;
 }
 
@@ -709,25 +799,65 @@ main(int argc, char **argv)
 {
   Utilities::MPI::MPI_InitFinalize mpi(argc, argv, 1);
 
-  if (true)
+  ConvergenceTable table;
+
+  if (false)
     {
       const unsigned int n_subdivisions_1D = 10;
       const double       cfl               = 0.1;
 
       for (const unsigned int fe_degree : {1, 3, 5})
-        test<2>(fe_degree, n_subdivisions_1D, cfl, false);
+        test<2>(table, fe_degree, n_subdivisions_1D, cfl, false);
 
       for (const unsigned int fe_degree : {1, 3, 5})
-        test<2>(fe_degree, n_subdivisions_1D, cfl, true);
+        test<2>(table, fe_degree, n_subdivisions_1D, cfl, true);
+
+      if (Utilities::MPI::this_mpi_process(MPI_COMM_WORLD) == 0)
+        {
+          table.write_text(std::cout);
+          std::cout << std::endl;
+        }
     }
 
-  if (true)
+  if (false)
     {
       const unsigned int fe_degree         = 5;
       const unsigned int n_subdivisions_1D = 10;
       const double       cfl               = 0.1;
 
       for (double factor = 0.5; factor <= 2.0; factor += 0.1)
-        test<2>(fe_degree, n_subdivisions_1D, cfl, false, factor);
+        test<2>(table, fe_degree, n_subdivisions_1D, cfl, false, factor);
+
+      if (Utilities::MPI::this_mpi_process(MPI_COMM_WORLD) == 0)
+        {
+          table.write_text(std::cout);
+          std::cout << std::endl;
+        }
+    }
+
+  if (true)
+    {
+      const double factor = 1.0;
+
+
+      for (const unsigned int fe_degree : {3, 5})
+        {
+          for (const double cfl : {0.4, 0.2, 0.1, 0.05, 0.025})
+            {
+              for (unsigned int n_subdivisions_1D = 10;
+                   n_subdivisions_1D <= 100;
+                   n_subdivisions_1D += 10)
+                test<2>(
+                  table, fe_degree, n_subdivisions_1D, cfl, false, factor);
+
+              if (Utilities::MPI::this_mpi_process(MPI_COMM_WORLD) == 0)
+                {
+                  table.write_text(std::cout);
+                  std::cout << std::endl;
+                }
+
+              table.clear();
+            }
+        }
     }
 }
