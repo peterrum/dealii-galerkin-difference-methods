@@ -1,6 +1,7 @@
 // Solve advection problem (GDM).
 
 #include <deal.II/base/conditional_ostream.h>
+#include <deal.II/base/convergence_table.h>
 #include <deal.II/base/discrete_time.h>
 #include <deal.II/base/function.h>
 #include <deal.II/base/quadrature_lib.h>
@@ -72,7 +73,8 @@ private:
 
 template <int dim>
 void
-test(const unsigned int fe_degree,
+test(ConvergenceTable  &table,
+     const unsigned int fe_degree,
      const unsigned int n_subdivisions_1D,
      const double       cfl,
      const bool         weak_bc)
@@ -101,7 +103,8 @@ test(const unsigned int fe_degree,
   const MPI_Comm comm = MPI_COMM_WORLD;
 
   ConditionalOStream pcout(std::cout,
-                           Utilities::MPI::this_mpi_process(comm) == 0);
+                           (Utilities::MPI::this_mpi_process(comm) == 0) &&
+                             false);
   ConditionalOStream pcout_detail(
     std::cout, (Utilities::MPI::this_mpi_process(comm) == 0) && false);
 
@@ -389,7 +392,7 @@ test(const unsigned int fe_degree,
                                         VectorTools::NormType::L2_norm);
 
     if (pcout.is_active())
-      printf("%8.5f %14.8e\n", time, error);
+      printf("%5d %8.5f %14.8e\n", counter, time, error);
 
     // output result -> Paraview
     GDM::DataOut<dim> data_out(system, mapping, fe_degree_output);
@@ -408,6 +411,8 @@ test(const unsigned int fe_degree,
                                    ".vtu");
 
     counter++;
+
+    return error;
   };
 
   // set up time stepper
@@ -416,7 +421,7 @@ test(const unsigned int fe_degree,
   TimeStepping::ExplicitRungeKutta<VectorType> rk;
   rk.initialize(runge_kutta_method);
 
-  fu_postprocessing(0.0);
+  double error = fu_postprocessing(0.0);
 
   // perform time stepping
   while (time.is_at_end() == false)
@@ -429,10 +434,17 @@ test(const unsigned int fe_degree,
       constraints_dbc.distribute(solution);
 
       // output result
-      fu_postprocessing(time.get_current_time() + time.get_next_step_size());
+      error =
+        fu_postprocessing(time.get_current_time() + time.get_next_step_size());
 
       time.advance_time();
     }
+
+  table.add_value("fe_degree", fe_degree);
+  table.add_value("cfl", cfl);
+  table.add_value("n_subdivision", n_subdivisions_1D);
+  table.add_value("error", error);
+  table.set_scientific("error", true);
 
   pcout << std::endl;
 }
@@ -443,23 +455,60 @@ main(int argc, char **argv)
 {
   Utilities::MPI::MPI_InitFinalize mpi(argc, argv, 1);
 
-  if (true)
+  ConvergenceTable table;
+
+  if (false)
     {
       const unsigned int n_subdivisions_1D = 10;
       const double       cfl               = 0.1;
 
       for (const unsigned int fe_degree : {1, 3, 5})
-        test<2>(fe_degree, n_subdivisions_1D, cfl, false);
+        test<2>(table, fe_degree, n_subdivisions_1D, cfl, false);
 
       for (const unsigned int fe_degree : {1, 3, 5})
-        test<2>(fe_degree, n_subdivisions_1D, cfl, true);
+        test<2>(table, fe_degree, n_subdivisions_1D, cfl, true);
+
+      if (Utilities::MPI::this_mpi_process(MPI_COMM_WORLD) == 0)
+        {
+          table.write_text(std::cout);
+          std::cout << std::endl;
+        }
     }
+
   if (false)
     {
       const unsigned int fe_degree         = 5;
       const unsigned int n_subdivisions_1D = 40;
       const double       cfl               = 0.4;
 
-      test<2>(fe_degree, n_subdivisions_1D, cfl, false);
+      test<2>(table, fe_degree, n_subdivisions_1D, cfl, false);
+
+      if (Utilities::MPI::this_mpi_process(MPI_COMM_WORLD) == 0)
+        {
+          table.write_text(std::cout);
+          std::cout << std::endl;
+        }
+    }
+
+  if (true)
+    {
+      for (const unsigned int fe_degree : {3, 5})
+        {
+          for (const double cfl : {0.4, 0.2, 0.1, 0.05, 0.025})
+            {
+              for (unsigned int n_subdivisions_1D = 10;
+                   n_subdivisions_1D <= 100;
+                   n_subdivisions_1D += 10)
+                test<2>(table, fe_degree, n_subdivisions_1D, cfl, true);
+
+              if (Utilities::MPI::this_mpi_process(MPI_COMM_WORLD) == 0)
+                {
+                  table.write_text(std::cout);
+                  std::cout << std::endl;
+                }
+
+              table.clear();
+            }
+        }
     }
 }
