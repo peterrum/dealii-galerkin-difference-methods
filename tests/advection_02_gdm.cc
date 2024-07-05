@@ -69,6 +69,47 @@ private:
   const double           phi;
 };
 
+template <int dim, typename Number = double>
+class ExactSolutionDerivative : public dealii::Function<dim, Number>
+{
+public:
+  ExactSolutionDerivative(const double x_shift,
+                          const double phi,
+                          const double time = 0.)
+    : dealii::Function<dim, Number>(1, time)
+    , x_shift(x_shift)
+    , phi(phi)
+  {
+    advection[0] = 2.0 * std::cos(phi);
+    advection[1] = 2.0 * std::sin(phi);
+  }
+
+  virtual double
+  value(const dealii::Point<dim> &p, const unsigned int = 1) const override
+  {
+    double                       t        = this->get_time();
+    const dealii::Tensor<1, dim> position = p - t * advection;
+
+    const double x_hat =
+      std::cos(phi) * (position[0] - x_shift) + std::sin(phi) * position[1];
+
+    return std::cos(std::sqrt(2.0) * numbers::PI * x_hat / (1.0 - x_shift)) *
+           (std::sqrt(2.0) * numbers::PI / (1.0 - x_shift)) *
+           (std::cos(phi) * (-advection[0]) + std::sin(phi) * (-advection[1]));
+  }
+
+  const dealii::Tensor<1, dim> &
+  get_transport_direction() const
+  {
+    return advection;
+  }
+
+private:
+  dealii::Tensor<1, dim> advection;
+  const double           x_shift;
+  const double           phi;
+};
+
 
 
 template <int dim>
@@ -111,6 +152,7 @@ test(ConvergenceTable  &table,
   AssertThrow((weak_bc == true) || (alpha == 1.0), ExcNotImplemented());
 
   ExactSolution<dim>                       exact_solution(x_shift, phi);
+  ExactSolutionDerivative<dim>             exact_solution_der(x_shift, phi);
   Functions::ConstantFunction<dim, Number> advection(
     exact_solution.get_transport_direction().begin_raw(), dim);
 
@@ -185,8 +227,84 @@ test(ConvergenceTable  &table,
   VectorType solution(partitioner);
   GDM::VectorTools::interpolate(mapping, system, exact_solution, solution);
 
+  // set up BCs
+  std::vector<Point<dim>> all_points;
+
+  {
+    hp::FEFaceValues<dim> fe_face_values_collection(mapping,
+                                                    fe,
+                                                    face_quadrature,
+                                                    update_values |
+                                                      update_gradients |
+                                                      update_quadrature_points |
+                                                      update_JxW_values |
+                                                      update_normal_vectors);
+    for (const auto &cell : system.locally_active_cell_iterators())
+      {
+        for (const auto f : cell->dealii_iterator()->face_indices())
+          if (weak_bc && cell->dealii_iterator()->face(f)->at_boundary())
+            {
+              fe_face_values_collection.reinit(cell->dealii_iterator(),
+                                               f,
+                                               numbers::invalid_unsigned_int,
+                                               numbers::invalid_unsigned_int,
+                                               cell->active_fe_index());
+
+              const auto &fe_face_values =
+                fe_face_values_collection.get_present_fe_values();
+
+              for (const auto q : fe_face_values.quadrature_point_indices())
+                {
+                  all_points.emplace_back(fe_face_values.quadrature_point(q));
+                }
+            }
+      }
+  }
+
+  std::vector<Vector<double>> stage_bcs;
+
+  const auto fu_eval_bc = [&](const double time) {
+    exact_solution.set_time(time);
+
+    Vector<double> stage_bc(all_points.size());
+
+    for (unsigned int i = 0; i < all_points.size(); ++i)
+      stage_bc[i] = exact_solution.value(all_points[i]);
+
+    return stage_bc;
+  };
+
+  const auto fu_bc = [&](const double time, const Vector<double> &solution) {
+    if (false)
+      {
+        exact_solution.set_time(time);
+
+        Vector<double> stage_bc(all_points.size());
+
+        for (unsigned int i = 0; i < all_points.size(); ++i)
+          stage_bc[i] = exact_solution.value(all_points[i]);
+        stage_bcs.emplace_back(stage_bc);
+
+        return solution;
+      }
+    else
+      {
+        exact_solution_der.set_time(time);
+
+        stage_bcs.emplace_back(solution);
+
+        Vector<double> stage_bc(all_points.size());
+
+        for (unsigned int i = 0; i < all_points.size(); ++i)
+          stage_bc[i] = exact_solution_der.value(all_points[i]);
+
+        return stage_bc;
+      }
+  };
+
   // helper function to evaluate right-hand-side vector
-  const auto fu_rhs = [&](const double time, const VectorType &solution) {
+  unsigned int stage_counter = 0;
+  const auto   fu_rhs = [&](const double time, const VectorType &solution) {
     VectorType vec_0, vec_1, vec_2;
     vec_0.reinit(solution); // for applying constraints
     vec_1.reinit(solution); // result of assembly of rhs vector
@@ -229,6 +347,8 @@ test(ConvergenceTable  &table,
                                                       update_normal_vectors);
 
     advection.set_time(time);
+
+    unsigned int point_counter = 0;
 
     vec_0.update_ghost_values();
 
@@ -317,8 +437,7 @@ test(ConvergenceTable  &table,
 
               for (const auto q : fe_face_values.quadrature_point_indices())
                 {
-                  const auto point = fe_face_values.quadrature_point(q);
-                  u_plus[q]        = exact_solution.value(point);
+                  u_plus[q] = stage_bcs[stage_counter][point_counter++];
                 }
 
               for (const unsigned int q_index :
@@ -328,7 +447,7 @@ test(ConvergenceTable  &table,
                     fluxes[q_index] *
                     (alpha * quadrature_values[q_index] -
                      ((fluxes[q_index] >= 0.0) ? quadrature_values[q_index] :
-                                                 u_plus[q_index])) *
+                                                   u_plus[q_index])) *
                     fe_face_values.shape_value(i, q_index) *
                     fe_face_values.JxW(q_index);
             }
@@ -366,6 +485,8 @@ test(ConvergenceTable  &table,
       }
 
     constraints_dbc.set_zero(vec_2);
+
+    stage_counter++;
 
     return vec_2;
   };
@@ -418,6 +539,9 @@ test(ConvergenceTable  &table,
   // set up time stepper
   DiscreteTime time(start_t, end_t, delta_t);
 
+  TimeStepping::ExplicitRungeKutta<Vector<double>> rk_bc;
+  rk_bc.initialize(runge_kutta_method);
+
   TimeStepping::ExplicitRungeKutta<VectorType> rk;
   rk.initialize(runge_kutta_method);
 
@@ -426,6 +550,14 @@ test(ConvergenceTable  &table,
   // perform time stepping
   while (time.is_at_end() == false)
     {
+      stage_bcs.clear();
+      Vector<double> solution_bc = fu_eval_bc(time.get_current_time());
+      rk_bc.evolve_one_time_step(fu_bc,
+                                 time.get_current_time(),
+                                 time.get_next_step_size(),
+                                 solution_bc);
+
+      stage_counter = 0;
       rk.evolve_one_time_step(fu_rhs,
                               time.get_current_time(),
                               time.get_next_step_size(),
