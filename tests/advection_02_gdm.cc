@@ -15,6 +15,7 @@
 #include <deal.II/hp/fe_values.h>
 
 #include <deal.II/lac/dynamic_sparsity_pattern.h>
+#include <deal.II/lac/lapack_full_matrix.h>
 #include <deal.II/lac/precondition.h>
 #include <deal.II/lac/solver_cg.h>
 #include <deal.II/lac/sparse_matrix.h>
@@ -110,6 +111,32 @@ private:
   const double           phi;
 };
 
+
+
+template <typename SparseMatrixType>
+void
+eigenvalue_estimates(const SparseMatrixType &matrix_a)
+{
+  LAPACKFullMatrix<double> lapack_full_matrix(matrix_a.m(), matrix_a.n());
+
+
+  for (const auto &entry : matrix_a)
+    lapack_full_matrix.set(entry.row(), entry.column(), entry.value());
+
+  lapack_full_matrix.compute_eigenvalues();
+
+  std::vector<double> eigenvalues;
+
+  for (unsigned int i = 0; i < lapack_full_matrix.m(); ++i)
+    eigenvalues.push_back(lapack_full_matrix.eigenvalue(i).real());
+
+  std::sort(eigenvalues.begin(), eigenvalues.end());
+
+  printf("%10.2e %10.2e %10.2e \n",
+         eigenvalues[0],
+         eigenvalues.back(),
+         eigenvalues.back() / eigenvalues[0]);
+}
 
 
 template <int dim>
@@ -577,6 +604,11 @@ test(ConvergenceTable  &table,
   table.add_value("n_subdivision", n_subdivisions_1D);
   table.add_value("error", error);
   table.set_scientific("error", true);
+
+  if (false)
+    {
+      eigenvalue_estimates(sparse_matrix);
+    }
 
   pcout << std::endl;
 }
