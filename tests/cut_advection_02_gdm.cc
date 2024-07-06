@@ -166,7 +166,8 @@ test(ConvergenceTable  &table,
      const unsigned int n_subdivisions_1D,
      const double       cfl,
      const bool         rotate,
-     const double       factor = 1.0)
+     const double       factor           = 1.0,
+     const bool         do_ghost_penalty = true)
 {
   using Number     = double;
   using VectorType = LinearAlgebra::distributed::Vector<Number>;
@@ -191,6 +192,8 @@ test(ConvergenceTable  &table,
     TimeStepping::runge_kutta_method::RK_CLASSIC_FOURTH_ORDER;
   const std::string solver_name = "ILU";
 
+  const double ghost_parameter = 0.5;
+
   const MPI_Comm comm = MPI_COMM_WORLD;
 
   ConditionalOStream pcout(std::cout,
@@ -205,7 +208,7 @@ test(ConvergenceTable  &table,
     exact_solution.get_transport_direction().begin_raw(), dim);
 
   // Create GDM system
-  GDM::System<dim> system(comm, fe_degree, n_components);
+  GDM::System<dim> system(comm, fe_degree, n_components, do_ghost_penalty);
 
   // Create mesh
   system.subdivided_hyper_cube(n_subdivisions_1D, 0, 1);
@@ -249,13 +252,42 @@ test(ConvergenceTable  &table,
   level_set.update_ghost_values();
   mesh_classifier.reclassify();
 
+  const auto face_has_ghost_penalty = [&](const auto        &cell,
+                                          const unsigned int face_index) {
+    if (!do_ghost_penalty)
+      return false;
+
+    if (cell->at_boundary(face_index))
+      return false;
+
+    const NonMatching::LocationToLevelSet cell_location =
+      mesh_classifier.location_to_level_set(cell);
+
+    const NonMatching::LocationToLevelSet neighbor_location =
+      mesh_classifier.location_to_level_set(cell->neighbor(face_index));
+
+    if (cell_location == NonMatching::LocationToLevelSet::intersected &&
+        neighbor_location != NonMatching::LocationToLevelSet::outside)
+      return true;
+
+    if (neighbor_location == NonMatching::LocationToLevelSet::intersected &&
+        cell_location != NonMatching::LocationToLevelSet::outside)
+      return true;
+
+    return false;
+  };
+
   AffineConstraints<Number> constraints;
   constraints.close();
 
   // compute mass matrix
   TrilinosWrappers::SparsityPattern sparsity_pattern(
     system.locally_owned_dofs(), MPI_COMM_WORLD);
-  system.create_sparsity_pattern(constraints, sparsity_pattern);
+
+  if (do_ghost_penalty)
+    system.create_flux_sparsity_pattern(constraints, sparsity_pattern);
+  else
+    system.create_sparsity_pattern(constraints, sparsity_pattern);
   sparsity_pattern.compress();
 
   TrilinosWrappers::SparseMatrix sparse_matrix;
@@ -278,6 +310,12 @@ test(ConvergenceTable  &table,
                                                       level_set_dof_handler,
                                                       level_set);
 
+    FEInterfaceValues<dim> fe_interface_values(
+      mapping,
+      fe,
+      hp::QCollection<dim - 1>(QGauss<dim - 1>(fe_degree + 1)),
+      update_gradients | update_JxW_values | update_normal_vectors);
+
     std::vector<types::global_dof_index> dof_indices;
     for (const auto &cell : system.locally_active_cell_iterators())
       if (mesh_classifier.location_to_level_set(cell->dealii_iterator()) !=
@@ -288,13 +326,12 @@ test(ConvergenceTable  &table,
                                         numbers::invalid_unsigned_int,
                                         cell->active_fe_index());
 
+          const double cell_side_length =
+            cell->dealii_iterator()->minimum_vertex_distance();
+
           const auto &fe_values = non_matching_fe_values.get_inside_fe_values();
 
           const unsigned int dofs_per_cell = fe[0].dofs_per_cell;
-
-          // get indices
-          dof_indices.resize(dofs_per_cell);
-          cell->get_dof_indices(dof_indices);
 
           // compute element stiffness matrix
           FullMatrix<Number> cell_matrix(dofs_per_cell, dofs_per_cell);
@@ -311,6 +348,63 @@ test(ConvergenceTable  &table,
                                            fe_values->JxW(q_index);
                 }
             }
+
+          for (const unsigned int f : cell->dealii_iterator()->face_indices())
+            if (face_has_ghost_penalty(cell->dealii_iterator(), f))
+              {
+                fe_interface_values.reinit(
+                  cell->dealii_iterator(),
+                  f,
+                  numbers::invalid_unsigned_int,
+                  cell->dealii_iterator()->neighbor(f),
+                  cell->dealii_iterator()->neighbor_of_neighbor(f),
+                  numbers::invalid_unsigned_int,
+                  numbers::invalid_unsigned_int,
+                  numbers::invalid_unsigned_int,
+                  cell->active_fe_index(),
+                  cell->neighbor(f)->active_fe_index());
+
+                const unsigned int n_interface_dofs =
+                  fe_interface_values.n_current_interface_dofs();
+                FullMatrix<double> local_stabilization(n_interface_dofs,
+                                                       n_interface_dofs);
+                for (unsigned int q = 0;
+                     q < fe_interface_values.n_quadrature_points;
+                     ++q)
+                  {
+                    const Tensor<1, dim> normal = fe_interface_values.normal(q);
+                    for (unsigned int i = 0; i < n_interface_dofs; ++i)
+                      for (unsigned int j = 0; j < n_interface_dofs; ++j)
+                        {
+                          local_stabilization(i, j) +=
+                            .5 * ghost_parameter * cell_side_length *
+                            cell_side_length * cell_side_length *
+                            (normal *
+                             fe_interface_values.jump_in_shape_gradients(i,
+                                                                         q)) *
+                            (normal *
+                             fe_interface_values.jump_in_shape_gradients(j,
+                                                                         q)) *
+                            fe_interface_values.JxW(q);
+                        }
+                  }
+
+                std::vector<types::global_dof_index>
+                  local_interface_dof_indices;
+                cell->get_dof_indices(dof_indices);
+                for (const auto i : dof_indices)
+                  local_interface_dof_indices.emplace_back(i);
+                cell->neighbor(f)->get_dof_indices(dof_indices);
+                for (const auto i : dof_indices)
+                  local_interface_dof_indices.emplace_back(i);
+
+                sparse_matrix.add(local_interface_dof_indices,
+                                  local_stabilization);
+              }
+
+          // get indices
+          dof_indices.resize(dofs_per_cell);
+          cell->get_dof_indices(dof_indices);
 
           // assemble
           constraints.distribute_local_to_global(cell_matrix,
@@ -1005,6 +1099,8 @@ test(ConvergenceTable  &table,
       eigenvalue_estimates(sparse_matrix);
     }
 
+  table.write_text(std::cout);
+
   pcout << std::endl;
 }
 
@@ -1055,15 +1151,20 @@ main(int argc, char **argv)
       const double factor = 1.0;
 
 
-      for (const unsigned int fe_degree : {3, 5})
+      for (const unsigned int fe_degree : {5})
         {
           for (const double cfl : {0.4, 0.2, 0.1, 0.05, 0.025})
             {
               for (unsigned int n_subdivisions_1D = 10;
                    n_subdivisions_1D <= 100;
                    n_subdivisions_1D += 10)
-                test<2>(
-                  table, fe_degree, n_subdivisions_1D, cfl, false, factor);
+                test<2>(table,
+                        fe_degree,
+                        n_subdivisions_1D,
+                        cfl,
+                        false,
+                        factor,
+                        true);
 
               if (Utilities::MPI::this_mpi_process(MPI_COMM_WORLD) == 0)
                 {

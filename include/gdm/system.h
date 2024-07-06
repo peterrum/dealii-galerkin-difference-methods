@@ -329,11 +329,13 @@ namespace GDM
 
     System(const MPI_Comm     comm,
            const unsigned int fe_degree,
-           const unsigned int n_components)
+           const unsigned int n_components,
+           const bool         add_ghost_layer = false)
       : comm(comm)
       , fe_degree(fe_degree)
       , fe(generate_fe_collection<dim>(generate_polynomials_1D(fe_degree),
                                        n_components))
+      , add_ghost_layer(add_ghost_layer)
     {}
 
 
