@@ -652,6 +652,12 @@ test(ConvergenceTable  &table,
       level_set_dof_handler,
       level_set);
 
+    FEInterfaceValues<dim> fe_interface_values(
+      mapping,
+      fe,
+      hp::QCollection<dim - 1>(QGauss<dim - 1>(fe_degree + 1)),
+      update_gradients | update_JxW_values | update_normal_vectors);
+
     advection.set_time(time);
 
     unsigned int point_counter = 0;
@@ -667,6 +673,9 @@ test(ConvergenceTable  &table,
                                         numbers::invalid_unsigned_int,
                                         numbers::invalid_unsigned_int,
                                         cell->active_fe_index());
+
+          const double cell_side_length =
+            cell->dealii_iterator()->minimum_vertex_distance();
 
           const auto &fe_values_ptr =
             non_matching_fe_values.get_inside_fe_values();
@@ -831,6 +840,69 @@ test(ConvergenceTable  &table,
                   }
               }
 
+          for (const unsigned int f : cell->dealii_iterator()->face_indices())
+            if (face_has_ghost_penalty(cell->dealii_iterator(), f))
+              {
+                fe_interface_values.reinit(
+                  cell->dealii_iterator(),
+                  f,
+                  numbers::invalid_unsigned_int,
+                  cell->dealii_iterator()->neighbor(f),
+                  cell->dealii_iterator()->neighbor_of_neighbor(f),
+                  numbers::invalid_unsigned_int,
+                  numbers::invalid_unsigned_int,
+                  numbers::invalid_unsigned_int,
+                  cell->active_fe_index(),
+                  cell->neighbor(f)->active_fe_index());
+
+                const unsigned int n_interface_dofs =
+                  fe_interface_values.n_current_interface_dofs();
+                Vector<double> local_stabilization(n_interface_dofs);
+
+                std::vector<types::global_dof_index>
+                  local_interface_dof_indices;
+                cell->get_dof_indices(dof_indices);
+                for (const auto i : dof_indices)
+                  local_interface_dof_indices.emplace_back(i);
+                cell->neighbor(f)->get_dof_indices(dof_indices);
+                for (const auto i : dof_indices)
+                  local_interface_dof_indices.emplace_back(i);
+
+                std::vector<Tensor<1, dim>> jump_in_shape_gradients(
+                  fe_interface_values.n_quadrature_points);
+
+                const FEValuesExtractors::Scalar scalar(0);
+
+                std::vector<double> local_dof_values(n_interface_dofs);
+                for (unsigned int i = 0; i < n_interface_dofs; ++i)
+                  local_dof_values[i] = vec_0[local_interface_dof_indices[i]];
+
+                fe_interface_values[scalar]
+                  .get_jump_in_function_gradients_from_local_dof_values(
+                    local_dof_values, jump_in_shape_gradients);
+
+                for (unsigned int q = 0;
+                     q < fe_interface_values.n_quadrature_points;
+                     ++q)
+                  {
+                    const Tensor<1, dim> normal = fe_interface_values.normal(q);
+                    for (unsigned int i = 0; i < n_interface_dofs; ++i)
+                      {
+                        local_stabilization(i) -=
+                          .5 * ghost_parameter * cell_side_length *
+                          cell_side_length *
+                          (normal *
+                           fe_interface_values.jump_in_shape_gradients(i, q)) *
+                          (normal * jump_in_shape_gradients[q]) *
+                          fe_interface_values.JxW(q);
+                      }
+                  }
+
+                constraints.distribute_local_to_global(
+                  local_stabilization, local_interface_dof_indices, vec_1);
+              }
+
+          cell->get_dof_indices(dof_indices);
           constraints.distribute_local_to_global(cell_vector,
                                                  dof_indices,
                                                  vec_1);
@@ -1132,14 +1204,14 @@ main(int argc, char **argv)
         }
     }
 
-  if (false)
+  if (true)
     {
       const unsigned int fe_degree         = 5;
-      const unsigned int n_subdivisions_1D = 10;
+      const unsigned int n_subdivisions_1D = 40;
       const double       cfl               = 0.1;
 
       for (double factor = 0.5; factor <= 2.0; factor += 0.1)
-        test<2>(table, fe_degree, n_subdivisions_1D, cfl, false, factor);
+        test<2>(table, fe_degree, n_subdivisions_1D, cfl, false, factor, true);
 
       if (Utilities::MPI::this_mpi_process(MPI_COMM_WORLD) == 0)
         {
@@ -1148,7 +1220,7 @@ main(int argc, char **argv)
         }
     }
 
-  if (true)
+  if (false)
     {
       const double factor = 1.0;
 
