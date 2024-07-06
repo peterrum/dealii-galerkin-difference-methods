@@ -195,15 +195,10 @@ test(const bool do_ghost_penalty = false)
                                                     level_set_dof_handler,
                                                     level_set);
 
-  hp::FEFaceValues<dim> hp_fe_face_values_m(
+  FEInterfaceValues<dim> fe_interface_values(
     fe,
     hp::QCollection<dim - 1>(QGauss<dim - 1>(fe_degree + 1)),
     update_gradients | update_JxW_values | update_normal_vectors);
-
-  hp::FEFaceValues<dim> hp_fe_face_values_p(fe,
-                                            hp::QCollection<dim - 1>(
-                                              QGauss<dim - 1>(fe_degree + 1)),
-                                            update_gradients);
 
   for (const auto &cell : dof_handler.active_cell_iterators())
     if (mesh_classifier.location_to_level_set(cell) !=
@@ -279,91 +274,40 @@ test(const bool do_ghost_penalty = false)
         for (const unsigned int f : cell->face_indices())
           if (face_has_ghost_penalty(cell, f))
             {
-              hp_fe_face_values_m.reinit(cell, f);
-              hp_fe_face_values_p.reinit(cell->neighbor(f),
-                                         cell->neighbor_of_neighbor(f));
+              fe_interface_values.reinit(cell,
+                                         f,
+                                         numbers::invalid_unsigned_int,
+                                         cell->neighbor(f),
+                                         cell->neighbor_of_neighbor(f),
+                                         numbers::invalid_unsigned_int);
 
-              const auto &fe_face_values_m =
-                hp_fe_face_values_m.get_present_fe_values();
-              const auto &fe_face_values_p =
-                hp_fe_face_values_p.get_present_fe_values();
-
-              FullMatrix<double> local_stabilization_mm(
-                fe_face_values_m.dofs_per_cell, fe_face_values_m.dofs_per_cell);
-              FullMatrix<double> local_stabilization_pm(
-                fe_face_values_p.dofs_per_cell, fe_face_values_m.dofs_per_cell);
-              FullMatrix<double> local_stabilization_mp(
-                fe_face_values_m.dofs_per_cell, fe_face_values_p.dofs_per_cell);
-              FullMatrix<double> local_stabilization_pp(
-                fe_face_values_p.dofs_per_cell, fe_face_values_p.dofs_per_cell);
-
-              for (const unsigned int q :
-                   fe_face_values_m.quadrature_point_indices())
+              const unsigned int n_interface_dofs =
+                fe_interface_values.n_current_interface_dofs();
+              FullMatrix<double> local_stabilization(n_interface_dofs,
+                                                     n_interface_dofs);
+              for (unsigned int q = 0;
+                   q < fe_interface_values.n_quadrature_points;
+                   ++q)
                 {
-                  const Tensor<1, dim> normal =
-                    fe_face_values_m.normal_vector(q);
-
-                  for (const auto i : fe_face_values_m.dof_indices())
-                    for (const auto j : fe_face_values_m.dof_indices())
+                  const Tensor<1, dim> normal = fe_interface_values.normal(q);
+                  for (unsigned int i = 0; i < n_interface_dofs; ++i)
+                    for (unsigned int j = 0; j < n_interface_dofs; ++j)
                       {
-                        local_stabilization_mm(i, j) +=
+                        local_stabilization(i, j) +=
                           .5 * ghost_parameter * cell_side_length * normal *
-                          fe_face_values_m.shape_grad(i, q) * normal *
-                          fe_face_values_m.shape_grad(j, q) *
-                          fe_face_values_m.JxW(q);
-                      }
-
-                  for (const auto i : fe_face_values_p.dof_indices())
-                    for (const auto j : fe_face_values_m.dof_indices())
-                      {
-                        local_stabilization_pm(i, j) -=
-                          .5 * ghost_parameter * cell_side_length * normal *
-                          fe_face_values_p.shape_grad(i, q) * normal *
-                          fe_face_values_m.shape_grad(j, q) *
-                          fe_face_values_m.JxW(q);
-                      }
-
-                  for (const auto i : fe_face_values_m.dof_indices())
-                    for (const auto j : fe_face_values_p.dof_indices())
-                      {
-                        local_stabilization_mp(i, j) -=
-                          .5 * ghost_parameter * cell_side_length * normal *
-                          fe_face_values_m.shape_grad(i, q) * normal *
-                          fe_face_values_p.shape_grad(j, q) *
-                          fe_face_values_m.JxW(q);
-                      }
-
-                  for (const auto i : fe_face_values_m.dof_indices())
-                    for (const auto j : fe_face_values_m.dof_indices())
-                      {
-                        local_stabilization_pp(i, j) +=
-                          .5 * ghost_parameter * cell_side_length * normal *
-                          fe_face_values_p.shape_grad(i, q) * normal *
-                          fe_face_values_p.shape_grad(j, q) *
-                          fe_face_values_m.JxW(q);
+                          fe_interface_values.jump_in_shape_gradients(i, q) *
+                          normal *
+                          fe_interface_values.jump_in_shape_gradients(j, q) *
+                          fe_interface_values.JxW(q);
                       }
                 }
 
-              std::vector<types::global_dof_index> local_dof_indices_m(
-                fe_face_values_m.dofs_per_cell);
-              std::vector<types::global_dof_index> local_dof_indices_p(
-                fe_face_values_p.dofs_per_cell);
+              const std::vector<types::global_dof_index>
+                local_interface_dof_indices =
+                  fe_interface_values.get_interface_dof_indices();
 
-              cell->get_dof_indices(local_dof_indices_m);
-              cell->neighbor(f)->get_dof_indices(local_dof_indices_p);
-
-              stiffness_matrix.add(local_dof_indices_m,
-                                   local_dof_indices_m,
-                                   local_stabilization_mm);
-              stiffness_matrix.add(local_dof_indices_p,
-                                   local_dof_indices_m,
-                                   local_stabilization_pm);
-              stiffness_matrix.add(local_dof_indices_m,
-                                   local_dof_indices_p,
-                                   local_stabilization_mp);
-              stiffness_matrix.add(local_dof_indices_p,
-                                   local_dof_indices_p,
-                                   local_stabilization_pp);
+              stiffness_matrix.add(local_interface_dof_indices,
+                                   local_stabilization);
             }
 
         cell->get_dof_indices(local_dof_indices);
