@@ -131,7 +131,7 @@ void
 test(const unsigned int fe_degree,
      const unsigned int n_subdivisions_1D,
      const double       cfl,
-     const bool         do_ghost_penalty = false)
+     const bool         do_ghost_penalty = true)
 {
   using Number     = double;
   using VectorType = Vector<Number>;
@@ -354,9 +354,6 @@ test(const unsigned int fe_degree,
                   local_interface_dof_indices =
                     fe_interface_values.get_interface_dof_indices();
 
-                local_stabilization.print(std::cout);
-                std::cout << std::endl;
-
                 sparse_matrix.add(local_interface_dof_indices,
                                   local_stabilization);
               }
@@ -543,6 +540,11 @@ test(const unsigned int fe_degree,
       level_set_dof_handler,
       level_set);
 
+    FEInterfaceValues<dim> fe_interface_values(
+      fe,
+      hp::QCollection<dim - 1>(QGauss<dim - 1>(fe_degree + 1)),
+      update_gradients | update_JxW_values | update_normal_vectors);
+
     advection.set_time(time);
 
     unsigned int point_counter = 0;
@@ -552,6 +554,8 @@ test(const unsigned int fe_degree,
           NonMatching::LocationToLevelSet::outside)
         {
           non_matching_fe_values.reinit(cell);
+
+          const double cell_side_length = cell->minimum_vertex_distance();
 
           const auto &fe_values_ptr =
             non_matching_fe_values.get_inside_fe_values();
@@ -709,6 +713,51 @@ test(const unsigned int fe_degree,
                           fe_face_values.shape_value(i, q_index) *
                           fe_face_values.JxW(q_index);
                   }
+              }
+
+          for (const unsigned int f : cell->face_indices())
+            if (face_has_ghost_penalty(cell, f))
+              {
+                fe_interface_values.reinit(cell,
+                                           f,
+                                           numbers::invalid_unsigned_int,
+                                           cell->neighbor(f),
+                                           cell->neighbor_of_neighbor(f),
+                                           numbers::invalid_unsigned_int);
+
+                const unsigned int n_interface_dofs =
+                  fe_interface_values.n_current_interface_dofs();
+                Vector<double> local_stabilization(n_interface_dofs);
+
+                std::vector<Tensor<1, dim>> jump_in_shape_gradients(
+                  fe_interface_values.n_quadrature_points);
+
+                fe_interface_values.get_jump_in_function_gradients(
+                  vec_0, jump_in_shape_gradients);
+
+                for (unsigned int q = 0;
+                     q < fe_interface_values.n_quadrature_points;
+                     ++q)
+                  {
+                    const Tensor<1, dim> normal = fe_interface_values.normal(q);
+                    for (unsigned int i = 0; i < n_interface_dofs; ++i)
+                      {
+                        local_stabilization(i) -=
+                          .5 * ghost_parameter * cell_side_length *
+                          cell_side_length *
+                          (normal *
+                           fe_interface_values.jump_in_shape_gradients(i, q)) *
+                          (normal * jump_in_shape_gradients[q]) *
+                          fe_interface_values.JxW(q);
+                      }
+                  }
+
+                const std::vector<types::global_dof_index>
+                  local_interface_dof_indices =
+                    fe_interface_values.get_interface_dof_indices();
+
+                constraints.distribute_local_to_global(
+                  local_stabilization, local_interface_dof_indices, vec_1);
               }
 
           constraints.distribute_local_to_global(cell_vector,
