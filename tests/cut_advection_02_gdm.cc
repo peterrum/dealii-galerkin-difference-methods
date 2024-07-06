@@ -5,6 +5,7 @@
 // by Florian Streitbürger, Gunnar Birke, Christian Engwer, Sandra May
 
 #include <deal.II/base/conditional_ostream.h>
+#include <deal.II/base/convergence_table.h>
 #include <deal.II/base/discrete_time.h>
 #include <deal.II/base/function.h>
 #include <deal.II/base/function_signed_distance.h>
@@ -26,6 +27,10 @@
 #include <deal.II/lac/precondition.h>
 #include <deal.II/lac/solver_cg.h>
 #include <deal.II/lac/sparse_matrix.h>
+#include <deal.II/lac/trilinos_precondition.h>
+#include <deal.II/lac/trilinos_solver.h>
+#include <deal.II/lac/trilinos_sparse_matrix.h>
+#include <deal.II/lac/trilinos_sparsity_pattern.h>
 
 #include <deal.II/non_matching/fe_immersed_values.h>
 #include <deal.II/non_matching/fe_values.h>
@@ -83,41 +88,124 @@ private:
   const double           phi;
 };
 
+template <int dim, typename Number = double>
+class ExactSolutionDerivative : public dealii::Function<dim, Number>
+{
+public:
+  ExactSolutionDerivative(const double x_shift,
+                          const double phi,
+                          const double phi_add,
+                          const double time = 0.)
+    : dealii::Function<dim, Number>(1, time)
+    , x_shift(x_shift)
+    , phi(phi)
+  {
+    advection[0] = 2.0 * std::cos(phi + phi_add);
+    advection[1] = 2.0 * std::sin(phi + phi_add);
+  }
+
+  virtual double
+  value(const dealii::Point<dim> &p, const unsigned int = 1) const override
+  {
+    double                       t        = this->get_time();
+    const dealii::Tensor<1, dim> position = p - t * advection;
+
+    const double x_hat =
+      std::cos(phi) * (position[0] - x_shift) + std::sin(phi) * position[1];
+
+    return std::cos(std::sqrt(2.0) * numbers::PI * x_hat / (1.0 - x_shift)) *
+           (std::sqrt(2.0) * numbers::PI / (1.0 - x_shift)) *
+           (std::cos(phi) * (-advection[0]) + std::sin(phi) * (-advection[1]));
+  }
+
+  const dealii::Tensor<1, dim> &
+  get_transport_direction() const
+  {
+    return advection;
+  }
+
+private:
+  dealii::Tensor<1, dim> advection;
+  const double           x_shift;
+  const double           phi;
+};
+
+
+
+template <typename SparseMatrixType>
+void
+eigenvalue_estimates(const SparseMatrixType &matrix_a)
+{
+  LAPACKFullMatrix<double> lapack_full_matrix(matrix_a.m(), matrix_a.n());
+
+
+  for (const auto &entry : matrix_a)
+    lapack_full_matrix.set(entry.row(), entry.column(), entry.value());
+
+  lapack_full_matrix.compute_eigenvalues();
+
+  std::vector<double> eigenvalues;
+
+  for (unsigned int i = 0; i < lapack_full_matrix.m(); ++i)
+    eigenvalues.push_back(lapack_full_matrix.eigenvalue(i).real());
+
+  std::sort(eigenvalues.begin(), eigenvalues.end());
+
+  printf("%10.2e %10.2e %10.2e \n",
+         eigenvalues[0],
+         eigenvalues.back(),
+         eigenvalues.back() / eigenvalues[0]);
+}
+
 
 
 template <int dim>
 void
-test()
+test(ConvergenceTable  &table,
+     const unsigned int fe_degree,
+     const unsigned int n_subdivisions_1D,
+     const double       cfl,
+     const bool         rotate,
+     const double       factor = 1.0)
 {
   using Number     = double;
-  using VectorType = Vector<Number>;
+  using VectorType = LinearAlgebra::distributed::Vector<Number>;
 
   // settings
-  const double       phi     = std::atan(0.5); // numbers::PI / 8.0; // TODO
-  const double       phi_add = numbers::PI / 16.0;
-  const double       x_shift = 0.2000; // 0.2001
-  const unsigned int n_components           = 1;
-  const unsigned int fe_degree              = 3;
+  const double       phi          = (numbers::PI / 8.0) * factor; // TODO
+  const double       phi_add      = rotate ? (numbers::PI / 16.0) : 0.0;
+  const double       x_shift      = 0.2001;
+  const unsigned int n_components = 1;
   const unsigned int fe_degree_time_stepper = fe_degree;
   const unsigned int fe_degree_level_set    = 1;
-  const unsigned int n_subdivisions_1D      = 40;
   const unsigned int fe_degree_output       = 2;
-  const double       delta_t = (1.0 / n_subdivisions_1D) * 0.4 * 1.0 /
-                         (2 * fe_degree_time_stepper + 1) / 2.0;
-  const double                           start_t = 0.0;
-  const double                           end_t   = 0.1;
-  const double                           alpha   = 0.0;
+  const double       dx                     = (1.0 / n_subdivisions_1D);
+  const double       max_vel                = 2.0;
+  const double       sandra_factor =
+    false ? (1.0 / (2 * fe_degree_time_stepper + 1)) : 1.0;
+  const double delta_t = dx * cfl * sandra_factor / max_vel;
+  const double start_t = 0.0;
+  const double end_t   = 0.1;
+  const double alpha   = 0.0;
   const TimeStepping::runge_kutta_method runge_kutta_method =
     TimeStepping::runge_kutta_method::RK_CLASSIC_FOURTH_ORDER;
+  const std::string solver_name = "ILU";
 
-  ConditionalOStream cout_detail(std::cout, false);
+  const MPI_Comm comm = MPI_COMM_WORLD;
 
-  ExactSolution<dim> exact_solution(x_shift, phi, phi_add);
+  ConditionalOStream pcout(std::cout,
+                           (Utilities::MPI::this_mpi_process(comm) == 0) &&
+                             false);
+  ConditionalOStream pcout_detail(
+    std::cout, (Utilities::MPI::this_mpi_process(comm) == 0) && false);
+
+  ExactSolution<dim>           exact_solution(x_shift, phi, phi_add);
+  ExactSolutionDerivative<dim> exact_solution_der(x_shift, phi, phi_add);
   Functions::ConstantFunction<dim, Number> advection(
     exact_solution.get_transport_direction().begin_raw(), dim);
 
   // Create GDM system
-  GDM::System<dim> system(fe_degree, n_components);
+  GDM::System<dim> system(comm, fe_degree, n_components);
 
   // Create mesh
   system.subdivided_hyper_cube(n_subdivisions_1D, 0, 1);
@@ -132,8 +220,6 @@ test()
   // Categorize cells
   system.categorize();
 
-  cout_detail << " - " << system.n_dofs() << " DoFs" << std::endl;
-
   const auto &tria = system.get_triangulation();
 
   // level set and classify cells
@@ -141,8 +227,11 @@ test()
   DoFHandler<dim> level_set_dof_handler(tria);
   level_set_dof_handler.distribute_dofs(fe_level_set);
 
-  Vector<double> level_set;
-  level_set.reinit(level_set_dof_handler.n_dofs());
+  VectorType level_set;
+  level_set.reinit(level_set_dof_handler.locally_owned_dofs(),
+                   DoFTools::extract_locally_relevant_dofs(
+                     level_set_dof_handler),
+                   comm);
 
   NonMatching::MeshClassifier<dim> mesh_classifier(level_set_dof_handler,
                                                    level_set);
@@ -157,19 +246,19 @@ test()
                            signed_distance_sphere,
                            level_set);
 
+  level_set.update_ghost_values();
   mesh_classifier.reclassify();
 
   AffineConstraints<Number> constraints;
   constraints.close();
 
   // compute mass matrix
-  DynamicSparsityPattern dsp(system.n_dofs());
-  system.create_sparsity_pattern(constraints, dsp);
+  TrilinosWrappers::SparsityPattern sparsity_pattern(
+    system.locally_owned_dofs(), MPI_COMM_WORLD);
+  system.create_sparsity_pattern(constraints, sparsity_pattern);
+  sparsity_pattern.compress();
 
-  SparsityPattern sparsity_pattern;
-  sparsity_pattern.copy_from(dsp);
-
-  SparseMatrix<Number> sparse_matrix;
+  TrilinosWrappers::SparseMatrix sparse_matrix;
   sparse_matrix.reinit(sparsity_pattern);
 
   {
@@ -230,23 +319,210 @@ test()
         }
   }
 
+  sparse_matrix.compress(VectorOperation::values::add);
+
+  if (false)
+    {
+      for (auto &entry : sparse_matrix)
+        if ((entry.row() == entry.column()))
+          {
+            pcout << "(" << entry.row() << ": " << entry.value() << ") "
+                  << std::endl;
+          }
+
+      pcout << std::endl << std::endl;
+
+      return;
+    }
+
+  if (false)
+    {
+      const double tolerance = 1e-10;
+
+      IndexSet ghost(system.n_dofs());
+      ghost.add_range(0, system.n_dofs());
+
+      LinearAlgebra::distributed::Vector<double> diagonal(
+        system.locally_owned_dofs(), ghost, comm);
+
+      for (auto &entry : sparse_matrix)
+        if ((entry.row() == entry.column()))
+          {
+            diagonal[entry.row()] = std::abs(entry.value());
+          }
+
+      diagonal.update_ghost_values();
+
+      for (auto &entry : sparse_matrix)
+        if ((diagonal[entry.row()] < tolerance) &&
+            (diagonal[entry.column()] < tolerance))
+          entry.value() = 0.0;
+    }
+
   for (auto &entry : sparse_matrix)
     if ((entry.row() == entry.column()) && (entry.value() == 0.0))
       {
         entry.value() = 1.0;
       }
 
+  TrilinosWrappers::PreconditionAMG preconditioner_amg;
+  TrilinosWrappers::PreconditionILU preconditioner_ilu;
+  TrilinosWrappers::SolverDirect    solver_direct;
+
+  if (solver_name == "AMG")
+    preconditioner_amg.initialize(sparse_matrix);
+  else if (solver_name == "ILU")
+    preconditioner_ilu.initialize(sparse_matrix);
+  else if (solver_name == "direct")
+    solver_direct.initialize(sparse_matrix);
+  else
+    AssertThrow(false, ExcNotImplemented());
+
   // set up initial condition
-  VectorType solution(system.n_dofs());
+  const auto partitioner =
+    std::make_shared<Utilities::MPI::Partitioner>(system.locally_owned_dofs(),
+                                                  system.locally_relevant_dofs(
+                                                    constraints),
+                                                  comm);
+  VectorType solution(partitioner);
   GDM::VectorTools::interpolate(mapping, system, exact_solution, solution);
 
-  const auto fu_rhs = [&](const double time, const VectorType &solution) {
+  // set up BCs
+  std::vector<Point<dim>> all_points;
+
+  {
+    const QGauss<1> quadrature_1D(fe_degree + 1);
+
+    NonMatching::RegionUpdateFlags region_update_flags;
+    region_update_flags.inside = update_values | update_gradients |
+                                 update_JxW_values | update_quadrature_points;
+    region_update_flags.surface = update_values | update_gradients |
+                                  update_JxW_values | update_quadrature_points |
+                                  update_normal_vectors;
+
+    NonMatching::FEValues<dim> non_matching_fe_values(fe,
+                                                      quadrature_1D,
+                                                      region_update_flags,
+                                                      mesh_classifier,
+                                                      level_set_dof_handler,
+                                                      level_set);
+
+    NonMatching::RegionUpdateFlags region_update_flags_face;
+    region_update_flags_face.inside =
+      update_values | update_gradients | update_JxW_values |
+      update_quadrature_points | update_normal_vectors;
+
+    NonMatching::FEInterfaceValues<dim> non_matching_fe_interface_values(
+      fe,
+      quadrature_1D,
+      region_update_flags_face,
+      mesh_classifier,
+      level_set_dof_handler,
+      level_set);
+
+    for (const auto &cell : system.locally_active_cell_iterators())
+      if (mesh_classifier.location_to_level_set(cell->dealii_iterator()) !=
+          NonMatching::LocationToLevelSet::outside)
+        {
+          non_matching_fe_values.reinit(cell->dealii_iterator(),
+                                        numbers::invalid_unsigned_int,
+                                        numbers::invalid_unsigned_int,
+                                        cell->active_fe_index());
+
+          const auto &surface_fe_values_ptr =
+            non_matching_fe_values.get_surface_fe_values();
+
+          if ((phi_add != 0) && surface_fe_values_ptr)
+            {
+              const auto &fe_face_values = *surface_fe_values_ptr;
+
+              for (const auto q : fe_face_values.quadrature_point_indices())
+                {
+                  all_points.emplace_back(fe_face_values.quadrature_point(q));
+                }
+            }
+
+          for (const auto f : cell->dealii_iterator()->face_indices())
+            if (cell->dealii_iterator()->face(f)->at_boundary())
+              {
+                non_matching_fe_interface_values.reinit(
+                  cell->dealii_iterator(),
+                  f,
+                  numbers::invalid_unsigned_int,
+                  numbers::invalid_unsigned_int,
+                  cell->active_fe_index());
+
+                const auto &fe_interface_values =
+                  non_matching_fe_interface_values.get_inside_fe_values();
+
+                if (fe_interface_values)
+                  {
+                    const auto &fe_face_values =
+                      fe_interface_values->get_fe_face_values(0);
+
+                    for (const auto q :
+                         fe_face_values.quadrature_point_indices())
+                      {
+                        all_points.emplace_back(
+                          fe_face_values.quadrature_point(q));
+                      }
+                  }
+              }
+        }
+  }
+
+  std::vector<Vector<double>> stage_bcs;
+
+  const auto fu_eval_bc = [&](const double time) {
+    exact_solution.set_time(time);
+
+    Vector<double> stage_bc(all_points.size());
+
+    for (unsigned int i = 0; i < all_points.size(); ++i)
+      stage_bc[i] = exact_solution.value(all_points[i]);
+
+    return stage_bc;
+  };
+
+  const auto fu_bc = [&](const double time, const Vector<double> &solution) {
+    if (false)
+      {
+        exact_solution.set_time(time);
+
+        Vector<double> stage_bc(all_points.size());
+
+        for (unsigned int i = 0; i < all_points.size(); ++i)
+          stage_bc[i] = exact_solution.value(all_points[i]);
+        stage_bcs.emplace_back(stage_bc);
+
+        return solution;
+      }
+    else
+      {
+        exact_solution_der.set_time(time);
+
+        stage_bcs.emplace_back(solution);
+
+        Vector<double> stage_bc(all_points.size());
+
+        for (unsigned int i = 0; i < all_points.size(); ++i)
+          stage_bc[i] = exact_solution_der.value(all_points[i]);
+
+        return stage_bc;
+      }
+  };
+
+  // helper function to evaluate right-hand-side vector
+  unsigned int stage_counter = 0;
+  const auto   fu_rhs = [&](const double time, const VectorType &solution) {
     VectorType vec_0, vec_1, vec_2;
     vec_0.reinit(solution); // for applying constraints
     vec_1.reinit(solution); // result of assembly of rhs vector
     vec_2.reinit(solution); // result of inversion mass matrix
 
     vec_0 = solution;
+
+    exact_solution.set_time(time);
 
     // apply constraints
     constraints.distribute(vec_0);
@@ -281,6 +557,10 @@ test()
       level_set);
 
     advection.set_time(time);
+
+    unsigned int point_counter = 0;
+
+    vec_0.update_ghost_values();
 
     for (const auto &cell : system.locally_active_cell_iterators())
       if (mesh_classifier.location_to_level_set(cell->dealii_iterator()) !=
@@ -350,7 +630,7 @@ test()
                                    fe_values.JxW(q_index));
             }
 
-          if (surface_fe_values_ptr)
+          if ((phi_add != 0) && surface_fe_values_ptr)
             {
               const auto &fe_face_values = *surface_fe_values_ptr;
 
@@ -377,8 +657,7 @@ test()
 
               for (const auto q : fe_face_values.quadrature_point_indices())
                 {
-                  const auto point = fe_face_values.quadrature_point(q);
-                  u_plus[q]        = exact_solution.value(point);
+                  u_plus[q] = stage_bcs[stage_counter][point_counter++];
                 }
 
               for (const unsigned int q_index :
@@ -388,7 +667,7 @@ test()
                     fluxes[q_index] *
                     (alpha * quadrature_values[q_index] -
                      ((fluxes[q_index] >= 0.0) ? quadrature_values[q_index] :
-                                                 u_plus[q_index])) *
+                                                   u_plus[q_index])) *
                     fe_face_values.shape_value(i, q_index) *
                     fe_face_values.JxW(q_index);
             }
@@ -424,7 +703,7 @@ test()
                          fe_face_values.quadrature_point_indices())
                       {
                         const auto normal = fe_face_values.normal_vector(q);
-                        const auto point  = fe_face_values.quadrature_point(q);
+                        const auto point = fe_face_values.quadrature_point(q);
 
                         for (unsigned int d = 0; d < dim; ++d)
                           {
@@ -438,8 +717,7 @@ test()
                     for (const auto q :
                          fe_face_values.quadrature_point_indices())
                       {
-                        const auto point = fe_face_values.quadrature_point(q);
-                        u_plus[q]        = exact_solution.value(point);
+                        u_plus[q] = stage_bcs[stage_counter][point_counter++];
                       }
 
                     for (const unsigned int q_index :
@@ -449,8 +727,8 @@ test()
                           fluxes[q_index] *
                           (alpha * quadrature_values[q_index] -
                            ((fluxes[q_index] >= 0.0) ?
-                              quadrature_values[q_index] :
-                              u_plus[q_index])) *
+                                quadrature_values[q_index] :
+                                u_plus[q_index])) *
                           fe_face_values.shape_value(i, q_index) *
                           fe_face_values.JxW(q_index);
                   }
@@ -461,20 +739,40 @@ test()
                                                  vec_1);
         }
 
+    vec_1.compress(VectorOperation::add);
+
     // invert mass matrix
-    PreconditionJacobi<SparseMatrix<Number>> preconditioner;
-    preconditioner.initialize(sparse_matrix);
+    if (solver_name == "AMG" || solver_name == "ILU")
+      {
+        ReductionControl     solver_control(1000, 1.e-20, 1.e-14);
+        SolverCG<VectorType> solver(solver_control);
 
-    ReductionControl     solver_control(100, 1.e-10, 1.e-8);
-    SolverCG<VectorType> solver(solver_control);
-    solver.solve(sparse_matrix, vec_2, vec_1, preconditioner);
+        if (solver_name == "AMG")
+          solver.solve(sparse_matrix, vec_2, vec_1, preconditioner_amg);
+        else if (solver_name == "ILU")
+          solver.solve(sparse_matrix, vec_2, vec_1, preconditioner_ilu);
+        else
+          AssertThrow(false, ExcNotImplemented());
 
-    cout_detail << " [L] solved in " << solver_control.last_step() << std::endl;
+        pcout_detail << " [L] solved in " << solver_control.last_step()
+                     << std::endl;
+      }
+    else if (solver_name == "direct")
+      {
+        solver_direct.solve(sparse_matrix, vec_2, vec_1);
+      }
+    else
+      {
+        AssertThrow(false, ExcNotImplemented());
+      }
+
+    stage_counter++;
 
     return vec_2;
   };
 
-  const auto fu_postprocessing = [&](const double time) {
+  const auto fu_postprocessing =
+    [&](const double time) -> std::array<double, 6> {
     static unsigned int counter = 0;
 
     // compute error
@@ -486,6 +784,8 @@ test()
     NonMatching::RegionUpdateFlags region_update_flags_error;
     region_update_flags_error.inside =
       update_values | update_JxW_values | update_quadrature_points;
+    region_update_flags_error.surface =
+      update_values | update_JxW_values | update_quadrature_points;
 
     NonMatching::FEValues<dim> non_matching_fe_values_error(
       fe,
@@ -495,8 +795,14 @@ test()
       level_set_dof_handler,
       level_set);
 
-    double error_L2_squared = 0;
+    double local_error_Linf            = 0;
+    double local_error_L1              = 0;
+    double local_error_L2_squared      = 0;
+    double local_error_Linf_face       = 0;
+    double local_error_L1_face         = 0;
+    double local_error_L2_face_squared = 0;
 
+    solution.update_ghost_values();
     for (const auto &cell : system.locally_active_cell_iterators())
       if (mesh_classifier.location_to_level_set(cell->dealii_iterator()) !=
           NonMatching::LocationToLevelSet::outside)
@@ -508,6 +814,10 @@ test()
 
           const std::optional<FEValues<dim>> &fe_values =
             non_matching_fe_values_error.get_inside_fe_values();
+
+          const std::optional<NonMatching::FEImmersedSurfaceValues<dim>>
+            &fe_surface_values =
+              non_matching_fe_values_error.get_surface_fe_values();
 
 
           std::vector<types::global_dof_index> local_dof_indices(
@@ -527,71 +837,242 @@ test()
                   const Point<dim> &point = fe_values->quadrature_point(q);
                   const double      error_at_point =
                     solution_values.at(q) - exact_solution.value(point);
-                  error_L2_squared +=
+
+                  local_error_L2_squared +=
                     Utilities::fixed_power<2>(error_at_point) *
                     fe_values->JxW(q);
+
+                  local_error_L1 +=
+                    std::abs(error_at_point) * fe_values->JxW(q);
+
+                  local_error_Linf =
+                    std::max(local_error_Linf, std::abs(error_at_point));
+                }
+            }
+
+          if (fe_surface_values)
+            {
+              std::vector<double> solution_values(
+                fe_surface_values->n_quadrature_points);
+              fe_surface_values->get_function_values(solution,
+                                                     local_dof_indices,
+                                                     solution_values);
+
+              for (const unsigned int q :
+                   fe_surface_values->quadrature_point_indices())
+                {
+                  const Point<dim> &point =
+                    fe_surface_values->quadrature_point(q);
+                  const double error_at_point =
+                    solution_values.at(q) - exact_solution.value(point);
+
+                  local_error_L2_face_squared +=
+                    Utilities::fixed_power<2>(error_at_point) *
+                    fe_surface_values->JxW(q);
+
+                  local_error_L1_face +=
+                    std::abs(error_at_point) * fe_surface_values->JxW(q);
+
+                  local_error_Linf_face =
+                    std::max(local_error_Linf_face, std::abs(error_at_point));
                 }
             }
         }
 
-    const double error = std::sqrt(error_L2_squared);
+    const double error_Linf =
+      Utilities::MPI::max(local_error_Linf, MPI_COMM_WORLD);
 
-    std::cout << time << " " << error << std::endl;
+    const double error_L1 = Utilities::MPI::sum(local_error_L1, MPI_COMM_WORLD);
+
+    const double error_L2 =
+      std::sqrt(Utilities::MPI::sum(local_error_L2_squared, MPI_COMM_WORLD));
+
+    const double error_Linf_face =
+      Utilities::MPI::max(local_error_Linf_face, MPI_COMM_WORLD);
+
+    const double error_L1_face =
+      Utilities::MPI::sum(local_error_L1_face, MPI_COMM_WORLD);
+
+    const double error_L2_face = std::sqrt(
+      Utilities::MPI::sum(local_error_L2_face_squared, MPI_COMM_WORLD));
+
+    if (pcout.is_active())
+      printf("%5d %8.5f %14.8e %14.8e %14.8e\n",
+             counter,
+             time,
+             error_L2,
+             error_L1,
+             error_Linf);
 
     // output result -> Paraview
     GDM::DataOut<dim> data_out(system, mapping, fe_degree_output);
+    solution.update_ghost_values();
     data_out.add_data_vector(solution, "solution");
 
-    VectorType analytical_solution(system.n_dofs());
+    VectorType level_set(partitioner);
+    GDM::VectorTools::interpolate(mapping,
+                                  system,
+                                  signed_distance_sphere,
+                                  level_set);
+    level_set.update_ghost_values();
+    data_out.add_data_vector(level_set, "level_set");
+
+    VectorType analytical_solution(partitioner);
     GDM::VectorTools::interpolate(mapping,
                                   system,
                                   exact_solution,
                                   analytical_solution);
+    analytical_solution.update_ghost_values();
     data_out.add_data_vector(analytical_solution, "analytical_solution");
 
-    data_out.set_cell_selection(
-      [&](const typename Triangulation<dim>::cell_iterator &cell) {
-        return cell->is_active() &&
-               mesh_classifier.location_to_level_set(cell) !=
-                 NonMatching::LocationToLevelSet::outside;
-      });
+    if (true)
+      data_out.set_cell_selection(
+        [&](const typename Triangulation<dim>::cell_iterator &cell) {
+          return cell->is_active() && cell->is_locally_owned() &&
+                 mesh_classifier.location_to_level_set(cell) !=
+                   NonMatching::LocationToLevelSet::outside;
+        });
 
     data_out.build_patches();
 
-    std::string   file_name = "solution_" + std::to_string(counter) + ".vtu";
-    std::ofstream file(file_name);
-    data_out.write_vtu(file);
+    std::string file_name = "solution_" + std::to_string(counter) + ".vtu";
+    data_out.write_vtu_in_parallel(file_name);
 
     counter++;
+
+    return {{error_Linf,
+             error_L1,
+             error_L2,
+             error_Linf_face,
+             error_L1_face,
+             error_L2_face}};
   };
 
   // set up time stepper
   DiscreteTime time(start_t, end_t, delta_t);
 
+  TimeStepping::ExplicitRungeKutta<Vector<double>> rk_bc;
+  rk_bc.initialize(runge_kutta_method);
+
   TimeStepping::ExplicitRungeKutta<VectorType> rk;
   rk.initialize(runge_kutta_method);
 
-  fu_postprocessing(0.0);
+  auto error = fu_postprocessing(0.0);
 
   // perform time stepping
-  while (time.is_at_end() == false)
+  while ((time.is_at_end() == false) && (error[2] < 1.0 /*TODO*/))
     {
+      stage_bcs.clear();
+      Vector<double> solution_bc = fu_eval_bc(time.get_current_time());
+      rk_bc.evolve_one_time_step(fu_bc,
+                                 time.get_current_time(),
+                                 time.get_next_step_size(),
+                                 solution_bc);
+
+      stage_counter = 0;
       rk.evolve_one_time_step(fu_rhs,
                               time.get_current_time(),
                               time.get_next_step_size(),
                               solution);
-      time.advance_time();
 
       constraints.distribute(solution);
 
       // output result
-      fu_postprocessing(time.get_current_time() + time.get_next_step_size());
+      error =
+        fu_postprocessing(time.get_current_time() + time.get_next_step_size());
+
+      time.advance_time();
     }
+
+  table.add_value("fe_degree", fe_degree);
+  table.add_value("cfl", cfl);
+  table.add_value("n_subdivision", n_subdivisions_1D);
+  table.add_value("error_2", error[2]);
+  table.set_scientific("error_2", true);
+  table.add_value("error_1", error[1]);
+  table.set_scientific("error_1", true);
+  table.add_value("error_inf", error[0]);
+  table.set_scientific("error_inf", true);
+  table.add_value("error_2_face", error[5]);
+  table.set_scientific("error_2_face", true);
+  table.add_value("error_1_face", error[4]);
+  table.set_scientific("error_1_face", true);
+  table.add_value("error_inf_face", error[3]);
+  table.set_scientific("error_inf_face", true);
+
+  if (false)
+    {
+      eigenvalue_estimates(sparse_matrix);
+    }
+
+  pcout << std::endl;
 }
 
 
 int
-main()
+main(int argc, char **argv)
 {
-  test<2>();
+  Utilities::MPI::MPI_InitFinalize mpi(argc, argv, 1);
+
+  ConvergenceTable table;
+
+  if (false)
+    {
+      const unsigned int n_subdivisions_1D = 10;
+      const double       cfl               = 0.1;
+
+      for (const unsigned int fe_degree : {1, 3, 5})
+        test<2>(table, fe_degree, n_subdivisions_1D, cfl, false);
+
+      for (const unsigned int fe_degree : {1, 3, 5})
+        test<2>(table, fe_degree, n_subdivisions_1D, cfl, true);
+
+      if (Utilities::MPI::this_mpi_process(MPI_COMM_WORLD) == 0)
+        {
+          table.write_text(std::cout);
+          std::cout << std::endl;
+        }
+    }
+
+  if (false)
+    {
+      const unsigned int fe_degree         = 5;
+      const unsigned int n_subdivisions_1D = 10;
+      const double       cfl               = 0.1;
+
+      for (double factor = 0.5; factor <= 2.0; factor += 0.1)
+        test<2>(table, fe_degree, n_subdivisions_1D, cfl, false, factor);
+
+      if (Utilities::MPI::this_mpi_process(MPI_COMM_WORLD) == 0)
+        {
+          table.write_text(std::cout);
+          std::cout << std::endl;
+        }
+    }
+
+  if (true)
+    {
+      const double factor = 1.0;
+
+
+      for (const unsigned int fe_degree : {3, 5})
+        {
+          for (const double cfl : {0.4, 0.2, 0.1, 0.05, 0.025})
+            {
+              for (unsigned int n_subdivisions_1D = 10;
+                   n_subdivisions_1D <= 100;
+                   n_subdivisions_1D += 10)
+                test<2>(
+                  table, fe_degree, n_subdivisions_1D, cfl, false, factor);
+
+              if (Utilities::MPI::this_mpi_process(MPI_COMM_WORLD) == 0)
+                {
+                  table.write_text(std::cout);
+                  std::cout << std::endl;
+                }
+
+              table.clear();
+            }
+        }
+    }
 }

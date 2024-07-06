@@ -14,22 +14,61 @@
 
 #include <gdm/data_out.h>
 #include <gdm/system.h>
+#include <gdm/vector_tools.h>
 
 #include <fstream>
+
+template <int dim, typename Number = double>
+class RightHandSideFunction : public dealii::Function<dim, Number>
+{
+public:
+  RightHandSideFunction()
+  {
+    AssertDimension(dim, 1);
+  }
+
+  virtual double
+  value(const dealii::Point<dim> &, const unsigned int = 1) const override
+  {
+    return 1.0;
+  }
+
+private:
+};
+
+template <int dim, typename Number = double>
+class ExactSolution : public dealii::Function<dim, Number>
+{
+public:
+  ExactSolution()
+  {
+    AssertDimension(dim, 1);
+  }
+
+  virtual double
+  value(const dealii::Point<dim> &p, const unsigned int = 1) const override
+  {
+    return 0.125 - 0.5 * (p[0] - 0.5) * (p[0] - 0.5);
+  }
+
+private:
+};
 
 
 
 template <int dim>
 void
-test()
+test(const unsigned int fe_degree)
 {
-  const unsigned int n_subdivisions   = 20;
-  const unsigned int fe_degree        = 3;
+  const unsigned int n_subdivisions   = 10;
   const unsigned int n_components     = 1;
   const unsigned int fe_degree_output = 2;
 
   using Number     = double;
   using VectorType = Vector<Number>;
+
+  RightHandSideFunction<dim> right_hand_side_function;
+  ExactSolution<dim>         exact_solution;
 
   // Create GDM system
   GDM::System<dim> system(fe_degree, n_components);
@@ -77,7 +116,8 @@ test()
                                          fe,
                                          quadrature,
                                          update_gradients | update_values |
-                                           update_JxW_values);
+                                           update_JxW_values |
+                                           update_quadrature_points);
 
   std::vector<types::global_dof_index> dof_indices;
   for (const auto &cell : system.locally_active_cell_iterators())
@@ -110,8 +150,10 @@ test()
       Vector<Number> cell_vector(dofs_per_cell);
       for (const unsigned int q_index : fe_values.quadrature_point_indices())
         for (const unsigned int i : fe_values.dof_indices())
-          cell_vector(i) +=
-            1.0 * fe_values.shape_value(i, q_index) * fe_values.JxW(q_index);
+          cell_vector(i) += right_hand_side_function.value(
+                              fe_values.quadrature_point(q_index)) *
+                            fe_values.shape_value(i, q_index) *
+                            fe_values.JxW(q_index);
 
       // assemble
       constraints.distribute_local_to_global(
@@ -131,6 +173,23 @@ test()
   for (const auto &value : solution)
     std::cout << value << std::endl;
 
+
+
+  Vector<Number> cell_wise_error;
+  GDM::VectorTools::integrate_difference(mapping,
+                                         system,
+                                         solution,
+                                         exact_solution,
+                                         cell_wise_error,
+                                         quadrature,
+                                         VectorTools::NormType::L2_norm);
+  const auto error =
+    VectorTools::compute_global_error(system.get_triangulation(),
+                                      cell_wise_error,
+                                      VectorTools::NormType::L2_norm);
+
+  printf("%8.5f %14.8f\n\n", 0.0, error);
+
   // output result -> Paraview
   GDM::DataOut<dim> data_out(system, mapping, fe_degree_output);
   data_out.add_data_vector(solution, "solution");
@@ -144,5 +203,6 @@ test()
 int
 main()
 {
-  test<1>();
+  for (const unsigned int fe_degree : {1, 3, 5})
+    test<1>(fe_degree);
 }

@@ -27,6 +27,13 @@ namespace GDM
       dof_handler_output.distribute_dofs(fe_output);
 
       data_out.attach_dof_handler(dof_handler_output);
+
+      if (dim > 1)
+        {
+          DataOutBase::VtkFlags flags;
+          flags.write_higher_order_cells = true;
+          data_out.set_flags(flags);
+        }
     }
 
     template <typename VectorType>

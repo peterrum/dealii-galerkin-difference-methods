@@ -57,6 +57,8 @@ namespace GDM
                                                  dof_indices,
                                                  sparse_matrix);
         }
+
+      sparse_matrix.compress(VectorOperation::values::add);
     }
 
     template <int dim, typename VectorType>

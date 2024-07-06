@@ -28,117 +28,7 @@ namespace GDM
   namespace internal
   {
     template <int dim>
-    class CellAccessor
-    {
-    public:
-      CellAccessor(const System<dim> &system, const unsigned int _index)
-        : system(system)
-        , _index(_index)
-      {}
-
-      unsigned int
-      index() const
-      {
-        return _index;
-      }
-
-      unsigned int
-      active_fe_index() const
-      {
-        return system.active_fe_indices[_index];
-      }
-
-      void
-      operator++()
-      {
-        _index++;
-      }
-
-      void
-      operator++(int)
-      {
-        _index++;
-      }
-
-      void
-      operator--()
-      {
-        _index--;
-      }
-
-      void
-      operator--(int)
-      {
-        _index--;
-      }
-
-      bool
-      operator==(const CellAccessor &other) const
-      {
-        return _index == other._index;
-      }
-
-      bool
-      operator!=(const CellAccessor &other) const
-      {
-        return _index != other._index;
-      }
-
-      typename Triangulation<dim>::active_cell_iterator
-      dealii_iterator() const
-      {
-        return typename Triangulation<dim>::active_cell_iterator(
-          &system.get_triangulation(), 0, system.active_cell_index_map[_index]);
-      }
-
-      void
-      get_dof_indices(std::vector<types::global_dof_index> &dof_indices) const
-      {
-        const auto indices =
-          index_to_indices<dim>(system.active_cell_index_map[_index],
-                                system.n_subdivisions);
-
-        std::array<unsigned int, dim> offset_reference;
-        for (unsigned int d = 0; d < dim; ++d)
-          offset_reference[d] =
-            (indices[d] < system.fe_degree / 2) ?
-              0 :
-              (std::min(system.n_subdivisions[d],
-                        indices[d] + system.fe_degree / 2 + 1) -
-               system.fe_degree);
-
-        std::array<unsigned int, dim> n_dofs;
-        for (unsigned int d = 0; d < dim; ++d)
-          n_dofs[d] = system.n_subdivisions[d] + 1;
-
-        for (unsigned int k = 0, c = 0;
-             k <= ((dim >= 3) ? system.fe_degree : 0);
-             ++k)
-          for (unsigned int j = 0; j <= ((dim >= 2) ? system.fe_degree : 0);
-               ++j)
-            for (unsigned int i = 0; i <= system.fe_degree; ++i, ++c)
-              {
-                auto offset = offset_reference;
-
-                if (dim >= 1)
-                  offset[0] += i;
-                if (dim >= 2)
-                  offset[1] += j;
-                if (dim >= 3)
-                  offset[2] += k;
-
-                const auto index = indices_to_index<dim>(offset, n_dofs);
-
-                AssertIndexRange(index, system.n_dofs());
-
-                dof_indices[c] = index;
-              }
-      }
-
-    private:
-      const System<dim> &system;
-      unsigned int       _index;
-    };
+    class CellAccessor;
 
 
 
@@ -205,6 +95,136 @@ namespace GDM
 
     private:
       CellAccessor<dim> accessor;
+    };
+
+
+
+    template <int dim>
+    class CellAccessor
+    {
+    public:
+      CellAccessor(const System<dim> &system, const unsigned int _index)
+        : system(system)
+        , _index(_index)
+      {}
+
+      unsigned int
+      index() const
+      {
+        return _index;
+      }
+
+      unsigned int
+      active_fe_index() const
+      {
+        return system.active_fe_indices[_index];
+      }
+
+      void
+      operator++()
+      {
+        _index++;
+      }
+
+      void
+      operator++(int)
+      {
+        _index++;
+      }
+
+      void
+      operator--()
+      {
+        _index--;
+      }
+
+      void
+      operator--(int)
+      {
+        _index--;
+      }
+
+      bool
+      operator==(const CellAccessor &other) const
+      {
+        return _index == other._index;
+      }
+
+      bool
+      operator!=(const CellAccessor &other) const
+      {
+        return _index != other._index;
+      }
+
+      CellIterator<dim>
+      neighbor(const unsigned int f) const
+      {
+        auto indices_neighbor =
+          index_to_indices<dim>(system.active_cell_index_map[_index],
+                                system.n_subdivisions);
+
+        indices_neighbor[f / dim] += (f % 2 == 1) ? +1 : -1;
+
+        const auto index_neighbor =
+          indices_to_index<dim>(indices_neighbor, system.n_subdivisions);
+
+        return CellIterator<dim>(CellAccessor(this->system, index_neighbor));
+      }
+
+      typename Triangulation<dim>::active_cell_iterator
+      dealii_iterator() const
+      {
+        return typename Triangulation<dim>::active_cell_iterator(
+          &system.get_triangulation(), 0, system.active_cell_index_map[_index]);
+      }
+
+      void
+      get_dof_indices(std::vector<types::global_dof_index> &dof_indices) const
+      {
+        const auto indices =
+          index_to_indices<dim>(system.active_cell_index_map[_index],
+                                system.n_subdivisions);
+
+        std::array<unsigned int, dim> offset_reference;
+        for (unsigned int d = 0; d < dim; ++d)
+          offset_reference[d] =
+            (indices[d] < system.fe_degree / 2) ?
+              0 :
+              (std::min(system.n_subdivisions[d],
+                        indices[d] + system.fe_degree / 2 + 1) -
+               system.fe_degree);
+
+        std::array<unsigned int, dim> n_dofs;
+        for (unsigned int d = 0; d < dim; ++d)
+          n_dofs[d] = system.n_subdivisions[d] + 1;
+
+        for (unsigned int k = 0, c = 0;
+             k <= ((dim >= 3) ? system.fe_degree : 0);
+             ++k)
+          for (unsigned int j = 0; j <= ((dim >= 2) ? system.fe_degree : 0);
+               ++j)
+            for (unsigned int i = 0; i <= system.fe_degree; ++i, ++c)
+              {
+                auto offset = offset_reference;
+
+                if (dim >= 1)
+                  offset[0] += i;
+                if (dim >= 2)
+                  offset[1] += j;
+                if (dim >= 3)
+                  offset[2] += k;
+
+                const auto index = indices_to_index<dim>(offset, n_dofs);
+
+                AssertIndexRange(index, system.n_dofs());
+
+                dof_indices[c] = index;
+              }
+      }
+
+    private:
+      const System<dim> &system;
+      unsigned int       _index;
     };
 
 
@@ -297,11 +317,14 @@ namespace GDM
   class System
   {
   public:
-    System(const unsigned int fe_degree, const unsigned int n_components)
+    System(const unsigned int fe_degree,
+           const unsigned int n_components,
+           const bool         add_ghost_layer = false)
       : comm(MPI_COMM_NULL)
       , fe_degree(fe_degree)
       , fe(generate_fe_collection<dim>(generate_polynomials_1D(fe_degree),
                                        n_components))
+      , add_ghost_layer(add_ghost_layer)
     {}
 
     System(const MPI_Comm     comm,
@@ -539,6 +562,36 @@ namespace GDM
     }
 
 
+    template <typename Number, typename SparsityPatternType>
+    void
+    create_flux_sparsity_pattern(const AffineConstraints<Number> &constraints,
+                                 SparsityPatternType             &dsp) const
+    {
+      Assert(add_ghost_layer, ExcNotImplemented());
+
+      std::vector<types::global_dof_index> dof_indices;
+      std::vector<types::global_dof_index> dof_indices_neighbor;
+      for (const auto &cell : locally_active_cell_iterators())
+        {
+          dof_indices.resize(fe[cell->active_fe_index()].n_dofs_per_cell());
+          cell->get_dof_indices(dof_indices);
+
+          constraints.add_entries_local_to_global(dof_indices, dsp);
+
+          for (unsigned int i = 0; i < 2 * dim; ++i)
+            if (cell->dealii_iterator()->at_boundary(i) == false)
+              {
+                dof_indices_neighbor.resize(
+                  fe[cell->neighbor(i)->active_fe_index()].n_dofs_per_cell());
+                cell->neighbor(i)->get_dof_indices(dof_indices_neighbor);
+                constraints.add_entries_local_to_global(dof_indices,
+                                                        dof_indices_neighbor,
+                                                        dsp);
+              }
+        }
+    }
+
+
     IteratorRange<GDM::internal::CellIterator<dim>>
     locally_active_cell_iterators() const
     {
@@ -670,6 +723,8 @@ namespace GDM
       for (const auto &cell : tria->active_cell_iterators())
         if (cell->is_locally_owned())
           active_cell_index_map.push_back(cell->active_cell_index());
+        else if ((add_ghost_layer) && (cell->is_artificial() == false))
+          active_cell_index_map.push_back(cell->active_cell_index());
 
       if (comm == MPI_COMM_NULL)
         {
@@ -704,6 +759,8 @@ namespace GDM
     // finite element
     const unsigned int          fe_degree;
     const hp::FECollection<dim> fe;
+
+    const bool add_ghost_layer;
 
     // geometry
     std::array<unsigned int, dim>       n_subdivisions;
