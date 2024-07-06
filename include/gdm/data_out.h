@@ -55,42 +55,44 @@ namespace GDM
 
       std::vector<types::global_dof_index> dof_indices;
       for (const auto &cell : system.locally_active_cell_iterators())
-        {
-          fe_values_collection.reinit(cell->dealii_iterator(),
-                                      numbers::invalid_unsigned_int,
-                                      numbers::invalid_unsigned_int,
-                                      cell->active_fe_index());
+        if (cell->is_locally_owned())
+          {
+            fe_values_collection.reinit(cell->dealii_iterator(),
+                                        numbers::invalid_unsigned_int,
+                                        numbers::invalid_unsigned_int,
+                                        cell->active_fe_index());
 
-          const auto &fe_values = fe_values_collection.get_present_fe_values();
+            const auto &fe_values =
+              fe_values_collection.get_present_fe_values();
 
-          const unsigned int dofs_per_cell =
-            fe_values.get_fe().n_dofs_per_cell();
+            const unsigned int dofs_per_cell =
+              fe_values.get_fe().n_dofs_per_cell();
 
-          // get indices
-          dof_indices.resize(dofs_per_cell);
-          cell->get_dof_indices(dof_indices);
+            // get indices
+            dof_indices.resize(dofs_per_cell);
+            cell->get_dof_indices(dof_indices);
 
-          // read vector
-          Vector<double> cell_vector_input(dofs_per_cell);
+            // read vector
+            Vector<double> cell_vector_input(dofs_per_cell);
 
-          for (const unsigned int i : fe_values.dof_indices())
-            cell_vector_input[i] = solution[dof_indices[i]];
-
-          // perform interpolation
-          Vector<double> cell_vector_output(
-            dof_handler_output.get_fe().n_dofs_per_cell());
-
-          for (const unsigned int q_index :
-               fe_values.quadrature_point_indices())
             for (const unsigned int i : fe_values.dof_indices())
-              cell_vector_output(q_index) +=
-                fe_values.shape_value(i, q_index) * cell_vector_input[i];
+              cell_vector_input[i] = solution[dof_indices[i]];
 
-          // write
-          cell->dealii_iterator()
-            ->as_dof_handler_iterator(dof_handler_output)
-            ->set_dof_values(cell_vector_output, solution_output);
-        }
+            // perform interpolation
+            Vector<double> cell_vector_output(
+              dof_handler_output.get_fe().n_dofs_per_cell());
+
+            for (const unsigned int q_index :
+                 fe_values.quadrature_point_indices())
+              for (const unsigned int i : fe_values.dof_indices())
+                cell_vector_output(q_index) +=
+                  fe_values.shape_value(i, q_index) * cell_vector_input[i];
+
+            // write
+            cell->dealii_iterator()
+              ->as_dof_handler_iterator(dof_handler_output)
+              ->set_dof_values(cell_vector_output, solution_output);
+          }
 
       data_out.add_data_vector(solution_output, label);
     }

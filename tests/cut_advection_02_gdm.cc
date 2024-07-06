@@ -318,8 +318,9 @@ test(ConvergenceTable  &table,
 
     std::vector<types::global_dof_index> dof_indices;
     for (const auto &cell : system.locally_active_cell_iterators())
-      if (mesh_classifier.location_to_level_set(cell->dealii_iterator()) !=
-          NonMatching::LocationToLevelSet::outside)
+      if (cell->is_locally_owned() &&
+          (mesh_classifier.location_to_level_set(cell->dealii_iterator()) !=
+           NonMatching::LocationToLevelSet::outside))
         {
           non_matching_fe_values.reinit(cell->dealii_iterator(),
                                         numbers::invalid_unsigned_int,
@@ -515,8 +516,9 @@ test(ConvergenceTable  &table,
       level_set);
 
     for (const auto &cell : system.locally_active_cell_iterators())
-      if (mesh_classifier.location_to_level_set(cell->dealii_iterator()) !=
-          NonMatching::LocationToLevelSet::outside)
+      if (cell->is_locally_owned() &&
+          (mesh_classifier.location_to_level_set(cell->dealii_iterator()) !=
+           NonMatching::LocationToLevelSet::outside))
         {
           non_matching_fe_values.reinit(cell->dealii_iterator(),
                                         numbers::invalid_unsigned_int,
@@ -657,8 +659,9 @@ test(ConvergenceTable  &table,
     vec_0.update_ghost_values();
 
     for (const auto &cell : system.locally_active_cell_iterators())
-      if (mesh_classifier.location_to_level_set(cell->dealii_iterator()) !=
-          NonMatching::LocationToLevelSet::outside)
+      if (cell->is_locally_owned() &&
+          (mesh_classifier.location_to_level_set(cell->dealii_iterator()) !=
+           NonMatching::LocationToLevelSet::outside))
         {
           non_matching_fe_values.reinit(cell->dealii_iterator(),
                                         numbers::invalid_unsigned_int,
@@ -898,8 +901,9 @@ test(ConvergenceTable  &table,
 
     solution.update_ghost_values();
     for (const auto &cell : system.locally_active_cell_iterators())
-      if (mesh_classifier.location_to_level_set(cell->dealii_iterator()) !=
-          NonMatching::LocationToLevelSet::outside)
+      if (cell->is_locally_owned() &&
+          (mesh_classifier.location_to_level_set(cell->dealii_iterator()) !=
+           NonMatching::LocationToLevelSet::outside))
         {
           non_matching_fe_values_error.reinit(cell->dealii_iterator(),
                                               numbers::invalid_unsigned_int,
@@ -1099,8 +1103,6 @@ test(ConvergenceTable  &table,
       eigenvalue_estimates(sparse_matrix);
     }
 
-  table.write_text(std::cout);
-
   pcout << std::endl;
 }
 
@@ -1151,20 +1153,15 @@ main(int argc, char **argv)
       const double factor = 1.0;
 
 
-      for (const unsigned int fe_degree : {5})
+      for (const unsigned int fe_degree : {3, 5})
         {
           for (const double cfl : {0.4, 0.2, 0.1, 0.05, 0.025})
             {
               for (unsigned int n_subdivisions_1D = 10;
                    n_subdivisions_1D <= 100;
                    n_subdivisions_1D += 10)
-                test<2>(table,
-                        fe_degree,
-                        n_subdivisions_1D,
-                        cfl,
-                        false,
-                        factor,
-                        true);
+                test<2>(
+                  table, fe_degree, n_subdivisions_1D, cfl, true, factor, true);
 
               if (Utilities::MPI::this_mpi_process(MPI_COMM_WORLD) == 0)
                 {

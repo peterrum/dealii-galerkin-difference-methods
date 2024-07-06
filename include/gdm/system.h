@@ -106,7 +106,9 @@ namespace GDM
       CellAccessor(const System<dim> &system, const unsigned int _index)
         : system(system)
         , _index(_index)
-      {}
+      {
+        AssertIndexRange(_index, system.active_cell_index_map.size() + 1);
+      }
 
       unsigned int
       index() const
@@ -117,6 +119,8 @@ namespace GDM
       unsigned int
       active_fe_index() const
       {
+        AssertIndexRange(_index, system.active_fe_indices.size());
+
         return system.active_fe_indices[_index];
       }
 
@@ -159,16 +163,26 @@ namespace GDM
       CellIterator<dim>
       neighbor(const unsigned int f) const
       {
-        auto indices_neighbor =
-          index_to_indices<dim>(system.active_cell_index_map[_index],
-                                system.n_subdivisions);
+        auto index_neighbor = _index;
 
-        indices_neighbor[f / dim] += (f % 2 == 1) ? +1 : -1;
-
-        const auto index_neighbor =
-          indices_to_index<dim>(indices_neighbor, system.n_subdivisions);
+        if (f == 0)
+          index_neighbor -= 1;
+        else if (f == 1)
+          index_neighbor += 1;
+        else if (f == 2)
+          index_neighbor -= system.n_subdivisions[0];
+        else if (f == 3)
+          index_neighbor += system.n_subdivisions[1];
+        else
+          Assert(false, ExcNotImplemented());
 
         return CellIterator<dim>(CellAccessor(this->system, index_neighbor));
+      }
+
+      bool
+      is_locally_owned() const
+      {
+        return dealii_iterator()->is_locally_owned();
       }
 
       typename Triangulation<dim>::active_cell_iterator
@@ -574,23 +588,24 @@ namespace GDM
       std::vector<types::global_dof_index> dof_indices;
       std::vector<types::global_dof_index> dof_indices_neighbor;
       for (const auto &cell : locally_active_cell_iterators())
-        {
-          dof_indices.resize(fe[cell->active_fe_index()].n_dofs_per_cell());
-          cell->get_dof_indices(dof_indices);
+        if (cell->is_locally_owned())
+          {
+            dof_indices.resize(fe[cell->active_fe_index()].n_dofs_per_cell());
+            cell->get_dof_indices(dof_indices);
 
-          constraints.add_entries_local_to_global(dof_indices, dsp);
+            constraints.add_entries_local_to_global(dof_indices, dsp);
 
-          for (unsigned int i = 0; i < 2 * dim; ++i)
-            if (cell->dealii_iterator()->at_boundary(i) == false)
-              {
-                dof_indices_neighbor.resize(
-                  fe[cell->neighbor(i)->active_fe_index()].n_dofs_per_cell());
-                cell->neighbor(i)->get_dof_indices(dof_indices_neighbor);
-                constraints.add_entries_local_to_global(dof_indices,
-                                                        dof_indices_neighbor,
-                                                        dsp);
-              }
-        }
+            for (unsigned int i = 0; i < 2 * dim; ++i)
+              if (cell->dealii_iterator()->at_boundary(i) == false)
+                {
+                  dof_indices_neighbor.resize(
+                    fe[cell->neighbor(i)->active_fe_index()].n_dofs_per_cell());
+                  cell->neighbor(i)->get_dof_indices(dof_indices_neighbor);
+                  constraints.add_entries_local_to_global(dof_indices,
+                                                          dof_indices_neighbor,
+                                                          dsp);
+                }
+          }
     }
 
 
