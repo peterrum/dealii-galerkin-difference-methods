@@ -24,6 +24,7 @@
 #include <deal.II/hp/fe_values.h>
 
 #include <deal.II/lac/dynamic_sparsity_pattern.h>
+#include <deal.II/lac/la_parallel_block_vector.h>
 #include <deal.II/lac/precondition.h>
 #include <deal.II/lac/solver_cg.h>
 #include <deal.II/lac/sparse_matrix.h>
@@ -166,10 +167,12 @@ test(ConvergenceTable  &table,
      const unsigned int n_subdivisions_1D,
      const double       cfl,
      const bool         rotate,
-     const double       factor = 1.0)
+     const double       factor           = 1.0,
+     const bool         do_ghost_penalty = true)
 {
-  using Number     = double;
-  using VectorType = LinearAlgebra::distributed::Vector<Number>;
+  using Number          = double;
+  using VectorType      = LinearAlgebra::distributed::Vector<Number>;
+  using BlockVectorType = LinearAlgebra::distributed::BlockVector<Number>;
 
   // settings
   const double       phi          = (numbers::PI / 8.0) * factor; // TODO
@@ -191,6 +194,8 @@ test(ConvergenceTable  &table,
     TimeStepping::runge_kutta_method::RK_CLASSIC_FOURTH_ORDER;
   const std::string solver_name = "ILU";
 
+  const double ghost_parameter = 0.5;
+
   const MPI_Comm comm = MPI_COMM_WORLD;
 
   ConditionalOStream pcout(std::cout,
@@ -205,7 +210,7 @@ test(ConvergenceTable  &table,
     exact_solution.get_transport_direction().begin_raw(), dim);
 
   // Create GDM system
-  GDM::System<dim> system(comm, fe_degree, n_components);
+  GDM::System<dim> system(comm, fe_degree, n_components, do_ghost_penalty);
 
   // Create mesh
   system.subdivided_hyper_cube(n_subdivisions_1D, 0, 1);
@@ -249,13 +254,42 @@ test(ConvergenceTable  &table,
   level_set.update_ghost_values();
   mesh_classifier.reclassify();
 
+  const auto face_has_ghost_penalty = [&](const auto        &cell,
+                                          const unsigned int face_index) {
+    if (!do_ghost_penalty)
+      return false;
+
+    if (cell->at_boundary(face_index))
+      return false;
+
+    const NonMatching::LocationToLevelSet cell_location =
+      mesh_classifier.location_to_level_set(cell);
+
+    const NonMatching::LocationToLevelSet neighbor_location =
+      mesh_classifier.location_to_level_set(cell->neighbor(face_index));
+
+    if (cell_location == NonMatching::LocationToLevelSet::intersected &&
+        neighbor_location != NonMatching::LocationToLevelSet::outside)
+      return true;
+
+    if (neighbor_location == NonMatching::LocationToLevelSet::intersected &&
+        cell_location != NonMatching::LocationToLevelSet::outside)
+      return true;
+
+    return false;
+  };
+
   AffineConstraints<Number> constraints;
   constraints.close();
 
   // compute mass matrix
   TrilinosWrappers::SparsityPattern sparsity_pattern(
     system.locally_owned_dofs(), MPI_COMM_WORLD);
-  system.create_sparsity_pattern(constraints, sparsity_pattern);
+
+  if (do_ghost_penalty)
+    system.create_flux_sparsity_pattern(constraints, sparsity_pattern);
+  else
+    system.create_sparsity_pattern(constraints, sparsity_pattern);
   sparsity_pattern.compress();
 
   TrilinosWrappers::SparseMatrix sparse_matrix;
@@ -278,27 +312,34 @@ test(ConvergenceTable  &table,
                                                       level_set_dof_handler,
                                                       level_set);
 
+    FEInterfaceValues<dim> fe_interface_values(
+      mapping,
+      fe,
+      hp::QCollection<dim - 1>(QGauss<dim - 1>(fe_degree + 1)),
+      update_gradients | update_JxW_values | update_normal_vectors);
+
     std::vector<types::global_dof_index> dof_indices;
     for (const auto &cell : system.locally_active_cell_iterators())
-      if (mesh_classifier.location_to_level_set(cell->dealii_iterator()) !=
-          NonMatching::LocationToLevelSet::outside)
+      if (cell->is_locally_owned() &&
+          (mesh_classifier.location_to_level_set(cell->dealii_iterator()) !=
+           NonMatching::LocationToLevelSet::outside))
         {
           non_matching_fe_values.reinit(cell->dealii_iterator(),
                                         numbers::invalid_unsigned_int,
                                         numbers::invalid_unsigned_int,
                                         cell->active_fe_index());
 
+          const double cell_side_length =
+            cell->dealii_iterator()->minimum_vertex_distance();
+
           const auto &fe_values = non_matching_fe_values.get_inside_fe_values();
 
           const unsigned int dofs_per_cell = fe[0].dofs_per_cell;
 
-          // get indices
-          dof_indices.resize(dofs_per_cell);
-          cell->get_dof_indices(dof_indices);
-
           // compute element stiffness matrix
           FullMatrix<Number> cell_matrix(dofs_per_cell, dofs_per_cell);
 
+          // (I) cell integral
           if (fe_values)
             {
               for (const unsigned int q_index :
@@ -312,6 +353,64 @@ test(ConvergenceTable  &table,
                 }
             }
 
+          // (II) face integral to apply GP
+          for (const unsigned int f : cell->dealii_iterator()->face_indices())
+            if (face_has_ghost_penalty(cell->dealii_iterator(), f))
+              {
+                fe_interface_values.reinit(
+                  cell->dealii_iterator(),
+                  f,
+                  numbers::invalid_unsigned_int,
+                  cell->dealii_iterator()->neighbor(f),
+                  cell->dealii_iterator()->neighbor_of_neighbor(f),
+                  numbers::invalid_unsigned_int,
+                  numbers::invalid_unsigned_int,
+                  numbers::invalid_unsigned_int,
+                  cell->active_fe_index(),
+                  cell->neighbor(f)->active_fe_index());
+
+                const unsigned int n_interface_dofs =
+                  fe_interface_values.n_current_interface_dofs();
+                FullMatrix<double> local_stabilization(n_interface_dofs,
+                                                       n_interface_dofs);
+                for (unsigned int q = 0;
+                     q < fe_interface_values.n_quadrature_points;
+                     ++q)
+                  {
+                    const Tensor<1, dim> normal = fe_interface_values.normal(q);
+                    for (unsigned int i = 0; i < n_interface_dofs; ++i)
+                      for (unsigned int j = 0; j < n_interface_dofs; ++j)
+                        {
+                          local_stabilization(i, j) +=
+                            .5 * ghost_parameter * cell_side_length *
+                            cell_side_length * cell_side_length *
+                            (normal *
+                             fe_interface_values.jump_in_shape_gradients(i,
+                                                                         q)) *
+                            (normal *
+                             fe_interface_values.jump_in_shape_gradients(j,
+                                                                         q)) *
+                            fe_interface_values.JxW(q);
+                        }
+                  }
+
+                std::vector<types::global_dof_index>
+                  local_interface_dof_indices;
+                cell->get_dof_indices(dof_indices);
+                for (const auto i : dof_indices)
+                  local_interface_dof_indices.emplace_back(i);
+                cell->neighbor(f)->get_dof_indices(dof_indices);
+                for (const auto i : dof_indices)
+                  local_interface_dof_indices.emplace_back(i);
+
+                sparse_matrix.add(local_interface_dof_indices,
+                                  local_stabilization);
+              }
+
+          // get indices
+          dof_indices.resize(dofs_per_cell);
+          cell->get_dof_indices(dof_indices);
+
           // assemble
           constraints.distribute_local_to_global(cell_matrix,
                                                  dof_indices,
@@ -320,44 +419,6 @@ test(ConvergenceTable  &table,
   }
 
   sparse_matrix.compress(VectorOperation::values::add);
-
-  if (false)
-    {
-      for (auto &entry : sparse_matrix)
-        if ((entry.row() == entry.column()))
-          {
-            pcout << "(" << entry.row() << ": " << entry.value() << ") "
-                  << std::endl;
-          }
-
-      pcout << std::endl << std::endl;
-
-      return;
-    }
-
-  if (false)
-    {
-      const double tolerance = 1e-10;
-
-      IndexSet ghost(system.n_dofs());
-      ghost.add_range(0, system.n_dofs());
-
-      LinearAlgebra::distributed::Vector<double> diagonal(
-        system.locally_owned_dofs(), ghost, comm);
-
-      for (auto &entry : sparse_matrix)
-        if ((entry.row() == entry.column()))
-          {
-            diagonal[entry.row()] = std::abs(entry.value());
-          }
-
-      diagonal.update_ghost_values();
-
-      for (auto &entry : sparse_matrix)
-        if ((diagonal[entry.row()] < tolerance) &&
-            (diagonal[entry.column()] < tolerance))
-          entry.value() = 0.0;
-    }
 
   for (auto &entry : sparse_matrix)
     if ((entry.row() == entry.column()) && (entry.value() == 0.0))
@@ -384,8 +445,12 @@ test(ConvergenceTable  &table,
                                                   system.locally_relevant_dofs(
                                                     constraints),
                                                   comm);
-  VectorType solution(partitioner);
-  GDM::VectorTools::interpolate(mapping, system, exact_solution, solution);
+  BlockVectorType solution(2);
+  solution.block(1).reinit(partitioner);
+  GDM::VectorTools::interpolate(mapping,
+                                system,
+                                exact_solution,
+                                solution.block(1));
 
   // set up BCs
   std::vector<Point<dim>> all_points;
@@ -421,8 +486,9 @@ test(ConvergenceTable  &table,
       level_set);
 
     for (const auto &cell : system.locally_active_cell_iterators())
-      if (mesh_classifier.location_to_level_set(cell->dealii_iterator()) !=
-          NonMatching::LocationToLevelSet::outside)
+      if (cell->is_locally_owned() &&
+          (mesh_classifier.location_to_level_set(cell->dealii_iterator()) !=
+           NonMatching::LocationToLevelSet::outside))
         {
           non_matching_fe_values.reinit(cell->dealii_iterator(),
                                         numbers::invalid_unsigned_int,
@@ -471,62 +537,32 @@ test(ConvergenceTable  &table,
         }
   }
 
-  std::vector<Vector<double>> stage_bcs;
+  solution.block(0).reinit(all_points.size());
 
-  const auto fu_eval_bc = [&](const double time) {
+  const auto fu_eval_bc = [&](const double time, VectorType &stage_bc) {
     exact_solution.set_time(time);
-
-    Vector<double> stage_bc(all_points.size());
-
     for (unsigned int i = 0; i < all_points.size(); ++i)
       stage_bc[i] = exact_solution.value(all_points[i]);
-
-    return stage_bc;
-  };
-
-  const auto fu_bc = [&](const double time, const Vector<double> &solution) {
-    if (false)
-      {
-        exact_solution.set_time(time);
-
-        Vector<double> stage_bc(all_points.size());
-
-        for (unsigned int i = 0; i < all_points.size(); ++i)
-          stage_bc[i] = exact_solution.value(all_points[i]);
-        stage_bcs.emplace_back(stage_bc);
-
-        return solution;
-      }
-    else
-      {
-        exact_solution_der.set_time(time);
-
-        stage_bcs.emplace_back(solution);
-
-        Vector<double> stage_bc(all_points.size());
-
-        for (unsigned int i = 0; i < all_points.size(); ++i)
-          stage_bc[i] = exact_solution_der.value(all_points[i]);
-
-        return stage_bc;
-      }
   };
 
   // helper function to evaluate right-hand-side vector
-  unsigned int stage_counter = 0;
-  const auto   fu_rhs = [&](const double time, const VectorType &solution) {
-    VectorType vec_0, vec_1, vec_2;
-    vec_0.reinit(solution); // for applying constraints
-    vec_1.reinit(solution); // result of assembly of rhs vector
-    vec_2.reinit(solution); // result of inversion mass matrix
+  const auto fu_rhs = [&](const double           time,
+                          const BlockVectorType &stage_bc_and_solution) {
+    const auto &stage_bc = stage_bc_and_solution.block(0);
+    const auto &solution = stage_bc_and_solution.block(1);
 
-    vec_0 = solution;
+    BlockVectorType result;
+    result.reinit(stage_bc_and_solution);
 
-    exact_solution.set_time(time);
+    VectorType vec_rhs;
+    vec_rhs.reinit(solution); // result of assembly of rhs vector
 
-    // apply constraints
-    constraints.distribute(vec_0);
+    // evaluate derivative of bc
+    exact_solution_der.set_time(time);
+    for (unsigned int i = 0; i < all_points.size(); ++i)
+      result.block(0)[i] = exact_solution_der.value(all_points[i]);
 
+    // evaluate advection operator
     const QGauss<1> quadrature_1D(fe_degree + 1);
 
     NonMatching::RegionUpdateFlags region_update_flags;
@@ -556,20 +592,30 @@ test(ConvergenceTable  &table,
       level_set_dof_handler,
       level_set);
 
+    FEInterfaceValues<dim> fe_interface_values(
+      mapping,
+      fe,
+      hp::QCollection<dim - 1>(QGauss<dim - 1>(fe_degree + 1)),
+      update_gradients | update_JxW_values | update_normal_vectors);
+
     advection.set_time(time);
 
     unsigned int point_counter = 0;
 
-    vec_0.update_ghost_values();
+    solution.update_ghost_values();
 
     for (const auto &cell : system.locally_active_cell_iterators())
-      if (mesh_classifier.location_to_level_set(cell->dealii_iterator()) !=
-          NonMatching::LocationToLevelSet::outside)
+      if (cell->is_locally_owned() &&
+          (mesh_classifier.location_to_level_set(cell->dealii_iterator()) !=
+           NonMatching::LocationToLevelSet::outside))
         {
           non_matching_fe_values.reinit(cell->dealii_iterator(),
                                         numbers::invalid_unsigned_int,
                                         numbers::invalid_unsigned_int,
                                         cell->active_fe_index());
+
+          const double cell_side_length =
+            cell->dealii_iterator()->minimum_vertex_distance();
 
           const auto &fe_values_ptr =
             non_matching_fe_values.get_inside_fe_values();
@@ -584,19 +630,20 @@ test(ConvergenceTable  &table,
 
           Vector<Number> cell_vector(n_dofs_per_cell);
 
+          // (I) cell integral
           if (fe_values_ptr)
             {
               const auto &fe_values = *fe_values_ptr;
 
               std::vector<Number> quadrature_values(
                 fe_values.n_quadrature_points);
-              fe_values.get_function_values(vec_0,
+              fe_values.get_function_values(solution,
                                             dof_indices,
                                             quadrature_values);
 
               std::vector<Tensor<1, dim, Number>> quadrature_gradients(
                 fe_values.n_quadrature_points);
-              fe_values.get_function_gradients(vec_0,
+              fe_values.get_function_gradients(solution,
                                                dof_indices,
                                                quadrature_gradients);
 
@@ -630,13 +677,14 @@ test(ConvergenceTable  &table,
                                    fe_values.JxW(q_index));
             }
 
+          // (II) surface integral to apply BC
           if ((phi_add != 0) && surface_fe_values_ptr)
             {
               const auto &fe_face_values = *surface_fe_values_ptr;
 
               std::vector<Number> quadrature_values(
                 fe_face_values.n_quadrature_points);
-              fe_face_values.get_function_values(vec_0,
+              fe_face_values.get_function_values(solution,
                                                  dof_indices,
                                                  quadrature_values);
 
@@ -648,17 +696,13 @@ test(ConvergenceTable  &table,
                   const auto point  = fe_face_values.quadrature_point(q);
 
                   for (unsigned int d = 0; d < dim; ++d)
-                    {
-                      fluxes[q] += normal[d] * advection.value(point, d);
-                    }
+                    fluxes[q] += normal[d] * advection.value(point, d);
                 }
 
               std::vector<Number> u_plus(fe_face_values.n_quadrature_points, 0);
 
               for (const auto q : fe_face_values.quadrature_point_indices())
-                {
-                  u_plus[q] = stage_bcs[stage_counter][point_counter++];
-                }
+                u_plus[q] = stage_bc[point_counter++];
 
               for (const unsigned int q_index :
                    fe_face_values.quadrature_point_indices())
@@ -667,11 +711,12 @@ test(ConvergenceTable  &table,
                     fluxes[q_index] *
                     (alpha * quadrature_values[q_index] -
                      ((fluxes[q_index] >= 0.0) ? quadrature_values[q_index] :
-                                                   u_plus[q_index])) *
+                                                 u_plus[q_index])) *
                     fe_face_values.shape_value(i, q_index) *
                     fe_face_values.JxW(q_index);
             }
 
+          // (III) face integral to apply BC
           for (const auto f : cell->dealii_iterator()->face_indices())
             if (cell->dealii_iterator()->face(f)->at_boundary())
               {
@@ -692,7 +737,7 @@ test(ConvergenceTable  &table,
 
                     std::vector<Number> quadrature_values(
                       fe_face_values.n_quadrature_points);
-                    fe_face_values.get_function_values(vec_0,
+                    fe_face_values.get_function_values(solution,
                                                        dof_indices,
                                                        quadrature_values);
 
@@ -703,12 +748,10 @@ test(ConvergenceTable  &table,
                          fe_face_values.quadrature_point_indices())
                       {
                         const auto normal = fe_face_values.normal_vector(q);
-                        const auto point = fe_face_values.quadrature_point(q);
+                        const auto point  = fe_face_values.quadrature_point(q);
 
                         for (unsigned int d = 0; d < dim; ++d)
-                          {
-                            fluxes[q] += normal[d] * advection.value(point, d);
-                          }
+                          fluxes[q] += normal[d] * advection.value(point, d);
                       }
 
                     std::vector<Number> u_plus(
@@ -716,9 +759,7 @@ test(ConvergenceTable  &table,
 
                     for (const auto q :
                          fe_face_values.quadrature_point_indices())
-                      {
-                        u_plus[q] = stage_bcs[stage_counter][point_counter++];
-                      }
+                      u_plus[q] = stage_bc[point_counter++];
 
                     for (const unsigned int q_index :
                          fe_face_values.quadrature_point_indices())
@@ -727,19 +768,84 @@ test(ConvergenceTable  &table,
                           fluxes[q_index] *
                           (alpha * quadrature_values[q_index] -
                            ((fluxes[q_index] >= 0.0) ?
-                                quadrature_values[q_index] :
-                                u_plus[q_index])) *
+                              quadrature_values[q_index] :
+                              u_plus[q_index])) *
                           fe_face_values.shape_value(i, q_index) *
                           fe_face_values.JxW(q_index);
                   }
               }
 
+          // (IV) face integral for apply GP
+          for (const unsigned int f : cell->dealii_iterator()->face_indices())
+            if (face_has_ghost_penalty(cell->dealii_iterator(), f))
+              {
+                fe_interface_values.reinit(
+                  cell->dealii_iterator(),
+                  f,
+                  numbers::invalid_unsigned_int,
+                  cell->dealii_iterator()->neighbor(f),
+                  cell->dealii_iterator()->neighbor_of_neighbor(f),
+                  numbers::invalid_unsigned_int,
+                  numbers::invalid_unsigned_int,
+                  numbers::invalid_unsigned_int,
+                  cell->active_fe_index(),
+                  cell->neighbor(f)->active_fe_index());
+
+                const unsigned int n_interface_dofs =
+                  fe_interface_values.n_current_interface_dofs();
+                Vector<double> local_stabilization(n_interface_dofs);
+
+                std::vector<types::global_dof_index>
+                  local_interface_dof_indices;
+                cell->get_dof_indices(dof_indices);
+                for (const auto i : dof_indices)
+                  local_interface_dof_indices.emplace_back(i);
+                cell->neighbor(f)->get_dof_indices(dof_indices);
+                for (const auto i : dof_indices)
+                  local_interface_dof_indices.emplace_back(i);
+
+                std::vector<Tensor<1, dim>> jump_in_shape_gradients(
+                  fe_interface_values.n_quadrature_points);
+
+                const FEValuesExtractors::Scalar scalar(0);
+
+                std::vector<double> local_dof_values(n_interface_dofs);
+                for (unsigned int i = 0; i < n_interface_dofs; ++i)
+                  local_dof_values[i] =
+                    solution[local_interface_dof_indices[i]];
+
+                fe_interface_values[scalar]
+                  .get_jump_in_function_gradients_from_local_dof_values(
+                    local_dof_values, jump_in_shape_gradients);
+
+                for (unsigned int q = 0;
+                     q < fe_interface_values.n_quadrature_points;
+                     ++q)
+                  {
+                    const Tensor<1, dim> normal = fe_interface_values.normal(q);
+                    for (unsigned int i = 0; i < n_interface_dofs; ++i)
+                      {
+                        local_stabilization(i) -=
+                          .5 * ghost_parameter * cell_side_length *
+                          cell_side_length *
+                          (normal *
+                           fe_interface_values.jump_in_shape_gradients(i, q)) *
+                          (normal * jump_in_shape_gradients[q]) *
+                          fe_interface_values.JxW(q);
+                      }
+                  }
+
+                constraints.distribute_local_to_global(
+                  local_stabilization, local_interface_dof_indices, vec_rhs);
+              }
+
+          cell->get_dof_indices(dof_indices);
           constraints.distribute_local_to_global(cell_vector,
                                                  dof_indices,
-                                                 vec_1);
+                                                 vec_rhs);
         }
 
-    vec_1.compress(VectorOperation::add);
+    vec_rhs.compress(VectorOperation::add);
 
     // invert mass matrix
     if (solver_name == "AMG" || solver_name == "ILU")
@@ -748,9 +854,15 @@ test(ConvergenceTable  &table,
         SolverCG<VectorType> solver(solver_control);
 
         if (solver_name == "AMG")
-          solver.solve(sparse_matrix, vec_2, vec_1, preconditioner_amg);
+          solver.solve(sparse_matrix,
+                       result.block(1),
+                       vec_rhs,
+                       preconditioner_amg);
         else if (solver_name == "ILU")
-          solver.solve(sparse_matrix, vec_2, vec_1, preconditioner_ilu);
+          solver.solve(sparse_matrix,
+                       result.block(1),
+                       vec_rhs,
+                       preconditioner_ilu);
         else
           AssertThrow(false, ExcNotImplemented());
 
@@ -759,21 +871,22 @@ test(ConvergenceTable  &table,
       }
     else if (solver_name == "direct")
       {
-        solver_direct.solve(sparse_matrix, vec_2, vec_1);
+        solver_direct.solve(sparse_matrix, result.block(1), vec_rhs);
       }
     else
       {
         AssertThrow(false, ExcNotImplemented());
       }
 
-    stage_counter++;
-
-    return vec_2;
+    return result;
   };
 
   const auto fu_postprocessing =
-    [&](const double time) -> std::array<double, 6> {
+    [&](const double           time,
+        const BlockVectorType &stage_bc_and_solution) -> std::array<double, 6> {
     static unsigned int counter = 0;
+
+    const auto &solution = stage_bc_and_solution.block(1);
 
     // compute error
     exact_solution.set_time(time);
@@ -804,8 +917,9 @@ test(ConvergenceTable  &table,
 
     solution.update_ghost_values();
     for (const auto &cell : system.locally_active_cell_iterators())
-      if (mesh_classifier.location_to_level_set(cell->dealii_iterator()) !=
-          NonMatching::LocationToLevelSet::outside)
+      if (cell->is_locally_owned() &&
+          (mesh_classifier.location_to_level_set(cell->dealii_iterator()) !=
+           NonMatching::LocationToLevelSet::outside))
         {
           non_matching_fe_values_error.reinit(cell->dealii_iterator(),
                                               numbers::invalid_unsigned_int,
@@ -951,25 +1065,16 @@ test(ConvergenceTable  &table,
   // set up time stepper
   DiscreteTime time(start_t, end_t, delta_t);
 
-  TimeStepping::ExplicitRungeKutta<Vector<double>> rk_bc;
-  rk_bc.initialize(runge_kutta_method);
-
-  TimeStepping::ExplicitRungeKutta<VectorType> rk;
+  TimeStepping::ExplicitRungeKutta<BlockVectorType> rk;
   rk.initialize(runge_kutta_method);
 
-  auto error = fu_postprocessing(0.0);
+  auto error = fu_postprocessing(0.0, solution);
 
   // perform time stepping
   while ((time.is_at_end() == false) && (error[2] < 1.0 /*TODO*/))
     {
-      stage_bcs.clear();
-      Vector<double> solution_bc = fu_eval_bc(time.get_current_time());
-      rk_bc.evolve_one_time_step(fu_bc,
-                                 time.get_current_time(),
-                                 time.get_next_step_size(),
-                                 solution_bc);
+      fu_eval_bc(time.get_current_time(), solution.block(0)); // evaluate bc
 
-      stage_counter = 0;
       rk.evolve_one_time_step(fu_rhs,
                               time.get_current_time(),
                               time.get_next_step_size(),
@@ -979,7 +1084,8 @@ test(ConvergenceTable  &table,
 
       // output result
       error =
-        fu_postprocessing(time.get_current_time() + time.get_next_step_size());
+        fu_postprocessing(time.get_current_time() + time.get_next_step_size(),
+                          solution);
 
       time.advance_time();
     }
@@ -1034,14 +1140,14 @@ main(int argc, char **argv)
         }
     }
 
-  if (false)
+  if (true)
     {
       const unsigned int fe_degree         = 5;
-      const unsigned int n_subdivisions_1D = 10;
+      const unsigned int n_subdivisions_1D = 40;
       const double       cfl               = 0.1;
 
       for (double factor = 0.5; factor <= 2.0; factor += 0.1)
-        test<2>(table, fe_degree, n_subdivisions_1D, cfl, false, factor);
+        test<2>(table, fe_degree, n_subdivisions_1D, cfl, true, factor, true);
 
       if (Utilities::MPI::this_mpi_process(MPI_COMM_WORLD) == 0)
         {
@@ -1050,7 +1156,7 @@ main(int argc, char **argv)
         }
     }
 
-  if (true)
+  if (false)
     {
       const double factor = 1.0;
 
@@ -1063,7 +1169,7 @@ main(int argc, char **argv)
                    n_subdivisions_1D <= 100;
                    n_subdivisions_1D += 10)
                 test<2>(
-                  table, fe_degree, n_subdivisions_1D, cfl, false, factor);
+                  table, fe_degree, n_subdivisions_1D, cfl, true, factor, true);
 
               if (Utilities::MPI::this_mpi_process(MPI_COMM_WORLD) == 0)
                 {

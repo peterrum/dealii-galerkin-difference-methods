@@ -25,6 +25,10 @@
 #include <deal.II/lac/precondition.h>
 #include <deal.II/lac/solver_cg.h>
 #include <deal.II/lac/sparse_matrix.h>
+#include <deal.II/lac/trilinos_precondition.h>
+#include <deal.II/lac/trilinos_solver.h>
+#include <deal.II/lac/trilinos_sparse_matrix.h>
+#include <deal.II/lac/trilinos_sparsity_pattern.h>
 
 #include <deal.II/non_matching/fe_immersed_values.h>
 #include <deal.II/non_matching/fe_values.h>
@@ -126,7 +130,8 @@ template <int dim>
 void
 test(const unsigned int fe_degree,
      const unsigned int n_subdivisions_1D,
-     const double       cfl)
+     const double       cfl,
+     const bool         do_ghost_penalty = true)
 {
   using Number     = double;
   using VectorType = Vector<Number>;
@@ -147,6 +152,8 @@ test(const unsigned int fe_degree,
   const double alpha   = 1.0;
   const TimeStepping::runge_kutta_method runge_kutta_method =
     TimeStepping::runge_kutta_method::RK_CLASSIC_FOURTH_ORDER;
+
+  const double ghost_parameter = 0.5;
 
   ExactSolution<dim>           exact_solution(x_shift, phi, phi_add);
   ExactSolutionDerivative<dim> exact_solution_der(x_shift, phi, phi_add);
@@ -189,17 +196,68 @@ test(const unsigned int fe_degree,
 
   mesh_classifier.reclassify();
 
+  const auto face_has_ghost_penalty = [&](const auto        &cell,
+                                          const unsigned int face_index) {
+    if (!do_ghost_penalty)
+      return false;
+
+    if (cell->at_boundary(face_index))
+      return false;
+
+    const NonMatching::LocationToLevelSet cell_location =
+      mesh_classifier.location_to_level_set(cell);
+
+    const NonMatching::LocationToLevelSet neighbor_location =
+      mesh_classifier.location_to_level_set(cell->neighbor(face_index));
+
+    if (cell_location == NonMatching::LocationToLevelSet::intersected &&
+        neighbor_location != NonMatching::LocationToLevelSet::outside)
+      return true;
+
+    if (neighbor_location == NonMatching::LocationToLevelSet::intersected &&
+        cell_location != NonMatching::LocationToLevelSet::outside)
+      return true;
+
+    return false;
+  };
+
   AffineConstraints<Number> constraints;
   constraints.close();
 
   // compute mass matrix
-  DynamicSparsityPattern dsp(dof_handler.n_dofs());
-  DoFTools::make_sparsity_pattern(dof_handler, dsp, constraints);
+  TrilinosWrappers::SparsityPattern sparsity_pattern(
+    dof_handler.locally_owned_dofs(), MPI_COMM_WORLD);
 
-  SparsityPattern sparsity_pattern;
-  sparsity_pattern.copy_from(dsp);
+  if (do_ghost_penalty)
+    {
+      const auto face_has_flux_coupling = [&](const auto        &cell,
+                                              const unsigned int face_index) {
+        return face_has_ghost_penalty(cell, face_index);
+      };
 
-  SparseMatrix<Number> sparse_matrix;
+      Table<2, DoFTools::Coupling> cell_coupling(1, 1);
+      Table<2, DoFTools::Coupling> face_coupling(1, 1);
+      cell_coupling[0][0] = DoFTools::always;
+      face_coupling[0][0] = DoFTools::always;
+
+      DoFTools::make_flux_sparsity_pattern(dof_handler,
+                                           sparsity_pattern,
+                                           constraints,
+                                           true,
+                                           cell_coupling,
+                                           face_coupling,
+                                           numbers::invalid_subdomain_id,
+                                           face_has_flux_coupling);
+    }
+  else
+    {
+      DoFTools::make_sparsity_pattern(dof_handler,
+                                      sparsity_pattern,
+                                      constraints);
+    }
+  sparsity_pattern.compress();
+
+  TrilinosWrappers::SparseMatrix sparse_matrix;
   sparse_matrix.reinit(sparsity_pattern);
 
   {
@@ -219,12 +277,19 @@ test(const unsigned int fe_degree,
                                                       level_set_dof_handler,
                                                       level_set);
 
+    FEInterfaceValues<dim> fe_interface_values(
+      fe,
+      hp::QCollection<dim - 1>(QGauss<dim - 1>(fe_degree + 1)),
+      update_gradients | update_JxW_values | update_normal_vectors);
+
     std::vector<types::global_dof_index> dof_indices;
     for (const auto &cell : dof_handler.active_cell_iterators())
       if (mesh_classifier.location_to_level_set(cell) !=
           NonMatching::LocationToLevelSet::outside)
         {
           non_matching_fe_values.reinit(cell);
+
+          const double cell_side_length = cell->minimum_vertex_distance();
 
           const auto &fe_values = non_matching_fe_values.get_inside_fe_values();
 
@@ -250,6 +315,49 @@ test(const unsigned int fe_degree,
                 }
             }
 
+          for (const unsigned int f : cell->face_indices())
+            if (face_has_ghost_penalty(cell, f))
+              {
+                fe_interface_values.reinit(cell,
+                                           f,
+                                           numbers::invalid_unsigned_int,
+                                           cell->neighbor(f),
+                                           cell->neighbor_of_neighbor(f),
+                                           numbers::invalid_unsigned_int);
+
+                const unsigned int n_interface_dofs =
+                  fe_interface_values.n_current_interface_dofs();
+                FullMatrix<double> local_stabilization(n_interface_dofs,
+                                                       n_interface_dofs);
+                for (unsigned int q = 0;
+                     q < fe_interface_values.n_quadrature_points;
+                     ++q)
+                  {
+                    const Tensor<1, dim> normal = fe_interface_values.normal(q);
+                    for (unsigned int i = 0; i < n_interface_dofs; ++i)
+                      for (unsigned int j = 0; j < n_interface_dofs; ++j)
+                        {
+                          local_stabilization(i, j) +=
+                            .5 * ghost_parameter * cell_side_length *
+                            cell_side_length * cell_side_length *
+                            (normal *
+                             fe_interface_values.jump_in_shape_gradients(i,
+                                                                         q)) *
+                            (normal *
+                             fe_interface_values.jump_in_shape_gradients(j,
+                                                                         q)) *
+                            fe_interface_values.JxW(q);
+                        }
+                  }
+
+                const std::vector<types::global_dof_index>
+                  local_interface_dof_indices =
+                    fe_interface_values.get_interface_dof_indices();
+
+                sparse_matrix.add(local_interface_dof_indices,
+                                  local_stabilization);
+              }
+
           // assemble
           constraints.distribute_local_to_global(cell_matrix,
                                                  dof_indices,
@@ -257,11 +365,16 @@ test(const unsigned int fe_degree,
         }
   }
 
+  sparse_matrix.compress(VectorOperation::values::add);
+
   for (auto &entry : sparse_matrix)
     if ((entry.row() == entry.column()) && (entry.value() == 0.0))
       {
         entry.value() = 1.0;
       }
+
+  TrilinosWrappers::PreconditionAMG preconditioner_ilu;
+  preconditioner_ilu.initialize(sparse_matrix);
 
   // set up initial condition
   VectorType solution(dof_handler.n_dofs());
@@ -427,6 +540,11 @@ test(const unsigned int fe_degree,
       level_set_dof_handler,
       level_set);
 
+    FEInterfaceValues<dim> fe_interface_values(
+      fe,
+      hp::QCollection<dim - 1>(QGauss<dim - 1>(fe_degree + 1)),
+      update_gradients | update_JxW_values | update_normal_vectors);
+
     advection.set_time(time);
 
     unsigned int point_counter = 0;
@@ -436,6 +554,8 @@ test(const unsigned int fe_degree,
           NonMatching::LocationToLevelSet::outside)
         {
           non_matching_fe_values.reinit(cell);
+
+          const double cell_side_length = cell->minimum_vertex_distance();
 
           const auto &fe_values_ptr =
             non_matching_fe_values.get_inside_fe_values();
@@ -595,18 +715,60 @@ test(const unsigned int fe_degree,
                   }
               }
 
+          for (const unsigned int f : cell->face_indices())
+            if (face_has_ghost_penalty(cell, f))
+              {
+                fe_interface_values.reinit(cell,
+                                           f,
+                                           numbers::invalid_unsigned_int,
+                                           cell->neighbor(f),
+                                           cell->neighbor_of_neighbor(f),
+                                           numbers::invalid_unsigned_int);
+
+                const unsigned int n_interface_dofs =
+                  fe_interface_values.n_current_interface_dofs();
+                Vector<double> local_stabilization(n_interface_dofs);
+
+                std::vector<Tensor<1, dim>> jump_in_shape_gradients(
+                  fe_interface_values.n_quadrature_points);
+
+                fe_interface_values.get_jump_in_function_gradients(
+                  vec_0, jump_in_shape_gradients);
+
+                for (unsigned int q = 0;
+                     q < fe_interface_values.n_quadrature_points;
+                     ++q)
+                  {
+                    const Tensor<1, dim> normal = fe_interface_values.normal(q);
+                    for (unsigned int i = 0; i < n_interface_dofs; ++i)
+                      {
+                        local_stabilization(i) -=
+                          .5 * ghost_parameter * cell_side_length *
+                          cell_side_length *
+                          (normal *
+                           fe_interface_values.jump_in_shape_gradients(i, q)) *
+                          (normal * jump_in_shape_gradients[q]) *
+                          fe_interface_values.JxW(q);
+                      }
+                  }
+
+                const std::vector<types::global_dof_index>
+                  local_interface_dof_indices =
+                    fe_interface_values.get_interface_dof_indices();
+
+                constraints.distribute_local_to_global(
+                  local_stabilization, local_interface_dof_indices, vec_1);
+              }
+
           constraints.distribute_local_to_global(cell_vector,
                                                  dof_indices,
                                                  vec_1);
         }
 
     // invert mass matrix
-    PreconditionJacobi<SparseMatrix<Number>> preconditioner;
-    preconditioner.initialize(sparse_matrix);
-
     ReductionControl     solver_control(10000, 1.e-10, 1.e-8);
     SolverCG<VectorType> solver(solver_control);
-    solver.solve(sparse_matrix, vec_2, vec_1, preconditioner);
+    solver.solve(sparse_matrix, vec_2, vec_1, preconditioner_ilu);
 
     stage_counter++;
 
@@ -734,14 +896,16 @@ test(const unsigned int fe_degree,
 
 
 int
-main()
+main(int argc, char **argv)
 {
+  Utilities::MPI::MPI_InitFinalize mpi(argc, argv, 1);
+
   if (true)
     {
       const unsigned int n_subdivisions_1D = 20;
       const double       cfl               = 0.4;
 
-      for (const unsigned int fe_degree : {1, 3, 5})
+      for (const unsigned int fe_degree : {3})
         test<2>(fe_degree, n_subdivisions_1D, cfl);
     }
   else
