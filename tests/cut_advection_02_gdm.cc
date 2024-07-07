@@ -339,6 +339,7 @@ test(ConvergenceTable  &table,
           // compute element stiffness matrix
           FullMatrix<Number> cell_matrix(dofs_per_cell, dofs_per_cell);
 
+          // (I) cell integral
           if (fe_values)
             {
               for (const unsigned int q_index :
@@ -352,6 +353,7 @@ test(ConvergenceTable  &table,
                 }
             }
 
+          // (II) face integral to apply GP
           for (const unsigned int f : cell->dealii_iterator()->face_indices())
             if (face_has_ghost_penalty(cell->dealii_iterator(), f))
               {
@@ -773,7 +775,7 @@ test(ConvergenceTable  &table,
                   }
               }
 
-          // (IV) face integral to GP
+          // (IV) face integral for apply GP
           for (const unsigned int f : cell->dealii_iterator()->face_indices())
             if (face_has_ghost_penalty(cell->dealii_iterator(), f))
               {
