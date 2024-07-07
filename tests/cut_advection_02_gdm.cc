@@ -24,6 +24,7 @@
 #include <deal.II/hp/fe_values.h>
 
 #include <deal.II/lac/dynamic_sparsity_pattern.h>
+#include <deal.II/lac/la_parallel_block_vector.h>
 #include <deal.II/lac/precondition.h>
 #include <deal.II/lac/solver_cg.h>
 #include <deal.II/lac/sparse_matrix.h>
@@ -169,8 +170,9 @@ test(ConvergenceTable  &table,
      const double       factor           = 1.0,
      const bool         do_ghost_penalty = true)
 {
-  using Number     = double;
-  using VectorType = LinearAlgebra::distributed::Vector<Number>;
+  using Number          = double;
+  using VectorType      = LinearAlgebra::distributed::Vector<Number>;
+  using BlockVectorType = LinearAlgebra::distributed::BlockVector<Number>;
 
   // settings
   const double       phi          = (numbers::PI / 8.0) * factor; // TODO
@@ -441,8 +443,12 @@ test(ConvergenceTable  &table,
                                                   system.locally_relevant_dofs(
                                                     constraints),
                                                   comm);
-  VectorType solution(partitioner);
-  GDM::VectorTools::interpolate(mapping, system, exact_solution, solution);
+  BlockVectorType solution(2);
+  solution.block(1).reinit(partitioner);
+  GDM::VectorTools::interpolate(mapping,
+                                system,
+                                exact_solution,
+                                solution.block(1));
 
   // set up BCs
   std::vector<Point<dim>> all_points;
@@ -529,58 +535,33 @@ test(ConvergenceTable  &table,
         }
   }
 
-  std::vector<Vector<double>> stage_bcs;
+  solution.block(0).reinit(all_points.size());
 
-  const auto fu_eval_bc = [&](const double time) {
+  const auto fu_eval_bc = [&](const double time, VectorType &stage_bc) {
     exact_solution.set_time(time);
-
-    Vector<double> stage_bc(all_points.size());
-
     for (unsigned int i = 0; i < all_points.size(); ++i)
       stage_bc[i] = exact_solution.value(all_points[i]);
-
-    return stage_bc;
-  };
-
-  const auto fu_bc = [&](const double time, const Vector<double> &solution) {
-    if (false)
-      {
-        exact_solution.set_time(time);
-
-        Vector<double> stage_bc(all_points.size());
-
-        for (unsigned int i = 0; i < all_points.size(); ++i)
-          stage_bc[i] = exact_solution.value(all_points[i]);
-        stage_bcs.emplace_back(stage_bc);
-
-        return solution;
-      }
-    else
-      {
-        exact_solution_der.set_time(time);
-
-        stage_bcs.emplace_back(solution);
-
-        Vector<double> stage_bc(all_points.size());
-
-        for (unsigned int i = 0; i < all_points.size(); ++i)
-          stage_bc[i] = exact_solution_der.value(all_points[i]);
-
-        return stage_bc;
-      }
   };
 
   // helper function to evaluate right-hand-side vector
-  unsigned int stage_counter = 0;
-  const auto   fu_rhs = [&](const double time, const VectorType &solution) {
-    VectorType vec_0, vec_1, vec_2;
-    vec_0.reinit(solution); // for applying constraints
-    vec_1.reinit(solution); // result of assembly of rhs vector
-    vec_2.reinit(solution); // result of inversion mass matrix
+  const auto fu_rhs = [&](const double           time,
+                          const BlockVectorType &stage_bc_and_solution) {
+    const auto &stage_bc = stage_bc_and_solution.block(0);
+    const auto &solution = stage_bc_and_solution.block(1);
+
+    BlockVectorType result;
+    result.reinit(stage_bc_and_solution);
+
+    VectorType vec_0, vec_1;
+    vec_0.reinit(solution);              // for applying constraints
+    vec_1.reinit(solution);              // result of assembly of rhs vector
+    VectorType &vec_2 = result.block(1); // result of inversion mass matrix
 
     vec_0 = solution;
 
-    exact_solution.set_time(time);
+    exact_solution_der.set_time(time);
+    for (unsigned int i = 0; i < all_points.size(); ++i)
+      result.block(0)[i] = exact_solution_der.value(all_points[i]);
 
     // apply constraints
     constraints.distribute(vec_0);
@@ -725,7 +706,7 @@ test(ConvergenceTable  &table,
 
               for (const auto q : fe_face_values.quadrature_point_indices())
                 {
-                  u_plus[q] = stage_bcs[stage_counter][point_counter++];
+                  u_plus[q] = stage_bc[point_counter++];
                 }
 
               for (const unsigned int q_index :
@@ -735,7 +716,7 @@ test(ConvergenceTable  &table,
                     fluxes[q_index] *
                     (alpha * quadrature_values[q_index] -
                      ((fluxes[q_index] >= 0.0) ? quadrature_values[q_index] :
-                                                   u_plus[q_index])) *
+                                                 u_plus[q_index])) *
                     fe_face_values.shape_value(i, q_index) *
                     fe_face_values.JxW(q_index);
             }
@@ -771,7 +752,7 @@ test(ConvergenceTable  &table,
                          fe_face_values.quadrature_point_indices())
                       {
                         const auto normal = fe_face_values.normal_vector(q);
-                        const auto point = fe_face_values.quadrature_point(q);
+                        const auto point  = fe_face_values.quadrature_point(q);
 
                         for (unsigned int d = 0; d < dim; ++d)
                           {
@@ -785,7 +766,7 @@ test(ConvergenceTable  &table,
                     for (const auto q :
                          fe_face_values.quadrature_point_indices())
                       {
-                        u_plus[q] = stage_bcs[stage_counter][point_counter++];
+                        u_plus[q] = stage_bc[point_counter++];
                       }
 
                     for (const unsigned int q_index :
@@ -795,8 +776,8 @@ test(ConvergenceTable  &table,
                           fluxes[q_index] *
                           (alpha * quadrature_values[q_index] -
                            ((fluxes[q_index] >= 0.0) ?
-                                quadrature_values[q_index] :
-                                u_plus[q_index])) *
+                              quadrature_values[q_index] :
+                              u_plus[q_index])) *
                           fe_face_values.shape_value(i, q_index) *
                           fe_face_values.JxW(q_index);
                   }
@@ -897,14 +878,15 @@ test(ConvergenceTable  &table,
         AssertThrow(false, ExcNotImplemented());
       }
 
-    stage_counter++;
-
-    return vec_2;
+    return result;
   };
 
   const auto fu_postprocessing =
-    [&](const double time) -> std::array<double, 6> {
+    [&](const double           time,
+        const BlockVectorType &stage_bc_and_solution) -> std::array<double, 6> {
     static unsigned int counter = 0;
+
+    const auto &solution = stage_bc_and_solution.block(1);
 
     // compute error
     exact_solution.set_time(time);
@@ -1083,25 +1065,16 @@ test(ConvergenceTable  &table,
   // set up time stepper
   DiscreteTime time(start_t, end_t, delta_t);
 
-  TimeStepping::ExplicitRungeKutta<Vector<double>> rk_bc;
-  rk_bc.initialize(runge_kutta_method);
-
-  TimeStepping::ExplicitRungeKutta<VectorType> rk;
+  TimeStepping::ExplicitRungeKutta<BlockVectorType> rk;
   rk.initialize(runge_kutta_method);
 
-  auto error = fu_postprocessing(0.0);
+  auto error = fu_postprocessing(0.0, solution);
 
   // perform time stepping
   while ((time.is_at_end() == false) && (error[2] < 1.0 /*TODO*/))
     {
-      stage_bcs.clear();
-      Vector<double> solution_bc = fu_eval_bc(time.get_current_time());
-      rk_bc.evolve_one_time_step(fu_bc,
-                                 time.get_current_time(),
-                                 time.get_next_step_size(),
-                                 solution_bc);
+      fu_eval_bc(time.get_current_time(), solution.block(0)); // evaluate bc
 
-      stage_counter = 0;
       rk.evolve_one_time_step(fu_rhs,
                               time.get_current_time(),
                               time.get_next_step_size(),
@@ -1111,7 +1084,8 @@ test(ConvergenceTable  &table,
 
       // output result
       error =
-        fu_postprocessing(time.get_current_time() + time.get_next_step_size());
+        fu_postprocessing(time.get_current_time() + time.get_next_step_size(),
+                          solution);
 
       time.advance_time();
     }
