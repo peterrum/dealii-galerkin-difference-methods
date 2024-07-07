@@ -416,44 +416,6 @@ test(ConvergenceTable  &table,
 
   sparse_matrix.compress(VectorOperation::values::add);
 
-  if (false)
-    {
-      for (auto &entry : sparse_matrix)
-        if ((entry.row() == entry.column()))
-          {
-            pcout << "(" << entry.row() << ": " << entry.value() << ") "
-                  << std::endl;
-          }
-
-      pcout << std::endl << std::endl;
-
-      return;
-    }
-
-  if (false)
-    {
-      const double tolerance = 1e-10;
-
-      IndexSet ghost(system.n_dofs());
-      ghost.add_range(0, system.n_dofs());
-
-      LinearAlgebra::distributed::Vector<double> diagonal(
-        system.locally_owned_dofs(), ghost, comm);
-
-      for (auto &entry : sparse_matrix)
-        if ((entry.row() == entry.column()))
-          {
-            diagonal[entry.row()] = std::abs(entry.value());
-          }
-
-      diagonal.update_ghost_values();
-
-      for (auto &entry : sparse_matrix)
-        if ((diagonal[entry.row()] < tolerance) &&
-            (diagonal[entry.column()] < tolerance))
-          entry.value() = 0.0;
-    }
-
   for (auto &entry : sparse_matrix)
     if ((entry.row() == entry.column()) && (entry.value() == 0.0))
       {
