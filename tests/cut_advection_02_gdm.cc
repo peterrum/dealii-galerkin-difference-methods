@@ -1147,7 +1147,7 @@ main(int argc, char **argv)
       const double       cfl               = 0.1;
 
       for (double factor = 0.5; factor <= 2.0; factor += 0.1)
-        test<2>(table, fe_degree, n_subdivisions_1D, cfl, false, factor, true);
+        test<2>(table, fe_degree, n_subdivisions_1D, cfl, true, factor, true);
 
       if (Utilities::MPI::this_mpi_process(MPI_COMM_WORLD) == 0)
         {
