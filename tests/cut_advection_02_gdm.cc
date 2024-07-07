@@ -628,6 +628,7 @@ test(ConvergenceTable  &table,
 
           Vector<Number> cell_vector(n_dofs_per_cell);
 
+          // (I) cell integral
           if (fe_values_ptr)
             {
               const auto &fe_values = *fe_values_ptr;
@@ -674,6 +675,7 @@ test(ConvergenceTable  &table,
                                    fe_values.JxW(q_index));
             }
 
+          // (II) surface integral to apply BC
           if ((phi_add != 0) && surface_fe_values_ptr)
             {
               const auto &fe_face_values = *surface_fe_values_ptr;
@@ -692,17 +694,13 @@ test(ConvergenceTable  &table,
                   const auto point  = fe_face_values.quadrature_point(q);
 
                   for (unsigned int d = 0; d < dim; ++d)
-                    {
-                      fluxes[q] += normal[d] * advection.value(point, d);
-                    }
+                    fluxes[q] += normal[d] * advection.value(point, d);
                 }
 
               std::vector<Number> u_plus(fe_face_values.n_quadrature_points, 0);
 
               for (const auto q : fe_face_values.quadrature_point_indices())
-                {
-                  u_plus[q] = stage_bc[point_counter++];
-                }
+                u_plus[q] = stage_bc[point_counter++];
 
               for (const unsigned int q_index :
                    fe_face_values.quadrature_point_indices())
@@ -716,6 +714,7 @@ test(ConvergenceTable  &table,
                     fe_face_values.JxW(q_index);
             }
 
+          // (III) face integral to apply BC
           for (const auto f : cell->dealii_iterator()->face_indices())
             if (cell->dealii_iterator()->face(f)->at_boundary())
               {
@@ -750,9 +749,7 @@ test(ConvergenceTable  &table,
                         const auto point  = fe_face_values.quadrature_point(q);
 
                         for (unsigned int d = 0; d < dim; ++d)
-                          {
-                            fluxes[q] += normal[d] * advection.value(point, d);
-                          }
+                          fluxes[q] += normal[d] * advection.value(point, d);
                       }
 
                     std::vector<Number> u_plus(
@@ -760,9 +757,7 @@ test(ConvergenceTable  &table,
 
                     for (const auto q :
                          fe_face_values.quadrature_point_indices())
-                      {
-                        u_plus[q] = stage_bc[point_counter++];
-                      }
+                      u_plus[q] = stage_bc[point_counter++];
 
                     for (const unsigned int q_index :
                          fe_face_values.quadrature_point_indices())
@@ -778,6 +773,7 @@ test(ConvergenceTable  &table,
                   }
               }
 
+          // (IV) face integral to GP
           for (const unsigned int f : cell->dealii_iterator()->face_indices())
             if (face_has_ghost_penalty(cell->dealii_iterator(), f))
               {
