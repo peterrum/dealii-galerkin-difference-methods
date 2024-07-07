@@ -552,20 +552,16 @@ test(ConvergenceTable  &table,
     BlockVectorType result;
     result.reinit(stage_bc_and_solution);
 
-    VectorType vec_0, vec_1;
-    vec_0.reinit(solution);              // for applying constraints
+    VectorType vec_1;
     vec_1.reinit(solution);              // result of assembly of rhs vector
     VectorType &vec_2 = result.block(1); // result of inversion mass matrix
 
-    vec_0 = solution;
-
+    // evaluate derivative of bc
     exact_solution_der.set_time(time);
     for (unsigned int i = 0; i < all_points.size(); ++i)
       result.block(0)[i] = exact_solution_der.value(all_points[i]);
 
-    // apply constraints
-    constraints.distribute(vec_0);
-
+    // evaluate advection operator
     const QGauss<1> quadrature_1D(fe_degree + 1);
 
     NonMatching::RegionUpdateFlags region_update_flags;
@@ -605,7 +601,7 @@ test(ConvergenceTable  &table,
 
     unsigned int point_counter = 0;
 
-    vec_0.update_ghost_values();
+    solution.update_ghost_values();
 
     for (const auto &cell : system.locally_active_cell_iterators())
       if (cell->is_locally_owned() &&
@@ -639,13 +635,13 @@ test(ConvergenceTable  &table,
 
               std::vector<Number> quadrature_values(
                 fe_values.n_quadrature_points);
-              fe_values.get_function_values(vec_0,
+              fe_values.get_function_values(solution,
                                             dof_indices,
                                             quadrature_values);
 
               std::vector<Tensor<1, dim, Number>> quadrature_gradients(
                 fe_values.n_quadrature_points);
-              fe_values.get_function_gradients(vec_0,
+              fe_values.get_function_gradients(solution,
                                                dof_indices,
                                                quadrature_gradients);
 
@@ -685,7 +681,7 @@ test(ConvergenceTable  &table,
 
               std::vector<Number> quadrature_values(
                 fe_face_values.n_quadrature_points);
-              fe_face_values.get_function_values(vec_0,
+              fe_face_values.get_function_values(solution,
                                                  dof_indices,
                                                  quadrature_values);
 
@@ -741,7 +737,7 @@ test(ConvergenceTable  &table,
 
                     std::vector<Number> quadrature_values(
                       fe_face_values.n_quadrature_points);
-                    fe_face_values.get_function_values(vec_0,
+                    fe_face_values.get_function_values(solution,
                                                        dof_indices,
                                                        quadrature_values);
 
@@ -818,7 +814,8 @@ test(ConvergenceTable  &table,
 
                 std::vector<double> local_dof_values(n_interface_dofs);
                 for (unsigned int i = 0; i < n_interface_dofs; ++i)
-                  local_dof_values[i] = vec_0[local_interface_dof_indices[i]];
+                  local_dof_values[i] =
+                    solution[local_interface_dof_indices[i]];
 
                 fe_interface_values[scalar]
                   .get_jump_in_function_gradients_from_local_dof_values(
