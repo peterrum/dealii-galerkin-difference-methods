@@ -552,9 +552,8 @@ test(ConvergenceTable  &table,
     BlockVectorType result;
     result.reinit(stage_bc_and_solution);
 
-    VectorType vec_1;
-    vec_1.reinit(solution);              // result of assembly of rhs vector
-    VectorType &vec_2 = result.block(1); // result of inversion mass matrix
+    VectorType vec_rhs;
+    vec_rhs.reinit(solution); // result of assembly of rhs vector
 
     // evaluate derivative of bc
     exact_solution_der.set_time(time);
@@ -839,16 +838,16 @@ test(ConvergenceTable  &table,
                   }
 
                 constraints.distribute_local_to_global(
-                  local_stabilization, local_interface_dof_indices, vec_1);
+                  local_stabilization, local_interface_dof_indices, vec_rhs);
               }
 
           cell->get_dof_indices(dof_indices);
           constraints.distribute_local_to_global(cell_vector,
                                                  dof_indices,
-                                                 vec_1);
+                                                 vec_rhs);
         }
 
-    vec_1.compress(VectorOperation::add);
+    vec_rhs.compress(VectorOperation::add);
 
     // invert mass matrix
     if (solver_name == "AMG" || solver_name == "ILU")
@@ -857,9 +856,15 @@ test(ConvergenceTable  &table,
         SolverCG<VectorType> solver(solver_control);
 
         if (solver_name == "AMG")
-          solver.solve(sparse_matrix, vec_2, vec_1, preconditioner_amg);
+          solver.solve(sparse_matrix,
+                       result.block(1),
+                       vec_rhs,
+                       preconditioner_amg);
         else if (solver_name == "ILU")
-          solver.solve(sparse_matrix, vec_2, vec_1, preconditioner_ilu);
+          solver.solve(sparse_matrix,
+                       result.block(1),
+                       vec_rhs,
+                       preconditioner_ilu);
         else
           AssertThrow(false, ExcNotImplemented());
 
@@ -868,7 +873,7 @@ test(ConvergenceTable  &table,
       }
     else if (solver_name == "direct")
       {
-        solver_direct.solve(sparse_matrix, vec_2, vec_1);
+        solver_direct.solve(sparse_matrix, result.block(1), vec_rhs);
       }
     else
       {
