@@ -116,24 +116,23 @@ test(ConvergenceTable  &table,
   const unsigned int fe_degree_time_stepper = fe_degree;
   const unsigned int fe_degree_level_set    = 1;
   const unsigned int fe_degree_output       = 2;
-  const double       dx                     = (1.0 / n_subdivisions_1D);
-  const double       max_vel                = 2.0;
-  const double       sandra_factor =
-    false ? (1.0 / (2 * fe_degree_time_stepper + 1)) : 1.0;
-  const double delta_t = dx * cfl * sandra_factor / max_vel;
-  const double start_t = 0.0;
-  const double end_t   = 0.1;
+  const double       dx                     = (1.21 * 2 / n_subdivisions_1D);
+  const double       delta_t = std::pow(dx / fe_degree / fe_degree, 2.0) * cfl;
+  const double       start_t = 0.0;
+  const double       end_t   = 0.1;
   const TimeStepping::runge_kutta_method runge_kutta_method =
     TimeStepping::runge_kutta_method::RK_CLASSIC_FOURTH_ORDER;
-  const std::string solver_name = "ILU";
+  const std::string solver_name = "direct";
 
+  std::cout << delta_t << std::endl;
 
   const Functions::ConstantFunction<dim> rhs_function(4.0);       // TODO
   const Functions::ConstantFunction<dim> initial_condition(0.0);  // TODO
   const Functions::ConstantFunction<dim> boundary_condition(0.0); // TODO
 
-  const double ghost_parameter   = 0.5;
-  const double nitsche_parameter = 5 * (fe_degree + 1) * fe_degree;
+  const double ghost_parameter_M = 0.75;
+  const double ghost_parameter_A = 1.50;
+  const double nitsche_parameter = 5 * (fe_degree)*fe_degree;
 
   const MPI_Comm comm = MPI_COMM_WORLD;
 
@@ -313,7 +312,7 @@ test(ConvergenceTable  &table,
                       for (unsigned int j = 0; j < n_interface_dofs; ++j)
                         {
                           local_stabilization(i, j) +=
-                            .5 * ghost_parameter * cell_side_length *
+                            .5 * ghost_parameter_M * cell_side_length *
                             cell_side_length * cell_side_length *
                             (normal *
                              fe_interface_values.jump_in_shape_gradients(i,
@@ -476,9 +475,12 @@ test(ConvergenceTable  &table,
                   const Point<dim> &point = fe_values.quadrature_point(q);
                   for (const unsigned int i : fe_values.dof_indices())
                     {
-                      cell_vector(i) += fe_values.shape_grad(i, q) *
+                      // left hand side:
+                      cell_vector(i) -= fe_values.shape_grad(i, q) *
                                         quadrature_gradients[q] *
                                         fe_values.JxW(q);
+
+                      // right hand side
                       cell_vector(i) += rhs_function.value(point) *
                                         fe_values.shape_value(i, q) *
                                         fe_values.JxW(q);
@@ -513,7 +515,8 @@ test(ConvergenceTable  &table,
                     surface_fe_values.normal_vector(q);
                   for (const unsigned int i : surface_fe_values.dof_indices())
                     {
-                      cell_vector(i) +=
+                      // left hand side
+                      cell_vector(i) -=
                         (-normal * surface_fe_values.shape_grad(i, q) *
                            quadrature_values[q] +
                          -normal * quadrature_gradients[q] *
@@ -523,6 +526,7 @@ test(ConvergenceTable  &table,
                            quadrature_values[q]) *
                         surface_fe_values.JxW(q);
 
+                      // right hand side
                       cell_vector(i) +=
                         boundary_condition.value(point) *
                         (nitsche_parameter / cell_side_length *
@@ -584,7 +588,7 @@ test(ConvergenceTable  &table,
                     for (unsigned int i = 0; i < n_interface_dofs; ++i)
                       {
                         local_stabilization(i) -=
-                          .5 * ghost_parameter * cell_side_length *
+                          .5 * ghost_parameter_A * cell_side_length *
                           (normal *
                            fe_interface_values.jump_in_shape_gradients(i, q)) *
                           (normal * jump_in_shape_gradients[q]) *
