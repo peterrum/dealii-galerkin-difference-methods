@@ -89,75 +89,6 @@ private:
   const double           phi;
 };
 
-template <int dim, typename Number = double>
-class ExactSolutionDerivative : public dealii::Function<dim, Number>
-{
-public:
-  ExactSolutionDerivative(const double x_shift,
-                          const double phi,
-                          const double phi_add,
-                          const double time = 0.)
-    : dealii::Function<dim, Number>(1, time)
-    , x_shift(x_shift)
-    , phi(phi)
-  {
-    advection[0] = 2.0 * std::cos(phi + phi_add);
-    advection[1] = 2.0 * std::sin(phi + phi_add);
-  }
-
-  virtual double
-  value(const dealii::Point<dim> &p, const unsigned int = 1) const override
-  {
-    double                       t        = this->get_time();
-    const dealii::Tensor<1, dim> position = p - t * advection;
-
-    const double x_hat =
-      std::cos(phi) * (position[0] - x_shift) + std::sin(phi) * position[1];
-
-    return std::cos(std::sqrt(2.0) * numbers::PI * x_hat / (1.0 - x_shift)) *
-           (std::sqrt(2.0) * numbers::PI / (1.0 - x_shift)) *
-           (std::cos(phi) * (-advection[0]) + std::sin(phi) * (-advection[1]));
-  }
-
-  const dealii::Tensor<1, dim> &
-  get_transport_direction() const
-  {
-    return advection;
-  }
-
-private:
-  dealii::Tensor<1, dim> advection;
-  const double           x_shift;
-  const double           phi;
-};
-
-
-
-template <typename SparseMatrixType>
-void
-eigenvalue_estimates(const SparseMatrixType &matrix_a)
-{
-  LAPACKFullMatrix<double> lapack_full_matrix(matrix_a.m(), matrix_a.n());
-
-
-  for (const auto &entry : matrix_a)
-    lapack_full_matrix.set(entry.row(), entry.column(), entry.value());
-
-  lapack_full_matrix.compute_eigenvalues();
-
-  std::vector<double> eigenvalues;
-
-  for (unsigned int i = 0; i < lapack_full_matrix.m(); ++i)
-    eigenvalues.push_back(lapack_full_matrix.eigenvalue(i).real());
-
-  std::sort(eigenvalues.begin(), eigenvalues.end());
-
-  printf("%10.2e %10.2e %10.2e \n",
-         eigenvalues[0],
-         eigenvalues.back(),
-         eigenvalues.back() / eigenvalues[0]);
-}
-
 
 
 template <int dim>
@@ -192,12 +123,17 @@ test(ConvergenceTable  &table,
   const double delta_t = dx * cfl * sandra_factor / max_vel;
   const double start_t = 0.0;
   const double end_t   = 0.1;
-  const double alpha   = 0.0;
   const TimeStepping::runge_kutta_method runge_kutta_method =
     TimeStepping::runge_kutta_method::RK_CLASSIC_FOURTH_ORDER;
   const std::string solver_name = "ILU";
 
-  const double ghost_parameter = 0.5;
+
+  const Functions::ConstantFunction<dim> rhs_function(4.0);       // TODO
+  const Functions::ConstantFunction<dim> initial_condition(0.0);  // TODO
+  const Functions::ConstantFunction<dim> boundary_condition(0.0); // TODO
+
+  const double ghost_parameter   = 0.5;
+  const double nitsche_parameter = 5 * (fe_degree + 1) * fe_degree;
 
   const MPI_Comm comm = MPI_COMM_WORLD;
 
@@ -207,16 +143,13 @@ test(ConvergenceTable  &table,
   ConditionalOStream pcout_detail(
     std::cout, (Utilities::MPI::this_mpi_process(comm) == 0) && false);
 
-  ExactSolution<dim>           exact_solution(x_shift, phi, phi_add);
-  ExactSolutionDerivative<dim> exact_solution_der(x_shift, phi, phi_add);
-  Functions::ConstantFunction<dim, Number> advection(
-    exact_solution.get_transport_direction().begin_raw(), dim);
+  ExactSolution<dim> exact_solution(x_shift, phi, phi_add);
 
   // Create GDM system
   GDM::System<dim> system(comm, fe_degree, n_components, do_ghost_penalty);
 
   // Create mesh
-  system.subdivided_hyper_cube(n_subdivisions_1D, 0, 1);
+  system.subdivided_hyper_cube(n_subdivisions_1D, -1.21, 1.21);
 
   // Create finite elements
   const auto &fe = system.get_fe();
@@ -244,12 +177,7 @@ test(ConvergenceTable  &table,
   NonMatching::MeshClassifier<dim> mesh_classifier(level_set_dof_handler,
                                                    level_set);
 
-  const Point<dim> point = {x_shift, 0.0};
-  Tensor<1, dim>   normal;
-  normal[0] = +std::sin(phi);
-  normal[1] = -std::cos(phi);
-  const Functions::SignedDistance::Plane<dim> signed_distance_sphere(point,
-                                                                     normal);
+  const Functions::SignedDistance::Sphere<dim> signed_distance_sphere;
   VectorTools::interpolate(level_set_dof_handler,
                            signed_distance_sphere,
                            level_set);
@@ -399,6 +327,7 @@ test(ConvergenceTable  &table,
 
                 std::vector<types::global_dof_index>
                   local_interface_dof_indices;
+                dof_indices.resize(dofs_per_cell);
                 cell->get_dof_indices(dof_indices);
                 for (const auto i : dof_indices)
                   local_interface_dof_indices.emplace_back(i);
@@ -452,106 +381,13 @@ test(ConvergenceTable  &table,
   solution.block(1).reinit(partitioner);
   GDM::VectorTools::interpolate(mapping,
                                 system,
-                                exact_solution,
+                                initial_condition,
                                 solution.block(1));
-
-  // set up BCs
-  std::vector<Point<dim>> all_points;
-
-  {
-    const QGauss<1> quadrature_1D(fe_degree + 1);
-
-    NonMatching::RegionUpdateFlags region_update_flags;
-    region_update_flags.inside = update_values | update_gradients |
-                                 update_JxW_values | update_quadrature_points;
-    region_update_flags.surface = update_values | update_gradients |
-                                  update_JxW_values | update_quadrature_points |
-                                  update_normal_vectors;
-
-    NonMatching::FEValues<dim> non_matching_fe_values(fe,
-                                                      quadrature_1D,
-                                                      region_update_flags,
-                                                      mesh_classifier,
-                                                      level_set_dof_handler,
-                                                      level_set);
-
-    NonMatching::RegionUpdateFlags region_update_flags_face;
-    region_update_flags_face.inside =
-      update_values | update_gradients | update_JxW_values |
-      update_quadrature_points | update_normal_vectors;
-
-    NonMatching::FEInterfaceValues<dim> non_matching_fe_interface_values(
-      fe,
-      quadrature_1D,
-      region_update_flags_face,
-      mesh_classifier,
-      level_set_dof_handler,
-      level_set);
-
-    for (const auto &cell : system.locally_active_cell_iterators())
-      if (cell->is_locally_owned() &&
-          (mesh_classifier.location_to_level_set(cell->dealii_iterator()) !=
-           NonMatching::LocationToLevelSet::outside))
-        {
-          non_matching_fe_values.reinit(cell->dealii_iterator(),
-                                        numbers::invalid_unsigned_int,
-                                        numbers::invalid_unsigned_int,
-                                        cell->active_fe_index());
-
-          const auto &surface_fe_values_ptr =
-            non_matching_fe_values.get_surface_fe_values();
-
-          if ((phi_add != 0) && surface_fe_values_ptr)
-            {
-              const auto &fe_face_values = *surface_fe_values_ptr;
-
-              for (const auto q : fe_face_values.quadrature_point_indices())
-                {
-                  all_points.emplace_back(fe_face_values.quadrature_point(q));
-                }
-            }
-
-          for (const auto f : cell->dealii_iterator()->face_indices())
-            if (cell->dealii_iterator()->face(f)->at_boundary())
-              {
-                non_matching_fe_interface_values.reinit(
-                  cell->dealii_iterator(),
-                  f,
-                  numbers::invalid_unsigned_int,
-                  numbers::invalid_unsigned_int,
-                  cell->active_fe_index());
-
-                const auto &fe_interface_values =
-                  non_matching_fe_interface_values.get_inside_fe_values();
-
-                if (fe_interface_values)
-                  {
-                    const auto &fe_face_values =
-                      fe_interface_values->get_fe_face_values(0);
-
-                    for (const auto q :
-                         fe_face_values.quadrature_point_indices())
-                      {
-                        all_points.emplace_back(
-                          fe_face_values.quadrature_point(q));
-                      }
-                  }
-              }
-        }
-  }
-
-  solution.block(0).reinit(all_points.size());
-
-  const auto fu_eval_bc = [&](const double time, VectorType &stage_bc) {
-    exact_solution.set_time(time);
-    for (unsigned int i = 0; i < all_points.size(); ++i)
-      stage_bc[i] = exact_solution.value(all_points[i]);
-  };
 
   // helper function to evaluate right-hand-side vector
   const auto fu_rhs = [&](const double           time,
                           const BlockVectorType &stage_bc_and_solution) {
-    const auto &stage_bc = stage_bc_and_solution.block(0);
+    (void)time;
     const auto &solution = stage_bc_and_solution.block(1);
 
     BlockVectorType result;
@@ -559,11 +395,6 @@ test(ConvergenceTable  &table,
 
     VectorType vec_rhs;
     vec_rhs.reinit(solution); // result of assembly of rhs vector
-
-    // evaluate derivative of bc
-    exact_solution_der.set_time(time);
-    for (unsigned int i = 0; i < all_points.size(); ++i)
-      result.block(0)[i] = exact_solution_der.value(all_points[i]);
 
     // evaluate advection operator
     const QGauss<1> quadrature_1D(fe_degree + 1);
@@ -601,10 +432,6 @@ test(ConvergenceTable  &table,
       hp::QCollection<dim - 1>(QGauss<dim - 1>(fe_degree + 1)),
       update_gradients | update_JxW_values | update_normal_vectors);
 
-    advection.set_time(time);
-
-    unsigned int point_counter = 0;
-
     solution.update_ghost_values();
 
     for (const auto &cell : system.locally_active_cell_iterators())
@@ -638,145 +465,73 @@ test(ConvergenceTable  &table,
             {
               const auto &fe_values = *fe_values_ptr;
 
-              std::vector<Number> quadrature_values(
-                fe_values.n_quadrature_points);
-              fe_values.get_function_values(solution,
-                                            dof_indices,
-                                            quadrature_values);
-
               std::vector<Tensor<1, dim, Number>> quadrature_gradients(
                 fe_values.n_quadrature_points);
               fe_values.get_function_gradients(solution,
                                                dof_indices,
                                                quadrature_gradients);
 
-              std::vector<Number> fluxes_value(fe_values.n_quadrature_points,
-                                               0);
-              std::vector<Tensor<1, dim, Number>> fluxes_gradient(
-                fe_values.n_quadrature_points);
-
-              for (const auto q : fe_values.quadrature_point_indices())
+              for (const unsigned int q : fe_values.quadrature_point_indices())
                 {
-                  const auto point = fe_values.quadrature_point(q);
-
-                  for (unsigned int d = 0; d < dim; ++d)
+                  const Point<dim> &point = fe_values.quadrature_point(q);
+                  for (const unsigned int i : fe_values.dof_indices())
                     {
-                      fluxes_value[q] +=
-                        quadrature_gradients[q][d] * advection.value(point, d);
-                      fluxes_gradient[q][d] =
-                        quadrature_values[q] * advection.value(point, d);
+                      cell_vector(i) += fe_values.shape_grad(i, q) *
+                                        quadrature_gradients[q] *
+                                        fe_values.JxW(q);
+                      cell_vector(i) += rhs_function.value(point) *
+                                        fe_values.shape_value(i, q) *
+                                        fe_values.JxW(q);
                     }
                 }
-
-              for (const unsigned int q_index :
-                   fe_values.quadrature_point_indices())
-                for (const unsigned int i : fe_values.dof_indices())
-                  cell_vector(i) +=
-                    alpha * (-fluxes_value[q_index] *
-                             fe_values.shape_value(i, q_index) *
-                             fe_values.JxW(q_index)) +
-                    (1 - alpha) * (fluxes_gradient[q_index] *
-                                   fe_values.shape_grad(i, q_index) *
-                                   fe_values.JxW(q_index));
             }
 
           // (II) surface integral to apply BC
-          if ((phi_add != 0) && surface_fe_values_ptr)
+          if (surface_fe_values_ptr)
             {
-              const auto &fe_face_values = *surface_fe_values_ptr;
+              const auto &surface_fe_values = *surface_fe_values_ptr;
 
               std::vector<Number> quadrature_values(
-                fe_face_values.n_quadrature_points);
-              fe_face_values.get_function_values(solution,
-                                                 dof_indices,
-                                                 quadrature_values);
+                surface_fe_values.n_quadrature_points);
+              surface_fe_values.get_function_values(solution,
+                                                    dof_indices,
+                                                    quadrature_values);
 
-              std::vector<Number> fluxes(fe_face_values.n_quadrature_points, 0);
-
-              for (const auto q : fe_face_values.quadrature_point_indices())
-                {
-                  const auto normal = fe_face_values.normal_vector(q);
-                  const auto point  = fe_face_values.quadrature_point(q);
-
-                  for (unsigned int d = 0; d < dim; ++d)
-                    fluxes[q] += normal[d] * advection.value(point, d);
-                }
-
-              std::vector<Number> u_plus(fe_face_values.n_quadrature_points, 0);
-
-              for (const auto q : fe_face_values.quadrature_point_indices())
-                u_plus[q] = stage_bc[point_counter++];
-
-              for (const unsigned int q_index :
-                   fe_face_values.quadrature_point_indices())
-                for (const unsigned int i : fe_face_values.dof_indices())
-                  cell_vector(i) +=
-                    fluxes[q_index] *
-                    (alpha * quadrature_values[q_index] -
-                     ((fluxes[q_index] >= 0.0) ? quadrature_values[q_index] :
-                                                 u_plus[q_index])) *
-                    fe_face_values.shape_value(i, q_index) *
-                    fe_face_values.JxW(q_index);
-            }
-
-          // (III) face integral to apply BC
-          for (const auto f : cell->dealii_iterator()->face_indices())
-            if (cell->dealii_iterator()->face(f)->at_boundary())
-              {
-                non_matching_fe_interface_values.reinit(
-                  cell->dealii_iterator(),
-                  f,
-                  numbers::invalid_unsigned_int,
-                  numbers::invalid_unsigned_int,
-                  cell->active_fe_index());
-
-                const auto &fe_interface_values =
-                  non_matching_fe_interface_values.get_inside_fe_values();
-
-                if (fe_interface_values)
-                  {
-                    const auto &fe_face_values =
-                      fe_interface_values->get_fe_face_values(0);
-
-                    std::vector<Number> quadrature_values(
-                      fe_face_values.n_quadrature_points);
-                    fe_face_values.get_function_values(solution,
+              std::vector<Tensor<1, dim, Number>> quadrature_gradients(
+                surface_fe_values.n_quadrature_points);
+              surface_fe_values.get_function_gradients(solution,
                                                        dof_indices,
-                                                       quadrature_values);
+                                                       quadrature_gradients);
 
-                    std::vector<Number> fluxes(
-                      fe_face_values.n_quadrature_points, 0);
 
-                    for (const auto q :
-                         fe_face_values.quadrature_point_indices())
-                      {
-                        const auto normal = fe_face_values.normal_vector(q);
-                        const auto point  = fe_face_values.quadrature_point(q);
+              for (const unsigned int q :
+                   surface_fe_values.quadrature_point_indices())
+                {
+                  const Point<dim> &point =
+                    surface_fe_values.quadrature_point(q);
+                  const Tensor<1, dim> &normal =
+                    surface_fe_values.normal_vector(q);
+                  for (const unsigned int i : surface_fe_values.dof_indices())
+                    {
+                      cell_vector(i) +=
+                        (-normal * surface_fe_values.shape_grad(i, q) *
+                           quadrature_values[q] +
+                         -normal * quadrature_gradients[q] *
+                           surface_fe_values.shape_value(i, q) +
+                         nitsche_parameter / cell_side_length *
+                           surface_fe_values.shape_value(i, q) *
+                           quadrature_values[q]) *
+                        surface_fe_values.JxW(q);
 
-                        for (unsigned int d = 0; d < dim; ++d)
-                          fluxes[q] += normal[d] * advection.value(point, d);
-                      }
-
-                    std::vector<Number> u_plus(
-                      fe_face_values.n_quadrature_points, 0);
-
-                    for (const auto q :
-                         fe_face_values.quadrature_point_indices())
-                      u_plus[q] = stage_bc[point_counter++];
-
-                    for (const unsigned int q_index :
-                         fe_face_values.quadrature_point_indices())
-                      for (const unsigned int i : fe_face_values.dof_indices())
-                        cell_vector(i) +=
-                          fluxes[q_index] *
-                          (alpha * quadrature_values[q_index] -
-                           ((fluxes[q_index] >= 0.0) ?
-                              quadrature_values[q_index] :
-                              u_plus[q_index])) *
-                          fe_face_values.shape_value(i, q_index) *
-                          fe_face_values.JxW(q_index);
-                  }
-              }
+                      cell_vector(i) +=
+                        boundary_condition.value(point) *
+                        (nitsche_parameter / cell_side_length *
+                           surface_fe_values.shape_value(i, q) -
+                         normal * surface_fe_values.shape_grad(i, q)) *
+                        surface_fe_values.JxW(q);
+                    }
+                }
+            }
 
           // (IV) face integral for apply GP
           for (const unsigned int f : cell->dealii_iterator()->face_indices())
@@ -830,7 +585,6 @@ test(ConvergenceTable  &table,
                       {
                         local_stabilization(i) -=
                           .5 * ghost_parameter * cell_side_length *
-                          cell_side_length *
                           (normal *
                            fe_interface_values.jump_in_shape_gradients(i, q)) *
                           (normal * jump_in_shape_gradients[q]) *
@@ -1074,16 +828,14 @@ test(ConvergenceTable  &table,
   auto error = fu_postprocessing(0.0, solution);
 
   // perform time stepping
-  while ((time.is_at_end() == false) && (error[2] < 1.0 /*TODO*/))
+  while ((time.is_at_end() == false))
     {
-      fu_eval_bc(time.get_current_time(), solution.block(0)); // evaluate bc
-
       rk.evolve_one_time_step(fu_rhs,
                               time.get_current_time(),
                               time.get_next_step_size(),
                               solution);
 
-      constraints.distribute(solution);
+      constraints.distribute(solution.block(1));
 
       // output result
       error =
@@ -1111,11 +863,6 @@ test(ConvergenceTable  &table,
   table.add_value("error_inf_face", error[3]);
   table.set_scientific("error_inf_face", true);
 
-  if (false)
-    {
-      eigenvalue_estimates(sparse_matrix);
-    }
-
   pcout << std::endl;
 }
 
@@ -1127,115 +874,12 @@ main(int argc, char **argv)
 
   ConvergenceTable table;
 
-  if (false)
+  test<2>(table, 3, 40, 0.01, 0.0, 0.0, true);
+
+
+  if (Utilities::MPI::this_mpi_process(MPI_COMM_WORLD) == 0)
     {
-      const unsigned int n_subdivisions_1D = 10;
-      const double       cfl               = 0.1;
-
-      for (const unsigned int fe_degree : {1, 3, 5})
-        test<2>(table, fe_degree, n_subdivisions_1D, cfl, false);
-
-      for (const unsigned int fe_degree : {1, 3, 5})
-        test<2>(table, fe_degree, n_subdivisions_1D, cfl, true);
-
-      if (Utilities::MPI::this_mpi_process(MPI_COMM_WORLD) == 0)
-        {
-          table.write_text(std::cout);
-          std::cout << std::endl;
-        }
-    }
-
-  if (false)
-    {
-      const unsigned int fe_degree         = 5;
-      const unsigned int n_subdivisions_1D = 40;
-      const double       cfl               = 0.1;
-
-      for (double factor = 0.5; factor <= 2.0; factor += 0.1)
-        test<2>(table, fe_degree, n_subdivisions_1D, cfl, true, factor, true);
-
-      if (Utilities::MPI::this_mpi_process(MPI_COMM_WORLD) == 0)
-        {
-          table.write_text(std::cout);
-          std::cout << std::endl;
-        }
-    }
-
-  if (false)
-    {
-      const double factor = 5.0;
-
-      for (const unsigned int fe_degree : {3, 5})
-        {
-          for (const double cfl : {0.4, 0.2, 0.1, 0.05, 0.025})
-            {
-              for (unsigned int n_subdivisions_1D = 10;
-                   n_subdivisions_1D <= 100;
-                   n_subdivisions_1D += 10)
-                test<2>(
-                  table, fe_degree, n_subdivisions_1D, cfl, 0.0, factor, true);
-
-              if (Utilities::MPI::this_mpi_process(MPI_COMM_WORLD) == 0)
-                {
-                  table.write_text(std::cout);
-                  std::cout << std::endl;
-                }
-
-              table.clear();
-            }
-        }
-    }
-
-  if (true)
-    {
-      for (const unsigned int fe_degree : {3, 5})
-        {
-          for (unsigned int factor = 1.0; factor <= 9; ++factor)
-            {
-              const double       cfl = (fe_degree == 3) ? 0.4 : 0.1;
-              const unsigned int n_subdivisions_1D = 40;
-
-              test<2>(
-                table, fe_degree, n_subdivisions_1D, cfl, 0.0, factor, true);
-            }
-
-          if (Utilities::MPI::this_mpi_process(MPI_COMM_WORLD) == 0)
-            {
-              table.write_text(std::cout);
-              std::cout << std::endl;
-            }
-
-          table.clear();
-        }
-    }
-
-  if (false)
-    {
-      for (const unsigned int fe_degree : {3, 5})
-        {
-          for (int factor_rotation = 0.0; factor_rotation <= 18;
-               ++factor_rotation)
-            {
-              const double       factor = 5;
-              const double       cfl    = (fe_degree == 3) ? 0.4 : 0.1;
-              const unsigned int n_subdivisions_1D = 40;
-
-              test<2>(table,
-                      fe_degree,
-                      n_subdivisions_1D,
-                      cfl,
-                      factor_rotation - factor,
-                      factor,
-                      true);
-            }
-
-          if (Utilities::MPI::this_mpi_process(MPI_COMM_WORLD) == 0)
-            {
-              table.write_text(std::cout);
-              std::cout << std::endl;
-            }
-
-          table.clear();
-        }
+      table.write_text(std::cout);
+      std::cout << std::endl;
     }
 }
