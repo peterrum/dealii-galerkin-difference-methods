@@ -151,8 +151,8 @@ test(ConvergenceTable  &table,
   using VectorType = LinearAlgebra::distributed::Vector<Number>;
 
   // settings
-  const double       phi     = std::atan(0.5); // numbers::PI / 8.0; // TODO
-  const double       x_shift = 0.2000;         // 0.2001
+  const double phi = (numbers::PI / 36.0) * 5.0; // numbers::PI / 8.0; // TODO
+  const double x_shift                      = 0.2001; // 0.2001
   const unsigned int n_components           = 1;
   const unsigned int fe_degree_time_stepper = 1;
   const unsigned int fe_degree_output       = 2;
@@ -163,7 +163,7 @@ test(ConvergenceTable  &table,
   const double delta_t = dx * cfl * sandra_factor / max_vel;
   const double start_t = 0.0;
   const double end_t   = 0.10;
-  const double alpha   = 1.0;
+  const double alpha   = 0.0;
   const TimeStepping::runge_kutta_method runge_kutta_method =
     TimeStepping::runge_kutta_method::RK_CLASSIC_FOURTH_ORDER;
   const std::string solver_name = "ILU";

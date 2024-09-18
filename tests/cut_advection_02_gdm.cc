@@ -166,7 +166,7 @@ test(ConvergenceTable  &table,
      const unsigned int fe_degree,
      const unsigned int n_subdivisions_1D,
      const double       cfl,
-     const bool         rotate,
+     const double       factor_rotation,
      const double       factor           = 1.0,
      const bool         do_ghost_penalty = true)
 {
@@ -175,10 +175,13 @@ test(ConvergenceTable  &table,
   using BlockVectorType = LinearAlgebra::distributed::BlockVector<Number>;
 
   // settings
-  const double       phi          = (numbers::PI / 8.0) * factor; // TODO
-  const double       phi_add      = rotate ? (numbers::PI / 16.0) : 0.0;
-  const double       x_shift      = 0.2001;
-  const unsigned int n_components = 1;
+  const double increment  = 5.0;
+  const double rotation_0 = increment * factor;
+  const double rotation_1 = increment * (factor + factor_rotation);
+  const double phi        = (numbers::PI * increment / 180.0) * factor; // TODO
+  const double phi_add    = (numbers::PI * increment / 180.0) * factor_rotation;
+  const double x_shift    = 0.2001;
+  const unsigned int n_components           = 1;
   const unsigned int fe_degree_time_stepper = fe_degree;
   const unsigned int fe_degree_level_set    = 1;
   const unsigned int fe_degree_output       = 2;
@@ -1093,6 +1096,8 @@ test(ConvergenceTable  &table,
   table.add_value("fe_degree", fe_degree);
   table.add_value("cfl", cfl);
   table.add_value("n_subdivision", n_subdivisions_1D);
+  table.add_value("rot_0", rotation_0);
+  table.add_value("rot_1", rotation_1);
   table.add_value("error_2", error[2]);
   table.set_scientific("error_2", true);
   table.add_value("error_1", error[1]);
@@ -1140,7 +1145,7 @@ main(int argc, char **argv)
         }
     }
 
-  if (true)
+  if (false)
     {
       const unsigned int fe_degree         = 5;
       const unsigned int n_subdivisions_1D = 40;
@@ -1158,8 +1163,7 @@ main(int argc, char **argv)
 
   if (false)
     {
-      const double factor = 1.0;
-
+      const double factor = 5.0;
 
       for (const unsigned int fe_degree : {3, 5})
         {
@@ -1169,7 +1173,7 @@ main(int argc, char **argv)
                    n_subdivisions_1D <= 100;
                    n_subdivisions_1D += 10)
                 test<2>(
-                  table, fe_degree, n_subdivisions_1D, cfl, true, factor, true);
+                  table, fe_degree, n_subdivisions_1D, cfl, 0.0, factor, true);
 
               if (Utilities::MPI::this_mpi_process(MPI_COMM_WORLD) == 0)
                 {
@@ -1179,6 +1183,59 @@ main(int argc, char **argv)
 
               table.clear();
             }
+        }
+    }
+
+  if (true)
+    {
+      for (const unsigned int fe_degree : {3, 5})
+        {
+          for (unsigned int factor = 1.0; factor <= 9; ++factor)
+            {
+              const double       cfl = (fe_degree == 3) ? 0.4 : 0.1;
+              const unsigned int n_subdivisions_1D = 40;
+
+              test<2>(
+                table, fe_degree, n_subdivisions_1D, cfl, 0.0, factor, true);
+            }
+
+          if (Utilities::MPI::this_mpi_process(MPI_COMM_WORLD) == 0)
+            {
+              table.write_text(std::cout);
+              std::cout << std::endl;
+            }
+
+          table.clear();
+        }
+    }
+
+  if (false)
+    {
+      for (const unsigned int fe_degree : {3, 5})
+        {
+          for (int factor_rotation = 0.0; factor_rotation <= 18;
+               ++factor_rotation)
+            {
+              const double       factor = 5;
+              const double       cfl    = (fe_degree == 3) ? 0.4 : 0.1;
+              const unsigned int n_subdivisions_1D = 40;
+
+              test<2>(table,
+                      fe_degree,
+                      n_subdivisions_1D,
+                      cfl,
+                      factor_rotation - factor,
+                      factor,
+                      true);
+            }
+
+          if (Utilities::MPI::this_mpi_process(MPI_COMM_WORLD) == 0)
+            {
+              table.write_text(std::cout);
+              std::cout << std::endl;
+            }
+
+          table.clear();
         }
     }
 }
