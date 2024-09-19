@@ -852,7 +852,7 @@ main(int argc, char **argv)
 
   ConvergenceTable table;
 
-  test<2>(table, 3, 40, 0.1);
+  test<2>(table, 3, 100, 0.1);
 
 
   if (Utilities::MPI::this_mpi_process(MPI_COMM_WORLD) == 0)
