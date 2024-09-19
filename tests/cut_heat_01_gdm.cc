@@ -50,43 +50,32 @@
 using namespace dealii;
 
 template <int dim, typename Number = double>
-class ExactSolution : public dealii::Function<dim, Number>
+class MyExactSolution : public dealii::Function<dim, Number>
 {
 public:
-  ExactSolution(const double x_shift,
-                const double phi,
-                const double phi_add,
-                const double time = 0.)
-    : dealii::Function<dim, Number>(1, time)
-    , x_shift(x_shift)
-    , phi(phi)
-  {
-    advection[0] = 2.0 * std::cos(phi + phi_add);
-    advection[1] = 2.0 * std::sin(phi + phi_add);
-  }
-
   virtual double
   value(const dealii::Point<dim> &p, const unsigned int = 1) const override
   {
-    double                       t        = this->get_time();
-    const dealii::Tensor<1, dim> position = p - t * advection;
+    double t = this->get_time();
 
-    const double x_hat =
-      std::cos(phi) * (position[0] - x_shift) + std::sin(phi) * position[1];
-
-    return std::sin(std::sqrt(2.0) * numbers::PI * x_hat / (1.0 - x_shift));
+    return std::pow(p[0], 9.0) * std::pow(p[1], 8.0) * std::exp(-t);
   }
+};
 
-  const dealii::Tensor<1, dim> &
-  get_transport_direction() const
+
+template <int dim, typename Number = double>
+class MyExactRightHandSide : public dealii::Function<dim, Number>
+{
+public:
+  virtual double
+  value(const dealii::Point<dim> &p, const unsigned int = 1) const override
   {
-    return advection;
-  }
+    double t = this->get_time();
 
-private:
-  dealii::Tensor<1, dim> advection;
-  const double           x_shift;
-  const double           phi;
+    return -std::pow(p[0], 7.0) * std::pow(p[1], 6.0) * std::exp(-t) *
+           (std::pow(p[0], 2.0) * std::pow(p[1], 2.0) +
+            72 * std::pow(p[1], 2.0) + 56 * std::pow(p[0], 2.0));
+  }
 };
 
 
@@ -96,39 +85,29 @@ void
 test(ConvergenceTable  &table,
      const unsigned int fe_degree,
      const unsigned int n_subdivisions_1D,
-     const double       cfl,
-     const double       factor_rotation,
-     const double       factor           = 1.0,
-     const bool         do_ghost_penalty = true)
+     const double       cfl)
 {
   using Number          = double;
   using VectorType      = LinearAlgebra::distributed::Vector<Number>;
   using BlockVectorType = LinearAlgebra::distributed::BlockVector<Number>;
 
   // settings
-  const double increment  = 5.0;
-  const double rotation_0 = increment * factor;
-  const double rotation_1 = increment * (factor + factor_rotation);
-  const double phi        = (numbers::PI * increment / 180.0) * factor; // TODO
-  const double phi_add    = (numbers::PI * increment / 180.0) * factor_rotation;
-  const double x_shift    = 0.2001;
-  const unsigned int n_components           = 1;
-  const unsigned int fe_degree_time_stepper = fe_degree;
-  const unsigned int fe_degree_level_set    = 1;
-  const unsigned int fe_degree_output       = 2;
-  const double       dx                     = (1.21 * 2 / n_subdivisions_1D);
-  const double       delta_t = std::pow(dx / fe_degree / fe_degree, 2.0) * cfl;
-  const double       start_t = 0.0;
-  const double       end_t   = 0.1;
+  const unsigned int n_components        = 1;
+  const unsigned int fe_degree_level_set = 1;
+  const unsigned int fe_degree_output    = 2;
+  const double       dx                  = (1.21 * 2 / n_subdivisions_1D);
+  const double       delta_t             = std::pow(dx / fe_degree, 2.0) * cfl;
+  const double       start_t             = 0.0;
+  const double       end_t               = 0.1;
   const TimeStepping::runge_kutta_method runge_kutta_method =
     TimeStepping::runge_kutta_method::RK_CLASSIC_FOURTH_ORDER;
   const std::string solver_name = "direct";
 
   std::cout << delta_t << std::endl;
 
-  const Functions::ConstantFunction<dim> rhs_function(4.0);       // TODO
-  const Functions::ConstantFunction<dim> initial_condition(0.0);  // TODO
-  const Functions::ConstantFunction<dim> boundary_condition(0.0); // TODO
+  MyExactRightHandSide<dim> rhs_function;       // TODO
+  MyExactSolution<dim>      initial_condition;  // TODO
+  MyExactSolution<dim>      boundary_condition; // TODO
 
   const double ghost_parameter_M = 0.75;
   const double ghost_parameter_A = 1.50;
@@ -142,10 +121,10 @@ test(ConvergenceTable  &table,
   ConditionalOStream pcout_detail(
     std::cout, (Utilities::MPI::this_mpi_process(comm) == 0) && false);
 
-  ExactSolution<dim> exact_solution(x_shift, phi, phi_add);
+  MyExactSolution<dim> exact_solution;
 
   // Create GDM system
-  GDM::System<dim> system(comm, fe_degree, n_components, do_ghost_penalty);
+  GDM::System<dim> system(comm, fe_degree, n_components, true);
 
   // Create mesh
   system.subdivided_hyper_cube(n_subdivisions_1D, -1.21, 1.21);
@@ -186,9 +165,6 @@ test(ConvergenceTable  &table,
 
   const auto face_has_ghost_penalty = [&](const auto        &cell,
                                           const unsigned int face_index) {
-    if (!do_ghost_penalty)
-      return false;
-
     if (cell->at_boundary(face_index))
       return false;
 
@@ -216,10 +192,7 @@ test(ConvergenceTable  &table,
   TrilinosWrappers::SparsityPattern sparsity_pattern(
     system.locally_owned_dofs(), MPI_COMM_WORLD);
 
-  if (do_ghost_penalty)
-    system.create_flux_sparsity_pattern(constraints, sparsity_pattern);
-  else
-    system.create_sparsity_pattern(constraints, sparsity_pattern);
+  system.create_flux_sparsity_pattern(constraints, sparsity_pattern);
   sparsity_pattern.compress();
 
   TrilinosWrappers::SparseMatrix sparse_matrix;
@@ -388,6 +361,9 @@ test(ConvergenceTable  &table,
                           const BlockVectorType &stage_bc_and_solution) {
     (void)time;
     const auto &solution = stage_bc_and_solution.block(1);
+
+    rhs_function.set_time(time);
+    boundary_condition.set_time(time);
 
     BlockVectorType result;
     result.reinit(stage_bc_and_solution);
@@ -852,8 +828,6 @@ test(ConvergenceTable  &table,
   table.add_value("fe_degree", fe_degree);
   table.add_value("cfl", cfl);
   table.add_value("n_subdivision", n_subdivisions_1D);
-  table.add_value("rot_0", rotation_0);
-  table.add_value("rot_1", rotation_1);
   table.add_value("error_2", error[2]);
   table.set_scientific("error_2", true);
   table.add_value("error_1", error[1]);
@@ -878,7 +852,7 @@ main(int argc, char **argv)
 
   ConvergenceTable table;
 
-  test<2>(table, 3, 40, 0.01, 0.0, 0.0, true);
+  test<2>(table, 1, 40, 0.1);
 
 
   if (Utilities::MPI::this_mpi_process(MPI_COMM_WORLD) == 0)
