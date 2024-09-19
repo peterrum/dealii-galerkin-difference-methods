@@ -209,7 +209,11 @@ test(ConvergenceTable  &table,
 
   sparsity_pattern.compress();
 
+  TrilinosWrappers::SparseMatrix mass_matrix;
+  TrilinosWrappers::SparseMatrix stiffness_matrix;
   TrilinosWrappers::SparseMatrix sparse_matrix;
+  mass_matrix.reinit(sparsity_pattern);
+  stiffness_matrix.reinit(sparsity_pattern);
   sparse_matrix.reinit(sparsity_pattern);
 
   {
@@ -246,10 +250,15 @@ test(ConvergenceTable  &table,
 
           const auto &fe_values = non_matching_fe_values.get_inside_fe_values();
 
+          const auto &surface_fe_values_ptr =
+            non_matching_fe_values.get_surface_fe_values();
+
           const unsigned int dofs_per_cell = fe[0].dofs_per_cell;
 
           // compute element stiffness matrix
-          FullMatrix<Number> cell_matrix(dofs_per_cell, dofs_per_cell);
+          FullMatrix<Number> cell_matrix_mass(dofs_per_cell, dofs_per_cell);
+          FullMatrix<Number> cell_matrix_stiffness(dofs_per_cell,
+                                                   dofs_per_cell);
 
           // (I) cell integral
           if (fe_values)
@@ -259,9 +268,42 @@ test(ConvergenceTable  &table,
                 {
                   for (const unsigned int i : fe_values->dof_indices())
                     for (const unsigned int j : fe_values->dof_indices())
-                      cell_matrix(i, j) += fe_values->shape_value(i, q_index) *
-                                           fe_values->shape_value(j, q_index) *
-                                           fe_values->JxW(q_index);
+                      {
+                        cell_matrix_mass(i, j) +=
+                          fe_values->shape_value(i, q_index) *
+                          fe_values->shape_value(j, q_index) *
+                          fe_values->JxW(q_index);
+                        cell_matrix_stiffness(i, j) +=
+                          fe_values->shape_grad(i, q_index) *
+                          fe_values->shape_grad(j, q_index) *
+                          fe_values->JxW(q_index);
+                      }
+                }
+            }
+
+          // (II) surface integral to apply BC
+          if (surface_fe_values_ptr)
+            {
+              const auto &surface_fe_values = *surface_fe_values_ptr;
+              for (const unsigned int q :
+                   surface_fe_values.quadrature_point_indices())
+                {
+                  const Tensor<1, dim> &normal =
+                    surface_fe_values.normal_vector(q);
+                  for (const unsigned int i : surface_fe_values.dof_indices())
+                    for (const unsigned int j : surface_fe_values.dof_indices())
+                      {
+                        // left hand side
+                        cell_matrix_stiffness(i, j) +=
+                          (-normal * surface_fe_values.shape_grad(i, q) *
+                             surface_fe_values.shape_value(j, q) +
+                           -normal * surface_fe_values.shape_grad(j, q) *
+                             surface_fe_values.shape_value(i, q) +
+                           nitsche_parameter / cell_side_length *
+                             surface_fe_values.shape_value(i, q) *
+                             surface_fe_values.shape_value(j, q)) *
+                          surface_fe_values.JxW(q);
+                      }
                 }
             }
 
@@ -278,8 +320,10 @@ test(ConvergenceTable  &table,
 
                 const unsigned int n_interface_dofs =
                   fe_interface_values.n_current_interface_dofs();
-                FullMatrix<double> local_stabilization(n_interface_dofs,
-                                                       n_interface_dofs);
+                FullMatrix<double> local_stabilization_mass(n_interface_dofs,
+                                                            n_interface_dofs);
+                FullMatrix<double> local_stabilization_stiffness(
+                  n_interface_dofs, n_interface_dofs);
                 for (unsigned int q = 0;
                      q < fe_interface_values.n_quadrature_points;
                      ++q)
@@ -288,9 +332,18 @@ test(ConvergenceTable  &table,
                     for (unsigned int i = 0; i < n_interface_dofs; ++i)
                       for (unsigned int j = 0; j < n_interface_dofs; ++j)
                         {
-                          local_stabilization(i, j) +=
+                          local_stabilization_mass(i, j) +=
                             .5 * ghost_parameter_M * cell_side_length *
                             cell_side_length * cell_side_length *
+                            (normal *
+                             fe_interface_values.jump_in_shape_gradients(i,
+                                                                         q)) *
+                            (normal *
+                             fe_interface_values.jump_in_shape_gradients(j,
+                                                                         q)) *
+                            fe_interface_values.JxW(q);
+                          local_stabilization_stiffness(i, j) +=
+                            .5 * ghost_parameter_A *
                             (normal *
                              fe_interface_values.jump_in_shape_gradients(i,
                                                                          q)) *
@@ -305,8 +358,10 @@ test(ConvergenceTable  &table,
                   local_interface_dof_indices =
                     fe_interface_values.get_interface_dof_indices();
 
-                sparse_matrix.add(local_interface_dof_indices,
-                                  local_stabilization);
+                mass_matrix.add(local_interface_dof_indices,
+                                local_stabilization_mass);
+                stiffness_matrix.add(local_interface_dof_indices,
+                                     local_stabilization_stiffness);
               }
 
           // get indices
@@ -314,12 +369,20 @@ test(ConvergenceTable  &table,
           cell->get_dof_indices(dof_indices);
 
           // assemble
-          constraints.distribute_local_to_global(cell_matrix,
+          constraints.distribute_local_to_global(cell_matrix_mass,
                                                  dof_indices,
-                                                 sparse_matrix);
+                                                 mass_matrix);
+          constraints.distribute_local_to_global(cell_matrix_stiffness,
+                                                 dof_indices,
+                                                 stiffness_matrix);
         }
   }
 
+  mass_matrix.compress(VectorOperation::values::add);
+  stiffness_matrix.compress(VectorOperation::values::add);
+
+  sparse_matrix.add(1.0, mass_matrix);
+  sparse_matrix.add(delta_t, stiffness_matrix);
   sparse_matrix.compress(VectorOperation::values::add);
 
   for (auto &entry : sparse_matrix)
@@ -355,9 +418,9 @@ test(ConvergenceTable  &table,
                            solution.block(1));
 
   // helper function to evaluate right-hand-side vector
-  const auto fu_rhs = [&](const double           time,
-                          const BlockVectorType &stage_bc_and_solution) {
-    (void)time;
+  const auto fu_rhs =
+    [&](const double           time,
+        const BlockVectorType &stage_bc_and_solution) -> VectorType {
     const auto &solution = stage_bc_and_solution.block(1);
 
     rhs_function.set_time(time);
@@ -367,7 +430,7 @@ test(ConvergenceTable  &table,
     result.reinit(stage_bc_and_solution);
 
     VectorType vec_rhs;
-    vec_rhs.reinit(solution); // result of assembly of rhs vector
+    vec_rhs.reinit(solution);
 
     // evaluate advection operator
     const QGauss<1> quadrature_1D(fe_degree + 1);
@@ -404,8 +467,6 @@ test(ConvergenceTable  &table,
       hp::QCollection<dim - 1>(QGauss<dim - 1>(fe_degree + 1)),
       update_gradients | update_JxW_values | update_normal_vectors);
 
-    solution.update_ghost_values();
-
     for (const auto &cell : dof_handler.active_cell_iterators())
       if (cell->is_locally_owned() &&
           (mesh_classifier.location_to_level_set(cell) !=
@@ -433,22 +494,11 @@ test(ConvergenceTable  &table,
             {
               const auto &fe_values = *fe_values_ptr;
 
-              std::vector<Tensor<1, dim, Number>> quadrature_gradients(
-                fe_values.n_quadrature_points);
-              fe_values.get_function_gradients(solution,
-                                               dof_indices,
-                                               quadrature_gradients);
-
               for (const unsigned int q : fe_values.quadrature_point_indices())
                 {
                   const Point<dim> &point = fe_values.quadrature_point(q);
                   for (const unsigned int i : fe_values.dof_indices())
                     {
-                      // left hand side:
-                      cell_vector(i) -= fe_values.shape_grad(i, q) *
-                                        quadrature_gradients[q] *
-                                        fe_values.JxW(q);
-
                       // right hand side
                       cell_vector(i) += rhs_function.value(point) *
                                         fe_values.shape_value(i, q) *
@@ -461,20 +511,6 @@ test(ConvergenceTable  &table,
           if (surface_fe_values_ptr)
             {
               const auto &surface_fe_values = *surface_fe_values_ptr;
-
-              std::vector<Number> quadrature_values(
-                surface_fe_values.n_quadrature_points);
-              surface_fe_values.get_function_values(solution,
-                                                    dof_indices,
-                                                    quadrature_values);
-
-              std::vector<Tensor<1, dim, Number>> quadrature_gradients(
-                surface_fe_values.n_quadrature_points);
-              surface_fe_values.get_function_gradients(solution,
-                                                       dof_indices,
-                                                       quadrature_gradients);
-
-
               for (const unsigned int q :
                    surface_fe_values.quadrature_point_indices())
                 {
@@ -484,17 +520,6 @@ test(ConvergenceTable  &table,
                     surface_fe_values.normal_vector(q);
                   for (const unsigned int i : surface_fe_values.dof_indices())
                     {
-                      // left hand side
-                      cell_vector(i) -=
-                        (-normal * surface_fe_values.shape_grad(i, q) *
-                           quadrature_values[q] +
-                         -normal * quadrature_gradients[q] *
-                           surface_fe_values.shape_value(i, q) +
-                         nitsche_parameter / cell_side_length *
-                           surface_fe_values.shape_value(i, q) *
-                           quadrature_values[q]) *
-                        surface_fe_values.JxW(q);
-
                       // right hand side
                       cell_vector(i) +=
                         boundary_condition.value(point) *
@@ -506,59 +531,6 @@ test(ConvergenceTable  &table,
                 }
             }
 
-          // (IV) face integral for apply GP
-          for (const unsigned int f : cell->face_indices())
-            if (face_has_ghost_penalty(cell, f))
-              {
-                fe_interface_values.reinit(cell,
-                                           f,
-                                           numbers::invalid_unsigned_int,
-                                           cell->neighbor(f),
-                                           cell->neighbor_of_neighbor(f),
-                                           numbers::invalid_unsigned_int);
-
-                const unsigned int n_interface_dofs =
-                  fe_interface_values.n_current_interface_dofs();
-                Vector<double> local_stabilization(n_interface_dofs);
-
-                const std::vector<types::global_dof_index>
-                  local_interface_dof_indices =
-                    fe_interface_values.get_interface_dof_indices();
-
-                std::vector<Tensor<1, dim>> jump_in_shape_gradients(
-                  fe_interface_values.n_quadrature_points);
-
-                const FEValuesExtractors::Scalar scalar(0);
-
-                std::vector<double> local_dof_values(n_interface_dofs);
-                for (unsigned int i = 0; i < n_interface_dofs; ++i)
-                  local_dof_values[i] =
-                    solution[local_interface_dof_indices[i]];
-
-                fe_interface_values[scalar]
-                  .get_jump_in_function_gradients_from_local_dof_values(
-                    local_dof_values, jump_in_shape_gradients);
-
-                for (unsigned int q = 0;
-                     q < fe_interface_values.n_quadrature_points;
-                     ++q)
-                  {
-                    const Tensor<1, dim> normal = fe_interface_values.normal(q);
-                    for (unsigned int i = 0; i < n_interface_dofs; ++i)
-                      {
-                        local_stabilization(i) -=
-                          .5 * ghost_parameter_A * cell_side_length *
-                          (normal *
-                           fe_interface_values.jump_in_shape_gradients(i, q)) *
-                          (normal * jump_in_shape_gradients[q]) *
-                          fe_interface_values.JxW(q);
-                      }
-                  }
-
-                constraints.distribute_local_to_global(
-                  local_stabilization, local_interface_dof_indices, vec_rhs);
-              }
-
           cell->get_dof_indices(dof_indices);
           constraints.distribute_local_to_global(cell_vector,
                                                  dof_indices,
@@ -567,38 +539,7 @@ test(ConvergenceTable  &table,
 
     vec_rhs.compress(VectorOperation::add);
 
-    // invert mass matrix
-    if (solver_name == "AMG" || solver_name == "ILU")
-      {
-        ReductionControl     solver_control(1000, 1.e-20, 1.e-14);
-        SolverCG<VectorType> solver(solver_control);
-
-        if (solver_name == "AMG")
-          solver.solve(sparse_matrix,
-                       result.block(1),
-                       vec_rhs,
-                       preconditioner_amg);
-        else if (solver_name == "ILU")
-          solver.solve(sparse_matrix,
-                       result.block(1),
-                       vec_rhs,
-                       preconditioner_ilu);
-        else
-          AssertThrow(false, ExcNotImplemented());
-
-        pcout_detail << " [L] solved in " << solver_control.last_step()
-                     << std::endl;
-      }
-    else if (solver_name == "direct")
-      {
-        solver_direct.solve(sparse_matrix, result.block(1), vec_rhs);
-      }
-    else
-      {
-        AssertThrow(false, ExcNotImplemented());
-      }
-
-    return result;
+    return vec_rhs;
   };
 
   const auto fu_postprocessing =
@@ -792,10 +733,42 @@ test(ConvergenceTable  &table,
   // perform time stepping
   while ((time.is_at_end() == false))
     {
-      rk.evolve_one_time_step(fu_rhs,
-                              time.get_current_time(),
-                              time.get_next_step_size(),
-                              solution);
+      auto vec_rhs =
+        fu_rhs(time.get_current_time() + time.get_next_step_size(), solution);
+      vec_rhs *= time.get_next_step_size();
+
+      mass_matrix.template vmult_add<VectorType>(vec_rhs, solution.block(1));
+
+      // invert mass matrix
+      if (solver_name == "AMG" || solver_name == "ILU")
+        {
+          ReductionControl     solver_control(1000, 1.e-20, 1.e-14);
+          SolverCG<VectorType> solver(solver_control);
+
+          if (solver_name == "AMG")
+            solver.solve(sparse_matrix,
+                         solution.block(1),
+                         vec_rhs,
+                         preconditioner_amg);
+          else if (solver_name == "ILU")
+            solver.solve(sparse_matrix,
+                         solution.block(1),
+                         vec_rhs,
+                         preconditioner_ilu);
+          else
+            AssertThrow(false, ExcNotImplemented());
+
+          pcout_detail << " [L] solved in " << solver_control.last_step()
+                       << std::endl;
+        }
+      else if (solver_name == "direct")
+        {
+          solver_direct.solve(sparse_matrix, solution.block(1), vec_rhs);
+        }
+      else
+        {
+          AssertThrow(false, ExcNotImplemented());
+        }
 
       constraints.distribute(solution.block(1));
 
@@ -834,7 +807,7 @@ main(int argc, char **argv)
 
   ConvergenceTable table;
 
-  test<2>(table, 3, 40, 0.1);
+  test<2>(table, 1, 40, 0.1);
 
 
   if (Utilities::MPI::this_mpi_process(MPI_COMM_WORLD) == 0)
