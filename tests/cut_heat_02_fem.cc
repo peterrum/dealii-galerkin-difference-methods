@@ -92,13 +92,13 @@ test(ConvergenceTable  &table,
   using BlockVectorType = LinearAlgebra::distributed::BlockVector<Number>;
 
   // settings
-  const unsigned int n_components        = 1;
-  const unsigned int fe_degree_level_set = fe_degree;
-  const unsigned int fe_degree_output    = 2;
-  const double       dx                  = (1.21 * 2 / n_subdivisions_1D);
-  const double       delta_t             = std::pow(dx / fe_degree, 2.0) * cfl;
-  const double       start_t             = 0.0;
-  const double       end_t               = 0.1;
+  const unsigned int                     n_components        = 1;
+  const unsigned int                     fe_degree_level_set = fe_degree;
+  const unsigned int                     fe_degree_output    = 2;
+  const double                           dx = (1.21 * 2 / n_subdivisions_1D);
+  const double                           delta_t = dx * cfl;
+  const double                           start_t = 0.0;
+  const double                           end_t   = 0.1;
   const TimeStepping::runge_kutta_method runge_kutta_method =
     TimeStepping::runge_kutta_method::RK_CLASSIC_FOURTH_ORDER;
   const std::string solver_name = "direct";
@@ -343,7 +343,7 @@ test(ConvergenceTable  &table,
                                                                          q)) *
                             fe_interface_values.JxW(q);
                           local_stabilization_stiffness(i, j) +=
-                            .5 * ghost_parameter_A *
+                            .5 * ghost_parameter_A * cell_side_length *
                             (normal *
                              fe_interface_values.jump_in_shape_gradients(i,
                                                                          q)) *
@@ -807,7 +807,7 @@ main(int argc, char **argv)
 
   ConvergenceTable table;
 
-  test<2>(table, 1, 40, 0.1);
+  test<2>(table, 1, 200, 0.1);
 
 
   if (Utilities::MPI::this_mpi_process(MPI_COMM_WORLD) == 0)
