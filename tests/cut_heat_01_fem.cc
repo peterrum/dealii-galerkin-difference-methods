@@ -124,22 +124,18 @@ test(ConvergenceTable  &table,
   MyExactSolution<dim> exact_solution;
 
   // Create GDM system
-  GDM::System<dim> system(comm, fe_degree, n_components, true);
+  MappingQ1<dim>        mapping;
+  hp::FECollection<dim> fe;
+  fe.push_back(FE_Q<dim>(fe_degree));
+  QGauss<dim>     quadrature(fe_degree + 1);
+  QGauss<dim - 1> face_quadrature(fe_degree + 1);
 
-  // Create mesh
-  system.subdivided_hyper_cube(n_subdivisions_1D, -1.21, 1.21);
+  Triangulation<dim> tria;
+  GridGenerator::subdivided_hyper_cube(
+    tria, n_subdivisions_1D, -1.21, 1.21, true);
 
-  // Create finite elements
-  const auto &fe = system.get_fe();
-
-  // Create mapping
-  hp::MappingCollection<dim> mapping;
-  mapping.push_back(MappingQ1<dim>());
-
-  // Categorize cells
-  system.categorize();
-
-  const auto &tria = system.get_triangulation();
+  DoFHandler<dim> dof_handler(tria);
+  dof_handler.distribute_dofs(fe);
 
   // level set and classify cells
   const FE_Q<dim> fe_level_set(fe_degree_level_set);
@@ -190,9 +186,27 @@ test(ConvergenceTable  &table,
 
   // compute mass matrix
   TrilinosWrappers::SparsityPattern sparsity_pattern(
-    system.locally_owned_dofs(), MPI_COMM_WORLD);
+    dof_handler.locally_owned_dofs(), MPI_COMM_WORLD);
 
-  system.create_flux_sparsity_pattern(constraints, sparsity_pattern);
+  const auto face_has_flux_coupling = [&](const auto        &cell,
+                                          const unsigned int face_index) {
+    return face_has_ghost_penalty(cell, face_index);
+  };
+
+  Table<2, DoFTools::Coupling> cell_coupling(1, 1);
+  Table<2, DoFTools::Coupling> face_coupling(1, 1);
+  cell_coupling[0][0] = DoFTools::always;
+  face_coupling[0][0] = DoFTools::always;
+
+  DoFTools::make_flux_sparsity_pattern(dof_handler,
+                                       sparsity_pattern,
+                                       constraints,
+                                       true,
+                                       cell_coupling,
+                                       face_coupling,
+                                       numbers::invalid_subdomain_id,
+                                       face_has_flux_coupling);
+
   sparsity_pattern.compress();
 
   TrilinosWrappers::SparseMatrix sparse_matrix;
@@ -216,24 +230,19 @@ test(ConvergenceTable  &table,
                                                       level_set);
 
     FEInterfaceValues<dim> fe_interface_values(
-      mapping,
       fe,
       hp::QCollection<dim - 1>(QGauss<dim - 1>(fe_degree + 1)),
       update_gradients | update_JxW_values | update_normal_vectors);
 
     std::vector<types::global_dof_index> dof_indices;
-    for (const auto &cell : system.locally_active_cell_iterators())
+    for (const auto &cell : dof_handler.active_cell_iterators())
       if (cell->is_locally_owned() &&
-          (mesh_classifier.location_to_level_set(cell->dealii_iterator()) !=
+          (mesh_classifier.location_to_level_set(cell) !=
            NonMatching::LocationToLevelSet::outside))
         {
-          non_matching_fe_values.reinit(cell->dealii_iterator(),
-                                        numbers::invalid_unsigned_int,
-                                        numbers::invalid_unsigned_int,
-                                        cell->active_fe_index());
+          non_matching_fe_values.reinit(cell);
 
-          const double cell_side_length =
-            cell->dealii_iterator()->minimum_vertex_distance();
+          const double cell_side_length = cell->minimum_vertex_distance();
 
           const auto &fe_values = non_matching_fe_values.get_inside_fe_values();
 
@@ -257,20 +266,15 @@ test(ConvergenceTable  &table,
             }
 
           // (II) face integral to apply GP
-          for (const unsigned int f : cell->dealii_iterator()->face_indices())
-            if (face_has_ghost_penalty(cell->dealii_iterator(), f))
+          for (const unsigned int f : cell->face_indices())
+            if (face_has_ghost_penalty(cell, f))
               {
-                fe_interface_values.reinit(
-                  cell->dealii_iterator(),
-                  f,
-                  numbers::invalid_unsigned_int,
-                  cell->dealii_iterator()->neighbor(f),
-                  cell->dealii_iterator()->neighbor_of_neighbor(f),
-                  numbers::invalid_unsigned_int,
-                  numbers::invalid_unsigned_int,
-                  numbers::invalid_unsigned_int,
-                  cell->active_fe_index(),
-                  cell->neighbor(f)->active_fe_index());
+                fe_interface_values.reinit(cell,
+                                           f,
+                                           numbers::invalid_unsigned_int,
+                                           cell->neighbor(f),
+                                           cell->neighbor_of_neighbor(f),
+                                           numbers::invalid_unsigned_int);
 
                 const unsigned int n_interface_dofs =
                   fe_interface_values.n_current_interface_dofs();
@@ -297,15 +301,9 @@ test(ConvergenceTable  &table,
                         }
                   }
 
-                std::vector<types::global_dof_index>
-                  local_interface_dof_indices;
-                dof_indices.resize(dofs_per_cell);
-                cell->get_dof_indices(dof_indices);
-                for (const auto i : dof_indices)
-                  local_interface_dof_indices.emplace_back(i);
-                cell->neighbor(f)->get_dof_indices(dof_indices);
-                for (const auto i : dof_indices)
-                  local_interface_dof_indices.emplace_back(i);
+                const std::vector<types::global_dof_index>
+                  local_interface_dof_indices =
+                    fe_interface_values.get_interface_dof_indices();
 
                 sparse_matrix.add(local_interface_dof_indices,
                                   local_stabilization);
@@ -344,17 +342,17 @@ test(ConvergenceTable  &table,
     AssertThrow(false, ExcNotImplemented());
 
   // set up initial condition
-  const auto partitioner =
-    std::make_shared<Utilities::MPI::Partitioner>(system.locally_owned_dofs(),
-                                                  system.locally_relevant_dofs(
-                                                    constraints),
-                                                  comm);
+  const auto partitioner = std::make_shared<Utilities::MPI::Partitioner>(
+    dof_handler.locally_owned_dofs(),
+    DoFTools::extract_locally_relevant_dofs(dof_handler),
+    comm);
   BlockVectorType solution(2);
   solution.block(1).reinit(partitioner);
-  GDM::VectorTools::interpolate(mapping,
-                                system,
-                                initial_condition,
-                                solution.block(1));
+
+  VectorTools::interpolate(mapping,
+                           dof_handler,
+                           initial_condition,
+                           solution.block(1));
 
   // helper function to evaluate right-hand-side vector
   const auto fu_rhs = [&](const double           time,
@@ -402,25 +400,20 @@ test(ConvergenceTable  &table,
       level_set);
 
     FEInterfaceValues<dim> fe_interface_values(
-      mapping,
       fe,
       hp::QCollection<dim - 1>(QGauss<dim - 1>(fe_degree + 1)),
       update_gradients | update_JxW_values | update_normal_vectors);
 
     solution.update_ghost_values();
 
-    for (const auto &cell : system.locally_active_cell_iterators())
+    for (const auto &cell : dof_handler.active_cell_iterators())
       if (cell->is_locally_owned() &&
-          (mesh_classifier.location_to_level_set(cell->dealii_iterator()) !=
+          (mesh_classifier.location_to_level_set(cell) !=
            NonMatching::LocationToLevelSet::outside))
         {
-          non_matching_fe_values.reinit(cell->dealii_iterator(),
-                                        numbers::invalid_unsigned_int,
-                                        numbers::invalid_unsigned_int,
-                                        cell->active_fe_index());
+          non_matching_fe_values.reinit(cell);
 
-          const double cell_side_length =
-            cell->dealii_iterator()->minimum_vertex_distance();
+          const double cell_side_length = cell->minimum_vertex_distance();
 
           const auto &fe_values_ptr =
             non_matching_fe_values.get_inside_fe_values();
@@ -514,33 +507,23 @@ test(ConvergenceTable  &table,
             }
 
           // (IV) face integral for apply GP
-          for (const unsigned int f : cell->dealii_iterator()->face_indices())
-            if (face_has_ghost_penalty(cell->dealii_iterator(), f))
+          for (const unsigned int f : cell->face_indices())
+            if (face_has_ghost_penalty(cell, f))
               {
-                fe_interface_values.reinit(
-                  cell->dealii_iterator(),
-                  f,
-                  numbers::invalid_unsigned_int,
-                  cell->dealii_iterator()->neighbor(f),
-                  cell->dealii_iterator()->neighbor_of_neighbor(f),
-                  numbers::invalid_unsigned_int,
-                  numbers::invalid_unsigned_int,
-                  numbers::invalid_unsigned_int,
-                  cell->active_fe_index(),
-                  cell->neighbor(f)->active_fe_index());
+                fe_interface_values.reinit(cell,
+                                           f,
+                                           numbers::invalid_unsigned_int,
+                                           cell->neighbor(f),
+                                           cell->neighbor_of_neighbor(f),
+                                           numbers::invalid_unsigned_int);
 
                 const unsigned int n_interface_dofs =
                   fe_interface_values.n_current_interface_dofs();
                 Vector<double> local_stabilization(n_interface_dofs);
 
-                std::vector<types::global_dof_index>
-                  local_interface_dof_indices;
-                cell->get_dof_indices(dof_indices);
-                for (const auto i : dof_indices)
-                  local_interface_dof_indices.emplace_back(i);
-                cell->neighbor(f)->get_dof_indices(dof_indices);
-                for (const auto i : dof_indices)
-                  local_interface_dof_indices.emplace_back(i);
+                const std::vector<types::global_dof_index>
+                  local_interface_dof_indices =
+                    fe_interface_values.get_interface_dof_indices();
 
                 std::vector<Tensor<1, dim>> jump_in_shape_gradients(
                   fe_interface_values.n_quadrature_points);
@@ -653,15 +636,12 @@ test(ConvergenceTable  &table,
     double local_error_L2_face_squared = 0;
 
     solution.update_ghost_values();
-    for (const auto &cell : system.locally_active_cell_iterators())
+    for (const auto &cell : dof_handler.active_cell_iterators())
       if (cell->is_locally_owned() &&
-          (mesh_classifier.location_to_level_set(cell->dealii_iterator()) !=
+          (mesh_classifier.location_to_level_set(cell) !=
            NonMatching::LocationToLevelSet::outside))
         {
-          non_matching_fe_values_error.reinit(cell->dealii_iterator(),
-                                              numbers::invalid_unsigned_int,
-                                              numbers::invalid_unsigned_int,
-                                              cell->active_fe_index());
+          non_matching_fe_values_error.reinit(cell);
 
           const std::optional<FEValues<dim>> &fe_values =
             non_matching_fe_values_error.get_inside_fe_values();
@@ -756,25 +736,27 @@ test(ConvergenceTable  &table,
              error_Linf);
 
     // output result -> Paraview
-    GDM::DataOut<dim> data_out(system, mapping, fe_degree_output);
+    dealii::DataOut<dim> data_out;
     solution.update_ghost_values();
-    data_out.add_data_vector(solution, "solution");
+    data_out.add_data_vector(dof_handler, solution, "solution");
 
     VectorType level_set(partitioner);
-    GDM::VectorTools::interpolate(mapping,
-                                  system,
-                                  signed_distance_sphere,
-                                  level_set);
+    VectorTools::interpolate(mapping,
+                             dof_handler,
+                             signed_distance_sphere,
+                             level_set);
     level_set.update_ghost_values();
-    data_out.add_data_vector(level_set, "level_set");
+    data_out.add_data_vector(level_set_dof_handler, level_set, "level_set");
 
     VectorType analytical_solution(partitioner);
-    GDM::VectorTools::interpolate(mapping,
-                                  system,
-                                  exact_solution,
-                                  analytical_solution);
+    VectorTools::interpolate(mapping,
+                             dof_handler,
+                             exact_solution,
+                             analytical_solution);
     analytical_solution.update_ghost_values();
-    data_out.add_data_vector(analytical_solution, "analytical_solution");
+    data_out.add_data_vector(dof_handler,
+                             analytical_solution,
+                             "analytical_solution");
 
     if (true)
       data_out.set_cell_selection(
@@ -784,10 +766,10 @@ test(ConvergenceTable  &table,
                    NonMatching::LocationToLevelSet::outside;
         });
 
-    data_out.build_patches();
+    data_out.build_patches(mapping, fe_degree);
 
     std::string file_name = "solution_" + std::to_string(counter) + ".vtu";
-    data_out.write_vtu_in_parallel(file_name);
+    data_out.write_vtu_in_parallel(file_name, comm);
 
     counter++;
 
