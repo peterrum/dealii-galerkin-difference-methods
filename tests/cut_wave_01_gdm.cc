@@ -861,7 +861,9 @@ main(int argc, char **argv)
 
   ConvergenceTable table;
 
-  test<2>(table, 3, 40, 0.2);
+  const unsigned int fe_degree = 3;
+
+  test<2>(table, fe_degree, 40, 0.4 / fe_degree);
 
 
   if (Utilities::MPI::this_mpi_process(MPI_COMM_WORLD) == 0)
