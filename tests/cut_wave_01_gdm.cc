@@ -98,7 +98,7 @@ test(ConvergenceTable  &table,
   const unsigned int                     n_components        = 1;
   const unsigned int                     fe_degree_level_set = fe_degree;
   const unsigned int                     fe_degree_output    = 2;
-  const double                           dx = (1.21 * 2 / n_subdivisions_1D);
+  const double                           dx = (1.5 * 2 / n_subdivisions_1D);
   const double                           delta_t = dx * cfl;
   const double                           start_t = 0.0;
   const double                           end_t   = 1.0;
@@ -112,9 +112,9 @@ test(ConvergenceTable  &table,
   MyExactSolution<dim>      initial_condition;  // TODO
   MyExactSolution<dim>      boundary_condition; // TODO
 
-  const double ghost_parameter_M = 0.75;
-  const double ghost_parameter_A = 1.50;
-  const double nitsche_parameter = 5 * (fe_degree)*fe_degree;
+  const double ghost_parameter_M = 0.25 * std::sqrt(3.0);
+  const double ghost_parameter_A = 0.50 * std::sqrt(3.0);
+  const double nitsche_parameter = 5 * fe_degree * fe_degree;
 
   const MPI_Comm comm = MPI_COMM_WORLD;
 
@@ -130,7 +130,7 @@ test(ConvergenceTable  &table,
   GDM::System<dim> system(comm, fe_degree, n_components, true);
 
   // Create mesh
-  system.subdivided_hyper_cube(n_subdivisions_1D, -1.21, 1.21);
+  system.subdivided_hyper_cube(n_subdivisions_1D, -1.5, 1.5);
 
   // Create finite elements
   const auto &fe = system.get_fe();
@@ -861,7 +861,9 @@ main(int argc, char **argv)
 
   ConvergenceTable table;
 
-  test<2>(table, 3, 40, 0.2);
+  const unsigned int fe_degree = 3;
+
+  test<2>(table, fe_degree, 40, 0.4 / fe_degree);
 
 
   if (Utilities::MPI::this_mpi_process(MPI_COMM_WORLD) == 0)
