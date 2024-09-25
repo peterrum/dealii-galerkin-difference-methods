@@ -20,33 +20,21 @@ using namespace dealii;
 
 
 template <unsigned int dim, typename Number>
-class MassMatrixOperator
+class Discretization
 {
 public:
-  const TrilinosWrappers::SparseMatrix &
-  get_sparse_matrix() const
-  {
-    compute_sparse_matrix();
+  using VectorType = LinearAlgebra::distributed::Vector<Number>;
 
-    return sparse_matrix;
-  }
-
-private:
-  mutable TrilinosWrappers::SparsityPattern sparsity_pattern;
-  mutable TrilinosWrappers::SparseMatrix    sparse_matrix;
+  Discretization() = default;
 
   void
-  compute_sparse_matrix() const
+  reinit()
   {
-    using VectorType = LinearAlgebra::distributed::Vector<Number>;
-
     // settings
     const unsigned int fe_degree           = 3;
     const unsigned int n_subdivisions_1D   = 40;
     const unsigned int n_components        = 1;
     const unsigned int fe_degree_level_set = fe_degree;
-
-    const double ghost_parameter_M = 0.25 * std::sqrt(3.0);
 
     const MPI_Comm comm = MPI_COMM_WORLD;
 
@@ -93,7 +81,85 @@ private:
     AffineConstraints<Number> constraints;
     constraints.close();
 
-    const QGauss<1> quadrature_1D(fe_degree + 1);
+    const QGauss<1>       quadrature_1D(fe_degree + 1);
+    const QGauss<dim - 1> face_quadrature(fe_degree + 1);
+  }
+
+
+  const hp::MappingCollection<dim> &
+  get_mapping() const;
+
+  const Quadrature<1> &
+  get_quadrature_1D() const;
+
+  const Quadrature<dim - 1>
+  get_face_quadrature() const;
+
+  const GDM::System<dim> &
+  get_system() const;
+
+  const AffineConstraints<Number> &
+  get_affine_constraints() const;
+
+  const NonMatching::MeshClassifier<dim> &
+  get_mesh_classifier() const;
+
+  const hp::FECollection<dim> &
+  get_fe() const;
+
+  const VectorType &
+  get_level_set() const;
+
+  const DoFHandler<dim> &
+  get_level_set_dof_handler() const;
+
+private:
+};
+
+
+template <unsigned int dim, typename Number>
+class MassMatrixOperator
+{
+public:
+  using VectorType = LinearAlgebra::distributed::Vector<Number>;
+
+  MassMatrixOperator(const Discretization<dim, Number> &discretization)
+    : discretization(discretization)
+  {}
+
+  const TrilinosWrappers::SparseMatrix &
+  get_sparse_matrix() const
+  {
+    compute_sparse_matrix();
+
+    return sparse_matrix;
+  }
+
+private:
+  const Discretization<dim, Number> &discretization;
+
+  mutable TrilinosWrappers::SparsityPattern sparsity_pattern;
+  mutable TrilinosWrappers::SparseMatrix    sparse_matrix;
+
+  void
+  compute_sparse_matrix() const
+  {
+    const double ghost_parameter_M = 0.25 * std::sqrt(3.0); // TODO
+
+    // extract information from discretization class
+    const hp::MappingCollection<dim> &mapping = discretization.get_mapping();
+    const Quadrature<1> &quadrature_1D = discretization.get_quadrature_1D();
+    const Quadrature<dim - 1> &face_quadrature =
+      discretization.get_face_quadrature();
+    const GDM::System<dim>          &system = discretization.get_system();
+    const AffineConstraints<Number> &constraints =
+      discretization.get_affine_constraints();
+    const NonMatching::MeshClassifier<dim> &mesh_classifier =
+      discretization.get_mesh_classifier();
+    const hp::FECollection<dim> &fe        = discretization.get_fe();
+    const VectorType            &level_set = discretization.get_level_set();
+    const DoFHandler<dim>       &level_set_dof_handler =
+      discretization.get_level_set_dof_handler();
 
     const auto face_has_ghost_penalty = [&](const auto        &cell,
                                             const unsigned int face_index) {
@@ -144,7 +210,7 @@ private:
     FEInterfaceValues<dim> fe_interface_values(
       mapping,
       fe,
-      hp::QCollection<dim - 1>(QGauss<dim - 1>(fe_degree + 1)),
+      hp::QCollection<dim - 1>(face_quadrature),
       update_gradients | update_JxW_values | update_normal_vectors);
 
     std::vector<types::global_dof_index> dof_indices;
@@ -331,7 +397,9 @@ main(int argc, char **argv)
   using Number           = double;
   const unsigned int dim = 1;
 
-  MassMatrixOperator<dim, Number> mass_matrix_operator;
+  Discretization<dim, Number> discretization;
+
+  MassMatrixOperator<dim, Number> mass_matrix_operator(discretization);
   StiffnessMatrixOperator<Number> stiffness_matrix_operator;
 
   if (true)
