@@ -27,7 +27,7 @@ public:
   reinit()
   {
     // settings
-    const unsigned int fe_degree           = 3;
+    const unsigned int fe_degree           = 5;
     const unsigned int n_subdivisions_1D   = 40;
     const unsigned int n_components        = 1;
     const unsigned int fe_degree_level_set = fe_degree;
@@ -86,6 +86,12 @@ public:
   get_fe() const
   {
     return system->get_fe();
+  }
+
+  unsigned int
+  get_fe_degree() const
+  {
+    return system->get_fe_degree();
   }
 
   const hp::MappingCollection<dim> &

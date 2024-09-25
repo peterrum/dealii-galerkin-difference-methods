@@ -28,6 +28,9 @@ compute_condition_number(const MatrixType &M_in)
 
   std::cout << "condition number: " << eigenvalues.back() / eigenvalues.front()
             << std::endl;
+
+  for (const auto i : eigenvalues)
+    std::cout << i << std::endl;
 }
 
 
@@ -56,6 +59,9 @@ compute_max_generalized_eigenvalues_symmetric(const MatrixType &S_in,
 
 
   std::cout << "max ev(M\\S):     " << eigenvalues.back() << std::endl;
+
+  for (const auto i : eigenvalues)
+    std::cout << i << std::endl;
 }
 
 

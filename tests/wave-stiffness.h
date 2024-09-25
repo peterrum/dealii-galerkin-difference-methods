@@ -34,8 +34,6 @@ private:
   void
   compute_sparse_matrix() const
   {
-    const double ghost_parameter_A = 0.50 * std::sqrt(3.0); // TODO
-
     // 0) extract information from discretization class
     const hp::MappingCollection<dim> &mapping = discretization.get_mapping();
     const Quadrature<1> &quadrature_1D = discretization.get_quadrature_1D();
@@ -50,6 +48,13 @@ private:
     const VectorType            &level_set = discretization.get_level_set();
     const DoFHandler<dim>       &level_set_dof_handler =
       discretization.get_level_set_dof_handler();
+
+    const unsigned int fe_degree         = discretization.get_fe_degree();
+    const double       ghost_parameter_A = 0.50 * std::sqrt(3.0); // TODO
+    const double       nitsche_parameter = 5.0 * fe_degree;
+
+    std::shared_ptr<Function<dim>> function_interface_dbc;
+
 
     // 1) create sparsity pattern
     if (sparse_matrix.m() == 0 || sparse_matrix.n() == 0)
@@ -121,15 +126,14 @@ private:
           const double cell_side_length =
             cell->dealii_iterator()->minimum_vertex_distance();
 
-          const auto &fe_values = non_matching_fe_values.get_inside_fe_values();
-
           const unsigned int dofs_per_cell = fe[0].dofs_per_cell;
 
           // compute element stiffness matrix
           FullMatrix<Number> cell_matrix(dofs_per_cell, dofs_per_cell);
 
           // (I) cell integral
-          if (fe_values)
+          if (const auto &fe_values =
+                non_matching_fe_values.get_inside_fe_values())
             {
               for (const unsigned int q_index :
                    fe_values->quadrature_point_indices())
@@ -141,6 +145,35 @@ private:
                                            fe_values->JxW(q_index);
                 }
             }
+
+          // (II) surface integral to apply BC
+          if (function_interface_dbc)
+            if (const auto &surface_fe_values_ptr =
+                  non_matching_fe_values.get_surface_fe_values())
+              {
+                const auto &surface_fe_values = *surface_fe_values_ptr;
+                for (const unsigned int q :
+                     surface_fe_values.quadrature_point_indices())
+                  {
+                    const Tensor<1, dim> &normal =
+                      surface_fe_values.normal_vector(q);
+                    for (const unsigned int i : surface_fe_values.dof_indices())
+                      for (const unsigned int j :
+                           surface_fe_values.dof_indices())
+                        {
+                          // left hand side
+                          cell_matrix(i, j) +=
+                            (-normal * surface_fe_values.shape_grad(i, q) *
+                               surface_fe_values.shape_value(j, q) +
+                             -normal * surface_fe_values.shape_grad(j, q) *
+                               surface_fe_values.shape_value(i, q) +
+                             nitsche_parameter / cell_side_length *
+                               surface_fe_values.shape_value(i, q) *
+                               surface_fe_values.shape_value(j, q)) *
+                            surface_fe_values.JxW(q);
+                        }
+                  }
+              }
 
           // (II) face integral to apply GP
           for (const unsigned int f : cell->dealii_iterator()->face_indices())
