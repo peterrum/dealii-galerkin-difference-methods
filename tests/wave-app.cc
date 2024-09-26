@@ -39,8 +39,6 @@ public:
 
     if (simulation_type == "poisson")
       {
-        AssertThrow(false, ExcNotImplemented());
-
         // Compute stiffness matrix
         const auto &stiffness_matrix =
           stiffness_matrix_operator.get_sparse_matrix();
