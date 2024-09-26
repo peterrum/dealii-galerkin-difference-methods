@@ -482,97 +482,6 @@ private:
 
 
 
-template <int dim>
-class AnalyticalSolution : public Function<dim>
-{
-public:
-  double
-  value(const Point<dim>  &point,
-        const unsigned int component = 0) const override
-  {
-    AssertIndexRange(component, this->n_components);
-    (void)component;
-
-    return 1. - 2. / dim * (point.norm_square() - 1.);
-  }
-};
-
-
-
-template <int dim, typename Number = double>
-class MyExactSolution : public dealii::Function<dim, Number>
-{
-public:
-  virtual double
-  value(const dealii::Point<dim> &p, const unsigned int = 1) const override
-  {
-    double t = this->get_time();
-
-    if (dim == 1)
-      return std::pow(p[0], 9.0) * std::exp(-t);
-    else if (dim == 2)
-      return std::pow(p[0], 9.0) * std::pow(p[1], 8.0) * std::exp(-t);
-
-    AssertThrow(false, ExcNotImplemented());
-
-    return 0.0;
-  }
-};
-
-
-
-template <int dim, typename Number = double>
-class MyExactRightHandSide : public dealii::Function<dim, Number>
-{
-public:
-  virtual double
-  value(const dealii::Point<dim> &p, const unsigned int = 1) const override
-  {
-    double t = this->get_time();
-
-    if (dim == 1)
-      return -std::pow(p[0], 7.0) * std::exp(-t) * (std::pow(p[0], 2.0) + 72);
-    else if (dim == 2)
-      return -std::pow(p[0], 7.0) * std::pow(p[1], 6.0) * std::exp(-t) *
-             (std::pow(p[0], 2.0) * std::pow(p[1], 2.0) +
-              72 * std::pow(p[1], 2.0) + 56 * std::pow(p[0], 2.0));
-
-    AssertThrow(false, ExcNotImplemented());
-
-    return 0.0;
-  }
-};
-
-
-
-template <int dim, typename Number = double>
-class MyExactSolution2 : public dealii::Function<dim, Number>
-{
-public:
-  virtual double
-  value(const dealii::Point<dim> &p, const unsigned int = 1) const override
-  {
-    double t = this->get_time();
-
-    const double r = p.norm();
-
-    if (dim == 1)
-      {
-        return std::cos(1.5 * numbers::PI * r) *
-               std::cos(t * 1.5 * numbers::PI);
-      }
-    else if (dim == 2)
-      {
-        return std::cyl_bessel_j(0, 3.0 * numbers::PI * r) *
-               std::cos(t * 3.0 * numbers::PI);
-      }
-    else
-      AssertThrow(false, ExcNotImplemented());
-  }
-};
-
-
-
 template <unsigned int dim>
 void
 fill_parameters(Parameters<dim> &params, const std::string &simulation_name)
@@ -606,11 +515,14 @@ fill_parameters(Parameters<dim> &params, const std::string &simulation_name)
         std::make_shared<Functions::ConstantFunction<dim>>(4.0);
 
       // time stepping
-      params.exact_solution = std::make_shared<AnalyticalSolution<dim>>();
-      params.start_t        = 0.0;
-      params.end_t          = 0.1;
-      params.cfl            = 0.3;
-      params.cfl_pow        = 1.0;
+      params.exact_solution =
+        std::make_shared<ScalarFunctionFromFunctionObject<dim>>(
+          [](const auto &p) { return 1. - 2. / dim * (p.norm_square() - 1.); });
+
+      params.start_t = 0.0;
+      params.end_t   = 0.1;
+      params.cfl     = 0.3;
+      params.cfl_pow = 1.0;
 
       // linear solvers
       params.solver_name = "AMG";
@@ -647,10 +559,37 @@ fill_parameters(Parameters<dim> &params, const std::string &simulation_name)
       params.ghost_parameter_M = 0.75;
 
       // stiffness matrix
-      params.ghost_parameter_A      = 1.5;
-      params.nitsche_parameter      = 5.0 * params.fe_degree;
-      params.function_interface_dbc = std::make_shared<MyExactSolution<dim>>();
-      params.function_rhs = std::make_shared<MyExactRightHandSide<dim>>();
+      params.ghost_parameter_A = 1.5;
+      params.nitsche_parameter = 5.0 * params.fe_degree;
+
+      params.function_interface_dbc =
+        std::make_shared<ScalarFunctionFromFunctionObject<dim>>(
+          [](const auto t, const auto &p) {
+            if (dim == 1)
+              return std::pow(p[0], 9.0) * std::exp(-t);
+            else if (dim == 2)
+              return std::pow(p[0], 9.0) * std::pow(p[1], 8.0) * std::exp(-t);
+
+            AssertThrow(false, ExcNotImplemented());
+
+            return 0.0;
+          });
+
+      params.function_rhs =
+        std::make_shared<ScalarFunctionFromFunctionObject<dim>>(
+          [](const auto t, const auto &p) {
+            if (dim == 1)
+              return -std::pow(p[0], 7.0) * std::exp(-t) *
+                     (std::pow(p[0], 2.0) + 72);
+            else if (dim == 2)
+              return -std::pow(p[0], 7.0) * std::pow(p[1], 6.0) * std::exp(-t) *
+                     (std::pow(p[0], 2.0) * std::pow(p[1], 2.0) +
+                      72 * std::pow(p[1], 2.0) + 56 * std::pow(p[0], 2.0));
+
+            AssertThrow(false, ExcNotImplemented());
+
+            return 0.0;
+          });
 
       // time stepping
       params.exact_solution = params.function_interface_dbc;
@@ -706,10 +645,27 @@ fill_parameters(Parameters<dim> &params, const std::string &simulation_name)
       params.ghost_parameter_M = 0.25 * std::sqrt(3.0);
 
       // stiffness matrix
-      params.ghost_parameter_A      = 0.50 * std::sqrt(3.0);
-      params.nitsche_parameter      = 5.0 * params.fe_degree;
-      params.function_interface_dbc = std::make_shared<MyExactSolution2<dim>>();
-      params.function_rhs           = {};
+      params.ghost_parameter_A = 0.50 * std::sqrt(3.0);
+      params.nitsche_parameter = 5.0 * params.fe_degree;
+      params.function_interface_dbc =
+        std::make_shared<ScalarFunctionFromFunctionObject<dim>>(
+          [](const auto t, const auto &p) {
+            const auto r = p.norm();
+
+            if (dim == 1)
+              {
+                return std::cos(1.5 * numbers::PI * r) *
+                       std::cos(t * 1.5 * numbers::PI);
+              }
+            else if (dim == 2)
+              {
+                return std::cyl_bessel_j(0, 3.0 * numbers::PI * r) *
+                       std::cos(t * 3.0 * numbers::PI);
+              }
+            else
+              AssertThrow(false, ExcNotImplemented());
+          });
+      params.function_rhs = {};
 
       // time stepping
       params.exact_solution = params.function_interface_dbc;
@@ -719,7 +675,7 @@ fill_parameters(Parameters<dim> &params, const std::string &simulation_name)
       params.cfl_pow        = 1.0;
 
       // linear solvers
-      params.solver_name = "ILU";
+      params.solver_name = "AMG";
 
       // level set field
       params.level_set_fe_degree = params.fe_degree;
