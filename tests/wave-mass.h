@@ -15,7 +15,14 @@ public:
 
   MassMatrixOperator(const Discretization<dim, Number> &discretization)
     : discretization(discretization)
+    , ghost_parameter_M(-1.0)
   {}
+
+  void
+  reinit(const Parameters<dim> &params)
+  {
+    this->ghost_parameter_M = params.ghost_parameter_M;
+  }
 
   const TrilinosWrappers::SparseMatrix &
   get_sparse_matrix() const
@@ -28,13 +35,15 @@ public:
 private:
   const Discretization<dim, Number> &discretization;
 
+  double ghost_parameter_M;
+
   mutable TrilinosWrappers::SparsityPattern sparsity_pattern;
   mutable TrilinosWrappers::SparseMatrix    sparse_matrix;
 
   void
   compute_sparse_matrix() const
   {
-    const double ghost_parameter_M = 0.25 * std::sqrt(3.0); // TODO
+    AssertThrow(ghost_parameter_M != -1.0, ExcNotImplemented());
 
     // 0) extract information from discretization class
     const hp::MappingCollection<dim> &mapping = discretization.get_mapping();

@@ -15,7 +15,19 @@ public:
 
   StiffnessMatrixOperator(const Discretization<dim, Number> &discretization)
     : discretization(discretization)
+    , ghost_parameter_A(-1.0)
+    , nitsche_parameter(-1.0)
   {}
+
+  void
+  reinit(const Parameters<dim> &params)
+  {
+    this->ghost_parameter_A = params.ghost_parameter_A;
+    this->nitsche_parameter = params.nitsche_parameter;
+
+    this->function_interface_dbc = params.function_interface_dbc;
+    this->function_rhs           = params.function_rhs;
+  }
 
   const TrilinosWrappers::SparseMatrix &
   get_sparse_matrix() const
@@ -46,12 +58,7 @@ public:
     const DoFHandler<dim>       &level_set_dof_handler =
       discretization.get_level_set_dof_handler();
 
-    const unsigned int fe_degree         = discretization.get_fe_degree();
-    const double       ghost_parameter_A = 0.50 * std::sqrt(3.0); // TODO
-    const double       nitsche_parameter = 5.0 * fe_degree;
-
-    std::shared_ptr<Function<dim>> function_interface_dbc;
-    std::shared_ptr<Function<dim>> function_rhs;
+    AssertThrow(ghost_parameter_A != -1.0, ExcNotImplemented());
 
     if (function_interface_dbc)
       function_interface_dbc->set_time(time);
@@ -111,7 +118,7 @@ public:
     FEInterfaceValues<dim> fe_interface_values(
       mapping,
       fe,
-      hp::QCollection<dim - 1>(QGauss<dim - 1>(fe_degree + 1)),
+      hp::QCollection<dim - 1>(face_quadrature),
       update_gradients | update_JxW_values | update_normal_vectors);
 
     solution.update_ghost_values();
@@ -298,6 +305,12 @@ public:
 private:
   const Discretization<dim, Number> &discretization;
 
+  double ghost_parameter_A;
+  double nitsche_parameter;
+
+  std::shared_ptr<Function<dim>> function_interface_dbc;
+  std::shared_ptr<Function<dim>> function_rhs;
+
   mutable TrilinosWrappers::SparsityPattern sparsity_pattern;
   mutable TrilinosWrappers::SparseMatrix    sparse_matrix;
 
@@ -319,12 +332,8 @@ private:
     const DoFHandler<dim>       &level_set_dof_handler =
       discretization.get_level_set_dof_handler();
 
-    const unsigned int fe_degree         = discretization.get_fe_degree();
-    const double       ghost_parameter_A = 0.50 * std::sqrt(3.0); // TODO
-    const double       nitsche_parameter = 5.0 * fe_degree;
-
-    std::shared_ptr<Function<dim>> function_interface_dbc;
-
+    AssertThrow(ghost_parameter_A != -1.0, ExcNotImplemented());
+    AssertThrow(nitsche_parameter != -1.0, ExcNotImplemented());
 
     // 1) create sparsity pattern
     if (sparse_matrix.m() == 0 || sparse_matrix.n() == 0)

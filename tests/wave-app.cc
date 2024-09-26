@@ -38,6 +38,8 @@ public:
       discretization);
 
     discretization.reinit(params);
+    mass_matrix_operator.reinit(params);
+    stiffness_matrix_operator.reinit(params);
 
     const std::string simulation_type = "poisson";
 

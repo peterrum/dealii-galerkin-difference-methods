@@ -27,6 +27,15 @@ struct Parameters
   double       geometry_left;
   double       geometry_right;
 
+  // mass matrix
+  double ghost_parameter_M;
+
+  // stiffness matrix
+  double                         ghost_parameter_A;
+  double                         nitsche_parameter;
+  std::shared_ptr<Function<dim>> function_interface_dbc;
+  std::shared_ptr<Function<dim>> function_rhs;
+
   // level set field
   unsigned int                   level_set_fe_degree;
   std::shared_ptr<Function<dim>> level_set_function;
