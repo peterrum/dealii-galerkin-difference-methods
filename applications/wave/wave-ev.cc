@@ -2,12 +2,11 @@
 
 #include <deal.II/lac/lapack_full_matrix.h>
 
-#include "wave-discretization.h"
-#include "wave-mass.h"
-#include "wave-stiffness.h"
+#include <gdm/wave/wave-discretization.h>
+#include <gdm/wave/wave-mass.h>
+#include <gdm/wave/wave-stiffness.h>
 
 using namespace dealii;
-
 
 template <typename MatrixType>
 void

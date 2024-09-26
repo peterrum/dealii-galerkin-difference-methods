@@ -1,4 +1,4 @@
-#include "wave-problem.h"
+#include <gdm/wave/wave-problem.h>
 
 using namespace dealii;
 
