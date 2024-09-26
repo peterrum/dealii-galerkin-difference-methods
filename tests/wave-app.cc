@@ -174,13 +174,14 @@ fill_parameters(Parameters<dim> &params, const std::string &simulation_name)
 
             if (dim == 1)
               {
-                return std::cos(1.5 * numbers::PI * r) *
-                       std::cos(t * 1.5 * numbers::PI);
+                const auto wave_number = 1.5 * numbers::PI;
+                return std::cos(wave_number * r) * std::cos(wave_number * t);
               }
             else if (dim == 2)
               {
-                return std::cyl_bessel_j(0, 3.0 * numbers::PI * r) *
-                       std::cos(t * 3.0 * numbers::PI);
+                const auto wave_number = 3.0 * numbers::PI;
+                return std::cyl_bessel_j(0, wave_number * r) *
+                       std::cos(wave_number * t);
               }
             else
               AssertThrow(false, ExcNotImplemented());
