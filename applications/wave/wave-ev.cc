@@ -73,13 +73,39 @@ main(int argc, char **argv)
   using Number           = double;
   const unsigned int dim = 1;
 
-  Discretization<dim, Number> discretization;
+  Parameters<dim> params;
 
-  discretization.reinit();
+  // general settings
+  params.fe_degree    = 3;
+  params.n_components = 1;
 
+  // geometry
+  params.n_subdivisions_1D = 40;
+  params.geometry_left     = -1.21;
+  params.geometry_right    = +1.21;
+
+  // mass matrix
+  params.ghost_parameter_M = 0.25 * std::sqrt(3.0);
+
+  // stiffness matrix
+  params.ghost_parameter_A      = 0.50 * std::sqrt(3.0);
+  params.nitsche_parameter      = 5.0 * params.fe_degree;
+  params.function_interface_dbc = {};
+  params.function_rhs           = {};
+
+  // level set field
+  params.level_set_fe_degree = params.fe_degree;
+  params.level_set_function =
+    std::make_shared<Functions::SignedDistance::Sphere<dim>>();
+
+  Discretization<dim, Number>          discretization;
   MassMatrixOperator<dim, Number>      mass_matrix_operator(discretization);
   StiffnessMatrixOperator<dim, Number> stiffness_matrix_operator(
     discretization);
+
+  discretization.reinit(params);
+  mass_matrix_operator.reinit(params);
+  stiffness_matrix_operator.reinit(params);
 
   if (true)
     compute_condition_number(mass_matrix_operator.get_sparse_matrix());
