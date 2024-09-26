@@ -487,6 +487,11 @@ fill_parameters(Parameters<dim> &params, const std::string &simulation_name)
 {
   if (simulation_name == "step85")
     {
+      // adopted from:
+      // Simon Sticko, 2022, deal.II: step-85
+      //
+      // https://www.dealii.org/developer/doxygen/deal.II/step_85.html
+
       // general settings
       params.simulation_type = "poisson";
       params.fe_degree       = 3;
