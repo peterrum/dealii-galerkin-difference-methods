@@ -25,11 +25,18 @@ compute_condition_number(const MatrixType &M_in)
     eigenvalues.push_back(M.eigenvalue(i).real());
   std::sort(eigenvalues.begin(), eigenvalues.end());
 
+  if (true)
+    eigenvalues.erase(std::remove(eigenvalues.begin(), eigenvalues.end(), 1.0),
+                      eigenvalues.end());
+
   std::cout << "condition number: " << eigenvalues.back() / eigenvalues.front()
             << std::endl;
 
+  std::cout << "eigenvalues:" << std::endl;
   for (const auto i : eigenvalues)
-    std::cout << i << std::endl;
+    std::cout << i << " ";
+  std::cout << std::endl;
+  std::cout << std::endl;
 }
 
 
@@ -56,11 +63,7 @@ compute_max_generalized_eigenvalues_symmetric(const MatrixType &S_in,
     eigenvalues.push_back(S.eigenvalue(i).real());
   std::sort(eigenvalues.begin(), eigenvalues.end());
 
-
-  std::cout << "max ev(M\\S):     " << eigenvalues.back() << std::endl;
-
-  for (const auto i : eigenvalues)
-    std::cout << i << std::endl;
+  std::cout << "max ev(M\\S): " << eigenvalues.back() << std::endl;
 }
 
 
