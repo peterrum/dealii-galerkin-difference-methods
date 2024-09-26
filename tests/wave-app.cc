@@ -72,7 +72,7 @@ public:
         const double start_t = params.start_t;
         const double end_t   = params.end_t;
         const double delta_t =
-          params.cfl * std::pow(discretization.get_dx(), params.cfl_pow);
+          params.cfl / std::pow(discretization.get_dx(), params.cfl_pow);
 
         const TimeStepping::runge_kutta_method runge_kutta_method =
           TimeStepping::runge_kutta_method::RK_CLASSIC_FOURTH_ORDER;
@@ -128,7 +128,7 @@ public:
         const double start_t = params.start_t;
         const double end_t   = params.end_t;
         const double delta_t =
-          params.cfl * std::pow(discretization.get_dx(), params.cfl_pow);
+          params.cfl / std::pow(discretization.get_dx(), params.cfl_pow);
 
         // Compute matrix (M + dt * S)
         const auto &mass_matrix = mass_matrix_operator.get_sparse_matrix();
@@ -197,7 +197,7 @@ public:
         const double start_t = params.start_t;
         const double end_t   = params.end_t;
         const double delta_t =
-          params.cfl * std::pow(discretization.get_dx(), params.cfl_pow);
+          params.cfl / std::pow(discretization.get_dx(), params.cfl_pow);
 
         const TimeStepping::runge_kutta_method runge_kutta_method =
           TimeStepping::runge_kutta_method::RK_CLASSIC_FOURTH_ORDER;
@@ -327,6 +327,47 @@ private:
   TrilinosWrappers::SolverDirect    solver_direct;
 };
 
+
+
+template <unsigned int dim>
+void
+fill_parameters(Parameters<dim> &params)
+{
+  params.simulation_type = "poisson";
+  params.fe_degree       = 3;
+  params.n_components    = 1;
+
+  params.n_subdivisions_1D = 40;
+  params.geometry_left     = -1.21;
+  params.geometry_right    = +1.21;
+
+  // mass matrix
+  params.ghost_parameter_M = -1.0;
+
+  // stiffness matrix
+  params.ghost_parameter_A = 0.5;
+  params.nitsche_parameter = 5.0 * params.fe_degree;
+  params.function_interface_dbc =
+    std::make_shared<Functions::ConstantFunction<dim>>(4.0);
+  params.function_rhs = std::make_shared<Functions::ConstantFunction<dim>>(1.0);
+
+  // time stepping
+  params.start_t = 0.0;
+  params.end_t   = 0.1;
+  params.cfl     = 0.3;
+  params.cfl_pow = 1.0;
+
+  // linear solvers
+  params.solver_name = "AMG";
+
+  // level set field
+  params.level_set_fe_degree = params.fe_degree;
+  params.level_set_function =
+    std::make_shared<Functions::SignedDistance::Sphere<dim>>();
+}
+
+
+
 int
 main(int argc, char **argv)
 {
@@ -337,11 +378,13 @@ main(int argc, char **argv)
   if (dim == 1)
     {
       Parameters<1> params;
+      fill_parameters(params);
       WaveProblem<1>(params).run();
     }
   else if (dim == 2)
     {
       Parameters<2> params;
+      fill_parameters(params);
       WaveProblem<2>(params).run();
     }
   else

@@ -29,11 +29,11 @@ struct Parameters
   double       geometry_right;
 
   // mass matrix
-  double ghost_parameter_M;
+  double ghost_parameter_M = -1.0;
 
   // stiffness matrix
-  double                         ghost_parameter_A;
-  double                         nitsche_parameter;
+  double                         ghost_parameter_A = -1.0;
+  double                         nitsche_parameter = -1.0;
   std::shared_ptr<Function<dim>> function_interface_dbc;
   std::shared_ptr<Function<dim>> function_rhs;
 
