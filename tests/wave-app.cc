@@ -71,9 +71,11 @@ public:
       }
     else if (simulation_type == "heat-rk")
       {
-        const double                           start_t = 0.0; // TODO
-        const double                           end_t   = 0.1; // TODO
-        const double                           delta_t = 0.1; // TODO
+        const double start_t = params.start_t;
+        const double end_t   = params.end_t;
+        const double delta_t =
+          params.cfl * std::pow(discretization.get_dx(), params.cfl_pow);
+
         const TimeStepping::runge_kutta_method runge_kutta_method =
           TimeStepping::runge_kutta_method::RK_CLASSIC_FOURTH_ORDER;
 
@@ -125,9 +127,10 @@ public:
       }
     else if (simulation_type == "heat-impl")
       {
-        const double start_t = 0.0; // TODO
-        const double end_t   = 0.1; // TODO
-        const double delta_t = 0.1; // TODO
+        const double start_t = params.start_t;
+        const double end_t   = params.end_t;
+        const double delta_t =
+          params.cfl * std::pow(discretization.get_dx(), params.cfl_pow);
 
         // Compute matrix (M + dt * S)
         const auto &mass_matrix = mass_matrix_operator.get_sparse_matrix();
@@ -193,9 +196,11 @@ public:
       }
     else if (simulation_type == "wave-rk")
       {
-        const double                           start_t = 0.0; // TODO
-        const double                           end_t   = 0.1; // TODO
-        const double                           delta_t = 0.1; // TODO
+        const double start_t = params.start_t;
+        const double end_t   = params.end_t;
+        const double delta_t =
+          params.cfl * std::pow(discretization.get_dx(), params.cfl_pow);
+
         const TimeStepping::runge_kutta_method runge_kutta_method =
           TimeStepping::runge_kutta_method::RK_CLASSIC_FOURTH_ORDER;
 
@@ -261,13 +266,11 @@ private:
   void
   setup_solver(const TrilinosWrappers::SparseMatrix &sparse_matrix)
   {
-    std::string solver_name = "AMG"; // TODO
-
-    if (solver_name == "AMG")
+    if (params.solver_name == "AMG")
       preconditioner_amg.initialize(sparse_matrix);
-    else if (solver_name == "ILU")
+    else if (params.solver_name == "ILU")
       preconditioner_ilu.initialize(sparse_matrix);
-    else if (solver_name == "direct")
+    else if (params.solver_name == "direct")
       solver_direct.initialize(sparse_matrix);
     else
       AssertThrow(false, ExcNotImplemented());
@@ -278,23 +281,24 @@ private:
         VectorType                           &result,
         const VectorType                     &vec_rhs)
   {
-    std::string solver_name = "AMG"; // TODO
-
-    if (solver_name == "AMG" || solver_name == "ILU")
+    if (params.solver_name == "AMG" || params.solver_name == "ILU")
       {
-        ReductionControl     solver_control(1000, 1.e-20, 1.e-14);
+        ReductionControl solver_control(params.solver_max_iterations,
+                                        params.solver_abs_tolerance,
+                                        params.solver_rel_tolerance);
+
         SolverCG<VectorType> solver(solver_control);
 
-        if (solver_name == "AMG")
+        if (params.solver_name == "AMG")
           solver.solve(sparse_matrix, result, vec_rhs, preconditioner_amg);
-        else if (solver_name == "ILU")
+        else if (params.solver_name == "ILU")
           solver.solve(sparse_matrix, result, vec_rhs, preconditioner_ilu);
         else
           AssertThrow(false, ExcNotImplemented());
 
         pcout << " [L] solved in " << solver_control.last_step() << std::endl;
       }
-    else if (solver_name == "direct")
+    else if (params.solver_name == "direct")
       {
         solver_direct.solve(sparse_matrix, result, vec_rhs);
       }

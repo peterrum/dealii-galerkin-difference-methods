@@ -36,6 +36,18 @@ struct Parameters
   std::shared_ptr<Function<dim>> function_interface_dbc;
   std::shared_ptr<Function<dim>> function_rhs;
 
+  // time stepping
+  double start_t;
+  double end_t;
+  double cfl;
+  double cfl_pow;
+
+  // linear solver
+  std::string  solver_name           = "AMG";
+  unsigned int solver_max_iterations = 1000;
+  double       solver_abs_tolerance  = 1.e-20;
+  double       solver_rel_tolerance  = 1.e-14;
+
   // level set field
   unsigned int                   level_set_fe_degree;
   std::shared_ptr<Function<dim>> level_set_function;
@@ -71,6 +83,8 @@ public:
     system->subdivided_hyper_cube(n_subdivisions_1D,
                                   geometry_left,
                                   geometry_right);
+
+    dx = (geometry_right - geometry_left) / n_subdivisions_1D;
 
     // Create mapping
     mapping.push_back(MappingQ1<dim>());
@@ -177,6 +191,12 @@ public:
     return *mesh_classifier;
   }
 
+  double
+  get_dx() const
+  {
+    return dx;
+  }
+
 private:
   std::shared_ptr<GDM::System<dim>> system;
   hp::MappingCollection<dim>        mapping;
@@ -189,4 +209,6 @@ private:
   DoFHandler<dim>                                   level_set_dof_handler;
   VectorType                                        level_set;
   std::shared_ptr<NonMatching::MeshClassifier<dim>> mesh_classifier;
+
+  double dx;
 };
