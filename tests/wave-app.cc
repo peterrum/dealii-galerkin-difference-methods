@@ -8,6 +8,9 @@
 #include <deal.II/lac/trilinos_precondition.h>
 #include <deal.II/lac/trilinos_solver.h>
 
+#include <gdm/data_out.h>
+#include <gdm/vector_tools.h>
+
 #include "wave-discretization.h"
 #include "wave-mass.h"
 #include "wave-stiffness.h"
@@ -26,17 +29,14 @@ public:
     : comm(MPI_COMM_WORLD)
     , pcout(std::cout, Utilities::MPI::this_mpi_process(comm) == 0)
     , params(params)
+    , discretization()
+    , mass_matrix_operator(discretization)
+    , stiffness_matrix_operator(discretization)
   {}
 
   void
   run()
   {
-    Discretization<dim, Number> discretization;
-
-    MassMatrixOperator<dim, Number>      mass_matrix_operator(discretization);
-    StiffnessMatrixOperator<dim, Number> stiffness_matrix_operator(
-      discretization);
-
     discretization.reinit(params);
     mass_matrix_operator.reinit(params);
     stiffness_matrix_operator.reinit(params);
@@ -311,10 +311,140 @@ private:
   }
 
   void
-  postprocess(const double time, const VectorType &vec)
+  postprocess(const double time, const VectorType &solution)
   {
-    (void)vec;
-    (void)time;
+    static unsigned int counter = 0;
+
+
+    const hp::MappingCollection<dim> &mapping = discretization.get_mapping();
+    const Quadrature<1>              &quadrature_1D_error =
+      discretization.get_quadrature_1D();
+    const GDM::System<dim> &system = discretization.get_system();
+    const NonMatching::MeshClassifier<dim> &mesh_classifier =
+      discretization.get_mesh_classifier();
+    const hp::FECollection<dim> &fe        = discretization.get_fe();
+    const VectorType            &level_set = discretization.get_level_set();
+    const DoFHandler<dim>       &level_set_dof_handler =
+      discretization.get_level_set_dof_handler();
+
+    // compute error
+    params.exact_solution->set_time(time);
+
+    NonMatching::RegionUpdateFlags region_update_flags_error;
+    region_update_flags_error.inside =
+      update_values | update_JxW_values | update_quadrature_points;
+
+    NonMatching::FEValues<dim> non_matching_fe_values_error(
+      fe,
+      quadrature_1D_error,
+      region_update_flags_error,
+      mesh_classifier,
+      level_set_dof_handler,
+      level_set);
+
+    double local_error_Linf       = 0;
+    double local_error_L1         = 0;
+    double local_error_L2_squared = 0;
+
+    solution.update_ghost_values();
+    for (const auto &cell : system.locally_active_cell_iterators())
+      if (cell->is_locally_owned() &&
+          (mesh_classifier.location_to_level_set(cell->dealii_iterator()) !=
+           NonMatching::LocationToLevelSet::outside))
+        {
+          non_matching_fe_values_error.reinit(cell->dealii_iterator(),
+                                              numbers::invalid_unsigned_int,
+                                              numbers::invalid_unsigned_int,
+                                              cell->active_fe_index());
+
+          std::vector<types::global_dof_index> local_dof_indices(
+            fe[0].dofs_per_cell);
+          cell->get_dof_indices(local_dof_indices);
+
+          if (const std::optional<FEValues<dim>> &fe_values =
+                non_matching_fe_values_error.get_inside_fe_values())
+            {
+              std::vector<double> solution_values(
+                fe_values->n_quadrature_points);
+              fe_values->get_function_values(solution,
+                                             local_dof_indices,
+                                             solution_values);
+
+              for (const unsigned int q : fe_values->quadrature_point_indices())
+                {
+                  const Point<dim> &point = fe_values->quadrature_point(q);
+                  const double      error_at_point =
+                    solution_values.at(q) - params.exact_solution->value(point);
+
+                  local_error_L2_squared +=
+                    Utilities::fixed_power<2>(error_at_point) *
+                    fe_values->JxW(q);
+
+                  local_error_L1 +=
+                    std::abs(error_at_point) * fe_values->JxW(q);
+
+                  local_error_Linf =
+                    std::max(local_error_Linf, std::abs(error_at_point));
+                }
+            }
+        }
+
+    const double error_Linf =
+      Utilities::MPI::max(local_error_Linf, MPI_COMM_WORLD);
+
+    const double error_L1 = Utilities::MPI::sum(local_error_L1, MPI_COMM_WORLD);
+
+    const double error_L2 =
+      std::sqrt(Utilities::MPI::sum(local_error_L2_squared, MPI_COMM_WORLD));
+
+    if (pcout.is_active())
+      printf("%5d %8.5f %14.8e %14.8e %14.8e\n",
+             counter,
+             time,
+             error_L2,
+             error_L1,
+             error_Linf);
+
+    // output result -> Paraview
+    GDM::DataOut<dim> data_out(system, mapping, params.output_fe_degree);
+    solution.update_ghost_values();
+    data_out.add_data_vector(solution, "solution");
+
+    if (params.level_set_function)
+      {
+        VectorType level_set;
+        discretization.initialize_dof_vector(level_set);
+        GDM::VectorTools::interpolate(mapping,
+                                      system,
+                                      *params.level_set_function,
+                                      level_set);
+        level_set.update_ghost_values();
+        data_out.add_data_vector(level_set, "level_set");
+      }
+
+    VectorType analytical_solution;
+    discretization.initialize_dof_vector(analytical_solution);
+    GDM::VectorTools::interpolate(mapping,
+                                  system,
+                                  *params.exact_solution,
+                                  analytical_solution);
+    analytical_solution.update_ghost_values();
+    data_out.add_data_vector(analytical_solution, "analytical_solution");
+
+    if (true)
+      data_out.set_cell_selection(
+        [&](const typename Triangulation<dim>::cell_iterator &cell) {
+          return cell->is_active() && cell->is_locally_owned() &&
+                 mesh_classifier.location_to_level_set(cell) !=
+                   NonMatching::LocationToLevelSet::outside;
+        });
+
+    data_out.build_patches();
+
+    std::string file_name = "solution_" + std::to_string(counter) + ".vtu";
+    data_out.write_vtu_in_parallel(file_name);
+
+    counter++;
   }
 
   const MPI_Comm     comm;
@@ -322,9 +452,31 @@ private:
 
   const Parameters<dim> &params;
 
+  Discretization<dim, Number> discretization;
+
+  MassMatrixOperator<dim, Number>      mass_matrix_operator;
+  StiffnessMatrixOperator<dim, Number> stiffness_matrix_operator;
+
   TrilinosWrappers::PreconditionAMG preconditioner_amg;
   TrilinosWrappers::PreconditionILU preconditioner_ilu;
   TrilinosWrappers::SolverDirect    solver_direct;
+};
+
+
+
+template <int dim>
+class AnalyticalSolution : public Function<dim>
+{
+public:
+  double
+  value(const Point<dim>  &point,
+        const unsigned int component = 0) const override
+  {
+    AssertIndexRange(component, this->n_components);
+    (void)component;
+
+    return 1. - 2. / dim * (point.norm_square() - 1.);
+  }
 };
 
 
@@ -348,14 +500,15 @@ fill_parameters(Parameters<dim> &params)
   params.ghost_parameter_A = 0.5;
   params.nitsche_parameter = 5.0 * params.fe_degree;
   params.function_interface_dbc =
-    std::make_shared<Functions::ConstantFunction<dim>>(4.0);
-  params.function_rhs = std::make_shared<Functions::ConstantFunction<dim>>(1.0);
+    std::make_shared<Functions::ConstantFunction<dim>>(1.0);
+  params.function_rhs = std::make_shared<Functions::ConstantFunction<dim>>(4.0);
 
   // time stepping
-  params.start_t = 0.0;
-  params.end_t   = 0.1;
-  params.cfl     = 0.3;
-  params.cfl_pow = 1.0;
+  params.exact_solution = std::make_shared<AnalyticalSolution<dim>>();
+  params.start_t        = 0.0;
+  params.end_t          = 0.1;
+  params.cfl            = 0.3;
+  params.cfl_pow        = 1.0;
 
   // linear solvers
   params.solver_name = "AMG";
@@ -364,6 +517,9 @@ fill_parameters(Parameters<dim> &params)
   params.level_set_fe_degree = params.fe_degree;
   params.level_set_function =
     std::make_shared<Functions::SignedDistance::Sphere<dim>>();
+
+  // output
+  params.output_fe_degree = params.fe_degree;
 }
 
 
@@ -373,7 +529,7 @@ main(int argc, char **argv)
 {
   Utilities::MPI::MPI_InitFinalize mpi(argc, argv, 1);
 
-  const unsigned int dim = 2;
+  const unsigned int dim = 1;
 
   if (dim == 1)
     {

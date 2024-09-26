@@ -38,10 +38,11 @@ struct Parameters
   std::shared_ptr<Function<dim>> function_rhs;
 
   // time stepping
-  double start_t;
-  double end_t;
-  double cfl;
-  double cfl_pow;
+  std::shared_ptr<Function<dim>> exact_solution;
+  double                         start_t;
+  double                         end_t;
+  double                         cfl;
+  double                         cfl_pow;
 
   // linear solver
   std::string  solver_name           = "AMG";
@@ -52,6 +53,9 @@ struct Parameters
   // level set field
   unsigned int                   level_set_fe_degree;
   std::shared_ptr<Function<dim>> level_set_function;
+
+  // output
+  unsigned int output_fe_degree = 1;
 };
 
 template <unsigned int dim, typename Number>
@@ -71,7 +75,7 @@ public:
     const unsigned int n_components        = params.n_components;
     const unsigned int level_set_fe_degree = params.level_set_fe_degree;
     const double       geometry_left       = params.geometry_left;
-    const double       geometry_right      = params.geometry_left;
+    const double       geometry_right      = params.geometry_right;
     const auto         level_set_function  = params.level_set_function;
 
     const MPI_Comm comm = MPI_COMM_WORLD;
