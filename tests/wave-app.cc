@@ -72,7 +72,9 @@ public:
         const double start_t = params.start_t;
         const double end_t   = params.end_t;
         const double delta_t =
-          params.cfl / std::pow(discretization.get_dx(), params.cfl_pow);
+          params.cfl * std::pow(discretization.get_dx(), params.cfl_pow);
+
+        std::cout << delta_t << std::endl;
 
         const TimeStepping::runge_kutta_method runge_kutta_method =
           TimeStepping::runge_kutta_method::RK_CLASSIC_FOURTH_ORDER;
@@ -83,6 +85,7 @@ public:
         // Initialize vectors
         VectorType vec_solution;
         discretization.initialize_dof_vector(vec_solution);
+        this->set_initial_condition(vec_solution);
 
         // Setup solver
         this->setup_solver(mass_matrix);
@@ -128,7 +131,7 @@ public:
         const double start_t = params.start_t;
         const double end_t   = params.end_t;
         const double delta_t =
-          params.cfl / std::pow(discretization.get_dx(), params.cfl_pow);
+          params.cfl * std::pow(discretization.get_dx(), params.cfl_pow);
 
         // Compute matrix (M + dt * S)
         const auto &mass_matrix = mass_matrix_operator.get_sparse_matrix();
@@ -144,6 +147,7 @@ public:
         // Initialize vectors
         VectorType vec_solution;
         discretization.initialize_dof_vector(vec_solution);
+        this->set_initial_condition(vec_solution);
 
         // Setup solver
         this->setup_solver(system_matrix);
@@ -197,7 +201,7 @@ public:
         const double start_t = params.start_t;
         const double end_t   = params.end_t;
         const double delta_t =
-          params.cfl / std::pow(discretization.get_dx(), params.cfl_pow);
+          params.cfl * std::pow(discretization.get_dx(), params.cfl_pow);
 
         const TimeStepping::runge_kutta_method runge_kutta_method =
           TimeStepping::runge_kutta_method::RK_CLASSIC_FOURTH_ORDER;
@@ -209,6 +213,7 @@ public:
         BlockVectorType vec_solution(2);
         discretization.initialize_dof_vector(vec_solution.block(0));
         discretization.initialize_dof_vector(vec_solution.block(1));
+        this->set_initial_condition(vec_solution.block(0));
 
         // Setup solver
         this->setup_solver(mass_matrix);
@@ -266,6 +271,20 @@ public:
 
 private:
   void
+  set_initial_condition(VectorType &vector) const
+  {
+    params.exact_solution->set_time(params.start_t);
+
+    const hp::MappingCollection<dim> &mapping = discretization.get_mapping();
+    const GDM::System<dim>           &system  = discretization.get_system();
+
+    GDM::VectorTools::interpolate(mapping,
+                                  system,
+                                  *params.exact_solution,
+                                  vector);
+  }
+
+  void
   setup_solver(const TrilinosWrappers::SparseMatrix &sparse_matrix)
   {
     if (params.solver_name == "AMG")
@@ -314,7 +333,6 @@ private:
   postprocess(const double time, const VectorType &solution)
   {
     static unsigned int counter = 0;
-
 
     const hp::MappingCollection<dim> &mapping = discretization.get_mapping();
     const Quadrature<1>              &quadrature_1D_error =
@@ -481,6 +499,52 @@ public:
 
 
 
+template <int dim, typename Number = double>
+class MyExactSolution : public dealii::Function<dim, Number>
+{
+public:
+  virtual double
+  value(const dealii::Point<dim> &p, const unsigned int = 1) const override
+  {
+    double t = this->get_time();
+
+    if (dim == 1)
+      return std::pow(p[0], 9.0) * std::exp(-t);
+    else if (dim == 2)
+      return std::pow(p[0], 9.0) * std::pow(p[1], 8.0) * std::exp(-t);
+
+    AssertThrow(false, ExcNotImplemented());
+
+    return 0.0;
+  }
+};
+
+
+
+template <int dim, typename Number = double>
+class MyExactRightHandSide : public dealii::Function<dim, Number>
+{
+public:
+  virtual double
+  value(const dealii::Point<dim> &p, const unsigned int = 1) const override
+  {
+    double t = this->get_time();
+
+    if (dim == 1)
+      return -std::pow(p[0], 7.0) * std::exp(-t) * (std::pow(p[0], 2.0) + 72);
+    else if (dim == 2)
+      return -std::pow(p[0], 7.0) * std::pow(p[1], 6.0) * std::exp(-t) *
+             (std::pow(p[0], 2.0) * std::pow(p[1], 2.0) +
+              72 * std::pow(p[1], 2.0) + 56 * std::pow(p[0], 2.0));
+
+    AssertThrow(false, ExcNotImplemented());
+
+    return 0.0;
+  }
+};
+
+
+
 template <unsigned int dim>
 void
 fill_parameters(Parameters<dim> &params, const std::string &simulation_name)
@@ -488,7 +552,7 @@ fill_parameters(Parameters<dim> &params, const std::string &simulation_name)
   if (simulation_name == "step85")
     {
       // adopted from:
-      // Simon Sticko, 2022, deal.II: step-85
+      // Simon Sticko, 2022, "deal.II: tutorial step-85"
       //
       // https://www.dealii.org/developer/doxygen/deal.II/step_85.html
 
@@ -522,6 +586,66 @@ fill_parameters(Parameters<dim> &params, const std::string &simulation_name)
 
       // linear solvers
       params.solver_name = "AMG";
+
+      // level set field
+      params.level_set_fe_degree = params.fe_degree;
+      params.level_set_function =
+        std::make_shared<Functions::SignedDistance::Sphere<dim>>();
+
+      // output
+      params.output_fe_degree = params.fe_degree;
+    }
+  else if (simulation_name == "heat")
+    {
+      // adopted from:
+      // Gustav Ludvigsson, Kyle R. Steffen, Simon Sticko, Siyang Wang,
+      // Qing Xia, Yekaterina Epshteyn, and Gunilla Kreiss. 2018.
+      // "High-order numerical methods for 2D parabolic problems in
+      // single and composite domains."
+      //
+      // https://link.springer.com/article/10.1007/s10915-017-0637-y
+
+      // general settings
+      params.simulation_type = "heat-impl"; // "heat-rk" or "heat-impl"
+      params.fe_degree       = 3;
+      params.n_components    = 1;
+
+      // geometry
+      params.n_subdivisions_1D = 40;
+      params.geometry_left     = -1.21;
+      params.geometry_right    = +1.21;
+
+      // mass matrix
+      params.ghost_parameter_M = 0.75;
+
+      // stiffness matrix
+      params.ghost_parameter_A      = 1.5;
+      params.nitsche_parameter      = 5.0 * params.fe_degree;
+      params.function_interface_dbc = std::make_shared<MyExactSolution<dim>>();
+      params.function_rhs = std::make_shared<MyExactRightHandSide<dim>>();
+
+      // time stepping
+      params.exact_solution = std::make_shared<MyExactSolution<dim>>();
+      params.start_t        = 0.0;
+      params.end_t          = 0.1;
+
+      if (params.simulation_type == "heat-rk")
+        {
+          params.cfl     = 0.3 / params.fe_degree / params.fe_degree;
+          params.cfl_pow = 2.0;
+        }
+      else if (params.simulation_type == "heat-impl")
+        {
+          params.cfl     = 0.3;
+          params.cfl_pow = 1.0;
+        }
+      else
+        {
+          AssertThrow(false, ExcNotImplemented());
+        }
+
+      // linear solvers
+      params.solver_name = "ILU";
 
       // level set field
       params.level_set_fe_degree = params.fe_degree;
