@@ -561,11 +561,13 @@ public:
         return std::cos(1.5 * numbers::PI * r) *
                std::cos(t * 1.5 * numbers::PI);
       }
-
-    if (r == 0.0)
-      return 1.0;
+    else if (dim == 2)
+      {
+        return std::cyl_bessel_j(0, 3.0 * numbers::PI * r) *
+               std::cos(t * 3.0 * numbers::PI);
+      }
     else
-      return std::sin(2.0 * numbers::PI * r) / (2.0 * numbers::PI * r);
+      AssertThrow(false, ExcNotImplemented());
   }
 };
 
