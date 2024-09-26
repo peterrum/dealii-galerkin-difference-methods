@@ -483,64 +483,80 @@ public:
 
 template <unsigned int dim>
 void
-fill_parameters(Parameters<dim> &params)
+fill_parameters(Parameters<dim> &params, const std::string &simulation_name)
 {
-  params.simulation_type = "poisson";
-  params.fe_degree       = 3;
-  params.n_components    = 1;
+  if (simulation_name == "step85")
+    {
+      // general settings
+      params.simulation_type = "poisson";
+      params.fe_degree       = 3;
+      params.n_components    = 1;
 
-  params.n_subdivisions_1D = 40;
-  params.geometry_left     = -1.21;
-  params.geometry_right    = +1.21;
+      // geometry
+      params.n_subdivisions_1D = 40;
+      params.geometry_left     = -1.21;
+      params.geometry_right    = +1.21;
 
-  // mass matrix
-  params.ghost_parameter_M = -1.0;
+      // mass matrix
+      params.ghost_parameter_M = -1.0;
 
-  // stiffness matrix
-  params.ghost_parameter_A = 0.5;
-  params.nitsche_parameter = 5.0 * params.fe_degree;
-  params.function_interface_dbc =
-    std::make_shared<Functions::ConstantFunction<dim>>(1.0);
-  params.function_rhs = std::make_shared<Functions::ConstantFunction<dim>>(4.0);
+      // stiffness matrix
+      params.ghost_parameter_A = 0.5;
+      params.nitsche_parameter = 5.0 * params.fe_degree;
+      params.function_interface_dbc =
+        std::make_shared<Functions::ConstantFunction<dim>>(1.0);
+      params.function_rhs =
+        std::make_shared<Functions::ConstantFunction<dim>>(4.0);
 
-  // time stepping
-  params.exact_solution = std::make_shared<AnalyticalSolution<dim>>();
-  params.start_t        = 0.0;
-  params.end_t          = 0.1;
-  params.cfl            = 0.3;
-  params.cfl_pow        = 1.0;
+      // time stepping
+      params.exact_solution = std::make_shared<AnalyticalSolution<dim>>();
+      params.start_t        = 0.0;
+      params.end_t          = 0.1;
+      params.cfl            = 0.3;
+      params.cfl_pow        = 1.0;
 
-  // linear solvers
-  params.solver_name = "AMG";
+      // linear solvers
+      params.solver_name = "AMG";
 
-  // level set field
-  params.level_set_fe_degree = params.fe_degree;
-  params.level_set_function =
-    std::make_shared<Functions::SignedDistance::Sphere<dim>>();
+      // level set field
+      params.level_set_fe_degree = params.fe_degree;
+      params.level_set_function =
+        std::make_shared<Functions::SignedDistance::Sphere<dim>>();
 
-  // output
-  params.output_fe_degree = params.fe_degree;
+      // output
+      params.output_fe_degree = params.fe_degree;
+    }
+  else
+    {
+      AssertThrow(false, ExcNotImplemented());
+    }
 }
 
 
-
+/**
+ * Run as:
+ * ./tests/wave-app.debug/wave-app.debug 1 step85
+ */
 int
 main(int argc, char **argv)
 {
   Utilities::MPI::MPI_InitFinalize mpi(argc, argv, 1);
 
-  const unsigned int dim = 1;
+  AssertThrow(argc == 3, ExcInternalError());
+
+  const unsigned int dim = std::atoi(argv[1]);
+  const std::string  simulation_name(argv[2]);
 
   if (dim == 1)
     {
       Parameters<1> params;
-      fill_parameters(params);
+      fill_parameters(params, simulation_name);
       WaveProblem<1>(params).run();
     }
   else if (dim == 2)
     {
       Parameters<2> params;
-      fill_parameters(params);
+      fill_parameters(params, simulation_name);
       WaveProblem<2>(params).run();
     }
   else
