@@ -697,10 +697,10 @@ fill_parameters(Parameters<dim> &params, const std::string &simulation_name)
       params.geometry_right    = +1.21;
 
       // mass matrix
-      params.ghost_parameter_M = 0.75;
+      params.ghost_parameter_M = 0.25 * std::sqrt(3.0);
 
       // stiffness matrix
-      params.ghost_parameter_A      = 1.5;
+      params.ghost_parameter_A      = 0.50 * std::sqrt(3.0);
       params.nitsche_parameter      = 5.0 * params.fe_degree;
       params.function_interface_dbc = std::make_shared<MyExactSolution2<dim>>();
       params.function_rhs           = {};
