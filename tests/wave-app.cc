@@ -37,7 +37,7 @@ public:
     StiffnessMatrixOperator<dim, Number> stiffness_matrix_operator(
       discretization);
 
-    discretization.reinit();
+    discretization.reinit(params);
 
     const std::string simulation_type = "poisson";
 

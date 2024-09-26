@@ -16,8 +16,21 @@
 using namespace dealii;
 
 template <unsigned int dim>
-class Parameters
-{};
+struct Parameters
+{
+  // general settings
+  unsigned int fe_degree;
+  unsigned int n_components;
+
+  // geometry
+  unsigned int n_subdivisions_1D;
+  double       geometry_left;
+  double       geometry_right;
+
+  // level set field
+  unsigned int                   level_set_fe_degree;
+  std::shared_ptr<Function<dim>> level_set_function;
+};
 
 template <unsigned int dim, typename Number>
 class Discretization
@@ -28,13 +41,16 @@ public:
   Discretization() = default;
 
   void
-  reinit()
+  reinit(const Parameters<dim> &params)
   {
     // settings
-    const unsigned int fe_degree           = 5;
-    const unsigned int n_subdivisions_1D   = 40;
-    const unsigned int n_components        = 1;
-    const unsigned int fe_degree_level_set = fe_degree;
+    const unsigned int fe_degree           = params.fe_degree;
+    const unsigned int n_subdivisions_1D   = params.n_subdivisions_1D;
+    const unsigned int n_components        = params.n_components;
+    const unsigned int level_set_fe_degree = params.level_set_fe_degree;
+    const double       geometry_left       = params.geometry_left;
+    const double       geometry_right      = params.geometry_left;
+    const auto         level_set_function  = params.level_set_function;
 
     const MPI_Comm comm = MPI_COMM_WORLD;
 
@@ -43,7 +59,9 @@ public:
       std::make_shared<GDM::System<dim>>(comm, fe_degree, n_components, true);
 
     // Create mesh
-    system->subdivided_hyper_cube(n_subdivisions_1D, -1.5, 1.5);
+    system->subdivided_hyper_cube(n_subdivisions_1D,
+                                  geometry_left,
+                                  geometry_right);
 
     // Create mapping
     mapping.push_back(MappingQ1<dim>());
@@ -55,7 +73,7 @@ public:
 
     // level set and classify cells
     level_set_dof_handler.reinit(tria);
-    level_set_dof_handler.distribute_dofs(FE_Q<dim>(fe_degree_level_set));
+    level_set_dof_handler.distribute_dofs(FE_Q<dim>(level_set_fe_degree));
 
     level_set.reinit(level_set_dof_handler.locally_owned_dofs(),
                      DoFTools::extract_locally_relevant_dofs(
@@ -66,9 +84,8 @@ public:
       std::make_shared<NonMatching::MeshClassifier<dim>>(level_set_dof_handler,
                                                          level_set);
 
-    const Functions::SignedDistance::Sphere<dim> signed_distance_sphere;
     VectorTools::interpolate(level_set_dof_handler,
-                             signed_distance_sphere,
+                             *level_set_function,
                              level_set);
 
     level_set.update_ghost_values();
