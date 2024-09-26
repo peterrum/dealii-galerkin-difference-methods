@@ -22,9 +22,10 @@ public:
   using VectorType      = LinearAlgebra::distributed::Vector<Number>;
   using BlockVectorType = LinearAlgebra::distributed::BlockVector<Number>;
 
-  WaveProblem()
+  WaveProblem(const Parameters<dim> &params)
     : comm(MPI_COMM_WORLD)
     , pcout(std::cout, Utilities::MPI::this_mpi_process(comm) == 0)
+    , params(params)
   {}
 
   void
@@ -122,11 +123,9 @@ public:
       }
     else if (simulation_type == "heat-impl")
       {
-        const double                           start_t = 0.0; // TODO
-        const double                           end_t   = 0.1; // TODO
-        const double                           delta_t = 0.1; // TODO
-        const TimeStepping::runge_kutta_method runge_kutta_method =
-          TimeStepping::runge_kutta_method::RK_CLASSIC_FOURTH_ORDER;
+        const double start_t = 0.0; // TODO
+        const double end_t   = 0.1; // TODO
+        const double delta_t = 0.1; // TODO
 
         // Compute matrix (M + dt * S)
         const auto &mass_matrix = mass_matrix_operator.get_sparse_matrix();
@@ -157,9 +156,6 @@ public:
 
         // Perform time stepping
         DiscreteTime time(start_t, end_t, delta_t);
-
-        TimeStepping::ExplicitRungeKutta<VectorType> rk;
-        rk.initialize(runge_kutta_method);
 
         this->postprocess(0.0, vec_solution);
 
@@ -316,6 +312,8 @@ private:
   const MPI_Comm     comm;
   ConditionalOStream pcout;
 
+  const Parameters<dim> &params;
+
   TrilinosWrappers::PreconditionAMG preconditioner_amg;
   TrilinosWrappers::PreconditionILU preconditioner_ilu;
   TrilinosWrappers::SolverDirect    solver_direct;
@@ -329,9 +327,15 @@ main(int argc, char **argv)
   const unsigned int dim = 2;
 
   if (dim == 1)
-    WaveProblem<1>().run();
+    {
+      Parameters<1> params;
+      WaveProblem<1>(params).run();
+    }
   else if (dim == 2)
-    WaveProblem<2>().run();
+    {
+      Parameters<2> params;
+      WaveProblem<2>(params).run();
+    }
   else
     AssertThrow(false, ExcNotImplemented());
 }

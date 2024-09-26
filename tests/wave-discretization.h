@@ -15,6 +15,10 @@
 
 using namespace dealii;
 
+template <unsigned int dim>
+class Parameters
+{};
+
 template <unsigned int dim, typename Number>
 class Discretization
 {
