@@ -74,6 +74,11 @@ public:
 
     quadrature_1D   = QGauss<1>(fe_degree + 1);
     face_quadrature = QGauss<dim - 1>(fe_degree + 1);
+
+    this->partitioner = std::make_shared<Utilities::MPI::Partitioner>(
+      system->locally_owned_dofs(),
+      system->locally_relevant_dofs(constraints),
+      comm);
   }
 
   const GDM::System<dim> &
@@ -118,6 +123,12 @@ public:
     return constraints;
   }
 
+  void
+  initialize_dof_vector(VectorType &vec) const
+  {
+    vec.reinit(this->partitioner);
+  }
+
   const DoFHandler<dim> &
   get_level_set_dof_handler() const
   {
@@ -142,6 +153,8 @@ private:
   Quadrature<1>                     quadrature_1D;
   Quadrature<dim - 1>               face_quadrature;
   AffineConstraints<Number>         constraints;
+
+  std::shared_ptr<const Utilities::MPI::Partitioner> partitioner;
 
   DoFHandler<dim>                                   level_set_dof_handler;
   VectorType                                        level_set;
