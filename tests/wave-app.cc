@@ -647,7 +647,7 @@ fill_parameters(Parameters<dim> &params, const std::string &simulation_name)
       params.function_rhs = std::make_shared<MyExactRightHandSide<dim>>();
 
       // time stepping
-      params.exact_solution = std::make_shared<MyExactSolution<dim>>();
+      params.exact_solution = params.function_interface_dbc;
       params.start_t        = 0.0;
       params.end_t          = 0.1;
 
@@ -706,7 +706,7 @@ fill_parameters(Parameters<dim> &params, const std::string &simulation_name)
       params.function_rhs           = {};
 
       // time stepping
-      params.exact_solution = std::make_shared<MyExactSolution2<dim>>();
+      params.exact_solution = params.function_interface_dbc;
       params.start_t        = 0.0;
       params.end_t          = 2.0;
       params.cfl            = 0.3;
