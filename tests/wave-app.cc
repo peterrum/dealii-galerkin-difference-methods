@@ -24,6 +24,16 @@ run()
   if (simulation_type == "poisson")
     {
       AssertThrow(false, ExcNotImplemented());
+
+      // Compute stiffness matrix
+
+      // Compute right-hand-side vector
+
+      // setup solver
+
+      // solve
+
+      // postprocess
     }
   else if (simulation_type == "heat-rk")
     {
