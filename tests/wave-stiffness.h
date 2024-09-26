@@ -28,7 +28,8 @@ public:
   void
   compute_rhs(VectorType       &vec_rhs,
               const VectorType &solution,
-              const bool        compute_impl_part = false) const
+              const bool        compute_impl_part,
+              const double      time) const
   {
     // 0) extract information from discretization class
     const hp::MappingCollection<dim> &mapping = discretization.get_mapping();
@@ -51,6 +52,12 @@ public:
 
     std::shared_ptr<Function<dim>> function_interface_dbc;
     std::shared_ptr<Function<dim>> function_rhs;
+
+    if (function_interface_dbc)
+      function_interface_dbc->set_time(time);
+
+    if (function_rhs)
+      function_rhs->set_time(time);
 
     const auto face_has_ghost_penalty = [&](const auto        &cell,
                                             const unsigned int face_index) {
