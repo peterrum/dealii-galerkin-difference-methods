@@ -554,9 +554,13 @@ public:
   {
     double t = this->get_time();
 
-    (void)t;
-
     const double r = p.norm();
+
+    if (dim == 1)
+      {
+        return std::cos(1.5 * numbers::PI * r) *
+               std::cos(t * 1.5 * numbers::PI);
+      }
 
     if (r == 0.0)
       return 1.0;
