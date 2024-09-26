@@ -41,9 +41,7 @@ public:
     mass_matrix_operator.reinit(params);
     stiffness_matrix_operator.reinit(params);
 
-    const std::string simulation_type = "poisson";
-
-    if (simulation_type == "poisson")
+    if (params.simulation_type == "poisson")
       {
         // Compute stiffness matrix
         const auto &stiffness_matrix =
@@ -69,7 +67,7 @@ public:
         // postprocess
         this->postprocess(0.0, vec_solution);
       }
-    else if (simulation_type == "heat-rk")
+    else if (params.simulation_type == "heat-rk")
       {
         const double start_t = params.start_t;
         const double end_t   = params.end_t;
@@ -125,7 +123,7 @@ public:
             time.advance_time();
           }
       }
-    else if (simulation_type == "heat-impl")
+    else if (params.simulation_type == "heat-impl")
       {
         const double start_t = params.start_t;
         const double end_t   = params.end_t;
@@ -194,7 +192,7 @@ public:
             time.advance_time();
           }
       }
-    else if (simulation_type == "wave-rk")
+    else if (params.simulation_type == "wave-rk")
       {
         const double start_t = params.start_t;
         const double end_t   = params.end_t;
@@ -259,6 +257,10 @@ public:
 
             time.advance_time();
           }
+      }
+    else
+      {
+        AssertThrow(false, ExcNotImplemented());
       }
   }
 

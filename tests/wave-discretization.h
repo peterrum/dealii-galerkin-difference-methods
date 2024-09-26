@@ -19,6 +19,7 @@ template <unsigned int dim>
 struct Parameters
 {
   // general settings
+  std::string  simulation_type;
   unsigned int fe_degree;
   unsigned int n_components;
 
