@@ -545,6 +545,28 @@ public:
 
 
 
+template <int dim, typename Number = double>
+class MyExactSolution2 : public dealii::Function<dim, Number>
+{
+public:
+  virtual double
+  value(const dealii::Point<dim> &p, const unsigned int = 1) const override
+  {
+    double t = this->get_time();
+
+    (void)t;
+
+    const double r = p.norm();
+
+    if (r == 0.0)
+      return 1.0;
+    else
+      return std::sin(2.0 * numbers::PI * r) / (2.0 * numbers::PI * r);
+  }
+};
+
+
+
 template <unsigned int dim>
 void
 fill_parameters(Parameters<dim> &params, const std::string &simulation_name)
@@ -643,6 +665,52 @@ fill_parameters(Parameters<dim> &params, const std::string &simulation_name)
         {
           AssertThrow(false, ExcNotImplemented());
         }
+
+      // linear solvers
+      params.solver_name = "ILU";
+
+      // level set field
+      params.level_set_fe_degree = params.fe_degree;
+      params.level_set_function =
+        std::make_shared<Functions::SignedDistance::Sphere<dim>>();
+
+      // output
+      params.output_fe_degree = params.fe_degree;
+    }
+  else if (simulation_name == "wave")
+    {
+      // adopted from:
+      // Simon Sticko, Gustav Ludvigsson, and Gunilla Kreiss. 2020.
+      // "High-order cut finite elements for the elastic wave
+      // equation."
+      //
+      // https://link.springer.com/article/10.1007/s10444-020-09785-z
+
+      // general settings
+      params.simulation_type = "wave-rk";
+      params.fe_degree       = 3;
+      params.n_components    = 1;
+
+      // geometry
+      params.n_subdivisions_1D = 40;
+      params.geometry_left     = -1.21;
+      params.geometry_right    = +1.21;
+
+      // mass matrix
+      params.ghost_parameter_M = 0.75;
+
+      // stiffness matrix
+      params.ghost_parameter_A      = 1.5;
+      params.nitsche_parameter      = 5.0 * params.fe_degree;
+      params.function_interface_dbc = std::make_shared<MyExactSolution2<dim>>();
+      params.function_rhs           = {};
+
+      // time stepping
+      params.exact_solution = std::make_shared<MyExactSolution2<dim>>();
+      params.start_t        = 0.0;
+      params.end_t          = 2.0;
+      params.cfl            = 0.3;
+      params.cfl_pow        = 1.0;
 
       // linear solvers
       params.solver_name = "ILU";
