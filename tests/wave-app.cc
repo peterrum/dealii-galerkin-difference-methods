@@ -122,7 +122,76 @@ public:
       }
     else if (simulation_type == "heat-impl")
       {
-        AssertThrow(false, ExcNotImplemented());
+        const double                           start_t = 0.0; // TODO
+        const double                           end_t   = 0.1; // TODO
+        const double                           delta_t = 0.1; // TODO
+        const TimeStepping::runge_kutta_method runge_kutta_method =
+          TimeStepping::runge_kutta_method::RK_CLASSIC_FOURTH_ORDER;
+
+        // Compute matrix (M + dt * S)
+        const auto &mass_matrix = mass_matrix_operator.get_sparse_matrix();
+        const auto &stiffness_matrix =
+          stiffness_matrix_operator.get_sparse_matrix();
+
+        TrilinosWrappers::SparseMatrix system_matrix;
+        system_matrix.reinit(mass_matrix);
+        system_matrix.add(1.0, mass_matrix);
+        system_matrix.add(delta_t, stiffness_matrix);
+        system_matrix.compress(VectorOperation::values::add);
+
+        // Initialize vectors
+        VectorType vec_solution;
+        discretization.initialize_dof_vector(vec_solution);
+
+        // Setup solver
+        this->setup_solver(system_matrix);
+
+        const auto fu_rhs = [&](const double time, const VectorType &solution) {
+          VectorType vec_rhs;
+          vec_rhs.reinit(solution);
+
+          // du/dt = f(t, u)
+          stiffness_matrix_operator.compute_rhs(vec_rhs, solution, false, time);
+          return vec_rhs;
+        };
+
+        // Perform time stepping
+        DiscreteTime time(start_t, end_t, delta_t);
+
+        TimeStepping::ExplicitRungeKutta<VectorType> rk;
+        rk.initialize(runge_kutta_method);
+
+        this->postprocess(0.0, vec_solution);
+
+        while ((time.is_at_end() == false))
+          {
+            if (delta_t != time.get_next_step_size())
+              {
+                // note: in the last time step, the time-step size might
+                // change -> set up again matrix and solver
+                system_matrix = 0.0;
+                system_matrix.add(1.0, mass_matrix);
+                system_matrix.add(time.get_next_step_size(), stiffness_matrix);
+                system_matrix.compress(VectorOperation::values::add);
+                this->setup_solver(system_matrix);
+              }
+
+            // u := (M + dt * S)\(M u + dt * f(t, u))
+            auto vec_rhs =
+              fu_rhs(time.get_current_time() + time.get_next_step_size(),
+                     vec_solution);
+            vec_rhs *= time.get_next_step_size();
+            mass_matrix.template vmult_add<VectorType>(vec_rhs, vec_solution);
+            this->solve(system_matrix, vec_solution, vec_rhs);
+
+            discretization.get_affine_constraints().distribute(vec_solution);
+
+            this->postprocess(time.get_current_time() +
+                                time.get_next_step_size(),
+                              vec_solution);
+
+            time.advance_time();
+          }
       }
     else if (simulation_type == "wave-rk")
       {
