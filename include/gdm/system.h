@@ -672,6 +672,12 @@ namespace GDM
       return dof_handler;
     }
 
+    unsigned int
+    get_fe_degree()
+    {
+      return fe_degree;
+    }
+
   private:
     void
     create_triangulation_pre()
