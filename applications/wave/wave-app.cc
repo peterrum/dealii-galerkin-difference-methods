@@ -224,7 +224,17 @@ main(int argc, char **argv)
 {
   Utilities::MPI::MPI_InitFinalize mpi(argc, argv, 1);
 
-  AssertThrow(argc == 3, ExcInternalError());
+  if (argc != 3)
+    {
+      std::cout << "Usage: ./wave-app dim simulation" << std::endl;
+      std::cout << std::endl;
+      std::cout << "dim         number of dimensions (1-3)" << std::endl;
+      std::cout << "simulation  name of simulation (step84, heat, wave)"
+                << std::endl;
+      std::cout << std::endl;
+
+      return 9;
+    }
 
   const unsigned int dim = std::atoi(argv[1]);
   const std::string  simulation_name(argv[2]);
