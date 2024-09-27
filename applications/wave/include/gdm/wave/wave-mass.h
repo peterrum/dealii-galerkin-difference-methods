@@ -137,7 +137,7 @@ private:
           // compute element stiffness matrix
           FullMatrix<Number> cell_matrix(dofs_per_cell, dofs_per_cell);
 
-          // (I) cell integral
+          // (I) cell integral:
           if (fe_values)
             {
               for (const unsigned int q_index :
@@ -145,13 +145,14 @@ private:
                 {
                   for (const unsigned int i : fe_values->dof_indices())
                     for (const unsigned int j : fe_values->dof_indices())
+                      // (v, u)
                       cell_matrix(i, j) += fe_values->shape_value(i, q_index) *
                                            fe_values->shape_value(j, q_index) *
                                            fe_values->JxW(q_index);
                 }
             }
 
-          // (II) face integral to apply GP
+          // (II) face integral to apply GP:
           for (const unsigned int f : cell->dealii_iterator()->face_indices())
             if (face_has_ghost_penalty(cell->dealii_iterator(), f))
               {
@@ -180,6 +181,7 @@ private:
                       for (unsigned int j = 0; j < n_interface_dofs; ++j)
                         {
                           // clang-format off
+                          // γ_M j(v, u) with j(v, u)= ∑ h^3 <∂v/∂n, ∂u/∂n>
                           local_stabilization(i, j) +=
                             .5 * ghost_parameter_M * cell_side_length *
                             cell_side_length * cell_side_length *

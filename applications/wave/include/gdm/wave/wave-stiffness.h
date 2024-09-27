@@ -160,13 +160,13 @@ public:
                   const Point<dim> &point = fe_values.quadrature_point(q);
                   for (const unsigned int i : fe_values.dof_indices())
                     {
-                      // left hand side:
+                      // left hand side: (∇v, ∇u)
                       if (compute_impl_part)
                         cell_vector(i) -= fe_values.shape_grad(i, q) *
                                           quadrature_gradients[q] *
                                           fe_values.JxW(q);
 
-                      // right hand side
+                      // right hand side: (v, f)
                       if (function_rhs)
                         cell_vector(i) += function_rhs->value(point) *
                                           fe_values.shape_value(i, q) *
@@ -204,7 +204,8 @@ public:
                       surface_fe_values.normal_vector(q);
                     for (const unsigned int i : surface_fe_values.dof_indices())
                       {
-                        // left hand side
+                        // left hand side: - <v, ∂u/∂n> - <∂v/∂n, u> + γ_D/h <v,
+                        // u>
                         if (compute_impl_part)
                           cell_vector(i) -=
                             (-normal * surface_fe_values.shape_grad(i, q) *
@@ -216,7 +217,7 @@ public:
                                quadrature_values[q]) *
                             surface_fe_values.JxW(q);
 
-                        // right hand side
+                        // right hand side: <γ_D/h v - ∂v/∂n, g_D>
                         cell_vector(i) +=
                           function_interface_dbc->value(point) *
                           (nitsche_parameter / cell_side_length *
@@ -279,6 +280,8 @@ public:
                         fe_interface_values.normal(q);
                       for (unsigned int i = 0; i < n_interface_dofs; ++i)
                         {
+                          // γ_A j(v, u) / h^2 with j(v, u)= ∑ h^3 <∂v/∂n,
+                          // ∂u/∂n>
                           local_stabilization(i) -=
                             .5 * ghost_parameter_A * cell_side_length *
                             (normal *
@@ -419,6 +422,7 @@ private:
                 {
                   for (const unsigned int i : fe_values->dof_indices())
                     for (const unsigned int j : fe_values->dof_indices())
+                      // (∇v, ∇u)
                       cell_matrix(i, j) += fe_values->shape_grad(i, q_index) *
                                            fe_values->shape_grad(j, q_index) *
                                            fe_values->JxW(q_index);
@@ -440,7 +444,7 @@ private:
                       for (const unsigned int j :
                            surface_fe_values.dof_indices())
                         {
-                          // left hand side
+                          // - <v, ∂u/∂n> - <∂v/∂n, u> + γ_D/h <v, u>
                           cell_matrix(i, j) +=
                             (-normal * surface_fe_values.shape_grad(i, q) *
                                surface_fe_values.shape_value(j, q) +
@@ -483,6 +487,7 @@ private:
                       for (unsigned int j = 0; j < n_interface_dofs; ++j)
                         {
                           // clang-format off
+                          // γ_A j(v, u) / h^2 with j(v, u)= ∑ h^3 <∂v/∂n, ∂u/∂n>
                           local_stabilization(i, j) +=
                             .5 * ghost_parameter_A * cell_side_length *
                             cell_side_length * cell_side_length *
