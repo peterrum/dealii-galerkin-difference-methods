@@ -1,5 +1,5 @@
 #include <gdm/wave/wave-problem.h>
-
+#include <boost/math/special_functions/bessel.hpp>
 using namespace dealii;
 
 template <unsigned int dim>
@@ -180,7 +180,7 @@ fill_parameters(Parameters<dim> &params, const std::string &simulation_name)
             else if (dim == 2)
               {
                 const auto wave_number = 3.0 * numbers::PI;
-                return std::cyl_bessel_j(0, wave_number * r) *
+                return  boost::math::cyl_bessel_j(0, wave_number * r) *
                        std::cos(wave_number * t);
               }
             else
