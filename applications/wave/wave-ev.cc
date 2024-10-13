@@ -124,11 +124,12 @@ parse_parameters(int              argc,
                  Parameters<dim> &params,
                  MyParameters    &my_params)
 {
-  double       scale     = 1.0;
-  double       radius    = 1.0;
-  unsigned int fe_degree = 5;
+  double       scale             = 1.0;
+  double       radius            = 1.0;
+  unsigned int fe_degree         = 5;
+  unsigned int n_subdivisions_1D = 100;
 
-  for (int i = 1; i < argc; ++i)
+  for (int i = 1; i < argc;)
     {
       std::string label(argv[i]);
 
@@ -177,6 +178,15 @@ parse_parameters(int              argc,
           fe_degree = std::atoi(argv[i + 1]);
           i += 2;
         }
+      else if (label == "--n_subdivisions")
+        {
+          n_subdivisions_1D = std::atoi(argv[i + 1]);
+          i += 2;
+        }
+      else
+        {
+          AssertThrow(false, ExcNotImplemented());
+        }
     }
 
   // general settings
@@ -184,7 +194,7 @@ parse_parameters(int              argc,
   params.n_components = 1;
 
   // geometry
-  params.n_subdivisions_1D = 100;
+  params.n_subdivisions_1D = n_subdivisions_1D;
   params.geometry_left     = -1.21;
   params.geometry_right    = +1.21;
 
@@ -242,4 +252,8 @@ main(int argc, char **argv)
   if (my_params.write_M)
     write_matrix_to_file(mass_matrix_operator.get_sparse_matrix(),
                          my_params.file_prefix + "_M.dat");
+
+  if (my_params.write_S)
+    write_matrix_to_file(stiffness_matrix_operator.get_sparse_matrix(),
+                         my_params.file_prefix + "_S.dat");
 }
