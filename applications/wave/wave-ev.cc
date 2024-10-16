@@ -72,9 +72,13 @@ compute_max_generalized_eigenvalues_symmetric(const MatrixType &S_in,
 
 template <typename MatrixType>
 void
-write_matrix_to_file(const MatrixType &M_in, const std::string &file_name)
+write_matrix_to_file(const MatrixType  &M_in,
+                     const std::string &file_name,
+                     const bool         write_binary_file)
 {
-  const auto flags = std::ios::out | std::ios::binary;
+  const auto flags =
+    write_binary_file ? (std::ios::out | std::ios::binary) : (std::ios::out);
+  ;
 
   std::ofstream file(file_name, flags);
 
@@ -110,9 +114,10 @@ struct MyParameters
   bool compute_kappa_S = false;
   bool compute_gev     = false;
 
-  bool        write_M     = false;
-  bool        write_S     = false;
-  std::string file_prefix = "";
+  bool        write_M           = false;
+  bool        write_S           = false;
+  std::string file_prefix       = "";
+  bool        write_binary_file = true;
 };
 
 
@@ -183,6 +188,11 @@ parse_parameters(int              argc,
           n_subdivisions_1D = std::atoi(argv[i + 1]);
           i += 2;
         }
+      else if (label == "--write_ascii")
+        {
+          my_params.write_binary_file = false;
+          i += 1;
+        }
       else
         {
           AssertThrow(false, ExcNotImplemented());
@@ -251,9 +261,11 @@ main(int argc, char **argv)
 
   if (my_params.write_M)
     write_matrix_to_file(mass_matrix_operator.get_sparse_matrix(),
-                         my_params.file_prefix + "_M.dat");
+                         my_params.file_prefix + "_M.dat",
+                         my_params.write_binary_file);
 
   if (my_params.write_S)
     write_matrix_to_file(stiffness_matrix_operator.get_sparse_matrix(),
-                         my_params.file_prefix + "_S.dat");
+                         my_params.file_prefix + "_S.dat",
+                         my_params.write_binary_file);
 }
