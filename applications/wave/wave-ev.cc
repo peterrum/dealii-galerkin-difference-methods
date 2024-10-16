@@ -2,9 +2,9 @@
 
 #include <deal.II/lac/lapack_full_matrix.h>
 
-#include <gdm/wave/wave-discretization.h>
-#include <gdm/wave/wave-mass.h>
-#include <gdm/wave/wave-stiffness.h>
+#include <gdm/wave/discretization.h>
+#include <gdm/wave/mass.h>
+#include <gdm/wave/stiffness.h>
 
 #include <fstream>
 

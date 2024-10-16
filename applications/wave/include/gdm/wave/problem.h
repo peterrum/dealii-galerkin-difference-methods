@@ -12,10 +12,9 @@
 
 #include <gdm/data_out.h>
 #include <gdm/vector_tools.h>
-
-#include "wave-discretization.h"
-#include "wave-mass.h"
-#include "wave-stiffness.h"
+#include <gdm/wave/discretization.h>
+#include <gdm/wave/mass.h>
+#include <gdm/wave/stiffness.h>
 
 using namespace dealii;
 

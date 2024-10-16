@@ -12,7 +12,7 @@
 #include <deal.II/non_matching/mesh_classifier.h>
 
 #include <gdm/system.h>
-#include <gdm/wave/wave-parameters.h>
+#include <gdm/wave/parameters.h>
 
 using namespace dealii;
 

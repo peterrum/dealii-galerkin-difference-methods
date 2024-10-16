@@ -3,7 +3,7 @@
 #include <deal.II/lac/trilinos_sparse_matrix.h>
 #include <deal.II/lac/trilinos_sparsity_pattern.h>
 
-#include "wave-discretization.h"
+#include <gdm/wave/discretization.h>
 
 using namespace dealii;
 
