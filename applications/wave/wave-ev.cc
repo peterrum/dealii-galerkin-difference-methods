@@ -20,6 +20,19 @@ compute_condition_number(const MatrixType &M_in)
 
   M.copy_from(M_in);
 
+  if (true)
+    {
+      LAPACKFullMatrix<double> diagonal(M.m(), M.n());
+      LAPACKFullMatrix<double> PA(M.m(), M.n());
+
+      for (unsigned int i = 0; i < diagonal.m(); ++i)
+        diagonal(i, i) = (M(i, i) == 0.0) ? 0.0 : (1.0 / M(i, i));
+
+      diagonal.mmult(PA, M);
+
+      M = PA;
+    }
+
   M.compute_eigenvalues();
 
   std::vector<Number> eigenvalues;
@@ -66,6 +79,12 @@ compute_max_generalized_eigenvalues_symmetric(const MatrixType &S_in,
   std::sort(eigenvalues.begin(), eigenvalues.end());
 
   std::cout << "max ev(M\\S): " << eigenvalues.back() << std::endl;
+
+  std::cout << "eigenvalues:" << std::endl;
+  for (const auto i : eigenvalues)
+    std::cout << i << " ";
+  std::cout << std::endl;
+  std::cout << std::endl;
 }
 
 
@@ -133,6 +152,7 @@ parse_parameters(int              argc,
   double       radius            = 1.0;
   unsigned int fe_degree         = 5;
   unsigned int n_subdivisions_1D = 100;
+  double       alpha             = 0.5;
 
   for (int i = 1; i < argc;)
     {
@@ -193,11 +213,24 @@ parse_parameters(int              argc,
           my_params.write_binary_file = false;
           i += 1;
         }
+      else if (label == "--alpha")
+        {
+          alpha = std::atof(argv[i + 1]);
+          i += 2;
+        }
       else
         {
           AssertThrow(false, ExcNotImplemented());
         }
     }
+
+  if (alpha >= 0.0)
+    {
+      auto h = 1.21 / (n_subdivisions_1D / 2);
+      radius = h * (std::floor(radius / h) + alpha);
+    }
+
+  std::cout << radius << std::endl;
 
   // general settings
   params.fe_degree    = fe_degree;

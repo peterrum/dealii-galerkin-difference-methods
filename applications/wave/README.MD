@@ -15,3 +15,9 @@ for i in `seq 20 20 200`; do ./applications/wave/wave-ev --n_subdivisions $i --c
 tar cvf matrices.tar matrices
 
 ```
+
+run experiments with different alpha:
+```bash
+./applications/wave/wave-ev --n_subdivisions 100 --compute_kappa_m --compute_kappa_s --radius 1.0 --alpha 0.1
+./applications/wave/wave-ev --n_subdivisions 100 --compute_kappa_m --compute_kappa_s --radius 1.0 --alpha 0.1 --disable_ghost_penalty
+```
