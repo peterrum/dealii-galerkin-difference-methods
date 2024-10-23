@@ -234,8 +234,6 @@ parse_parameters(int              argc,
       radius = h * (std::floor(radius / h) + alpha);
     }
 
-  std::cout << radius << std::endl;
-
   // general settings
   params.fe_degree    = fe_degree;
   params.n_components = 1;
