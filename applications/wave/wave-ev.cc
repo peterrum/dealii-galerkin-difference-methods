@@ -12,7 +12,8 @@ using namespace dealii;
 
 template <typename MatrixType>
 void
-compute_condition_number(const MatrixType &M_in)
+compute_condition_number(const MatrixType &M_in,
+                         const bool        rescale_matrix = false)
 {
   using Number = typename MatrixType::value_type;
 
@@ -20,7 +21,7 @@ compute_condition_number(const MatrixType &M_in)
 
   M.copy_from(M_in);
 
-  if (false)
+  if (rescale_matrix)
     {
       LAPACKFullMatrix<double> diagonal(M.m(), M.n());
       LAPACKFullMatrix<double> PA(M.m(), M.n());
@@ -137,6 +138,7 @@ struct MyParameters
   bool        write_S           = false;
   std::string file_prefix       = "";
   bool        write_binary_file = true;
+  bool        rescale_matrix    = false;
 };
 
 
@@ -222,6 +224,11 @@ parse_parameters(int              argc,
           alpha = std::atof(argv[i + 1]);
           i += 2;
         }
+      else if (label == "--rescale_matrix")
+        {
+          my_params.rescale_matrix = true;
+          i += 1;
+        }
       else
         {
           AssertThrow(false, ExcNotImplemented());
@@ -284,10 +291,12 @@ main(int argc, char **argv)
   stiffness_matrix_operator.reinit(params);
 
   if (my_params.compute_kappa_M)
-    compute_condition_number(mass_matrix_operator.get_sparse_matrix());
+    compute_condition_number(mass_matrix_operator.get_sparse_matrix(),
+                             my_params.rescale_matrix);
 
   if (my_params.compute_kappa_S)
-    compute_condition_number(stiffness_matrix_operator.get_sparse_matrix());
+    compute_condition_number(stiffness_matrix_operator.get_sparse_matrix(),
+                             my_params.rescale_matrix);
 
   if (my_params.compute_gev)
     compute_max_generalized_eigenvalues_symmetric(
