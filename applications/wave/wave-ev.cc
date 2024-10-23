@@ -20,7 +20,7 @@ compute_condition_number(const MatrixType &M_in)
 
   M.copy_from(M_in);
 
-  if (true)
+  if (false)
     {
       LAPACKFullMatrix<double> diagonal(M.m(), M.n());
       LAPACKFullMatrix<double> PA(M.m(), M.n());
@@ -152,7 +152,7 @@ parse_parameters(int              argc,
   double       radius            = 1.0;
   unsigned int fe_degree         = 5;
   unsigned int n_subdivisions_1D = 100;
-  double       alpha             = 0.5;
+  double       alpha             = -1.0;
 
   for (int i = 1; i < argc;)
     {
@@ -196,6 +196,10 @@ parse_parameters(int              argc,
       else if (label == "--file_prefix")
         {
           my_params.file_prefix = std::string(argv[i + 1]);
+
+          if (my_params.file_prefix != "")
+            my_params.file_prefix += "_";
+
           i += 2;
         }
       else if (label == "--fe_degree")
@@ -294,11 +298,11 @@ main(int argc, char **argv)
 
   if (my_params.write_M)
     write_matrix_to_file(mass_matrix_operator.get_sparse_matrix(),
-                         my_params.file_prefix + "_M.dat",
+                         my_params.file_prefix + "M.dat",
                          my_params.write_binary_file);
 
   if (my_params.write_S)
     write_matrix_to_file(stiffness_matrix_operator.get_sparse_matrix(),
-                         my_params.file_prefix + "_S.dat",
+                         my_params.file_prefix + "S.dat",
                          my_params.write_binary_file);
 }
