@@ -12,7 +12,8 @@ using namespace dealii;
 
 template <typename MatrixType>
 void
-compute_condition_number(const MatrixType &M_in)
+compute_condition_number(const MatrixType &M_in,
+                         const bool        rescale_matrix = false)
 {
   using Number = typename MatrixType::value_type;
 
@@ -20,7 +21,7 @@ compute_condition_number(const MatrixType &M_in)
 
   M.copy_from(M_in);
 
-  if (true)
+  if (rescale_matrix)
     {
       LAPACKFullMatrix<double> diagonal(M.m(), M.n());
       LAPACKFullMatrix<double> PA(M.m(), M.n());
@@ -137,6 +138,7 @@ struct MyParameters
   bool        write_S           = false;
   std::string file_prefix       = "";
   bool        write_binary_file = true;
+  bool        rescale_matrix    = false;
 };
 
 
@@ -152,7 +154,7 @@ parse_parameters(int              argc,
   double       radius            = 1.0;
   unsigned int fe_degree         = 5;
   unsigned int n_subdivisions_1D = 100;
-  double       alpha             = 0.5;
+  double       alpha             = -1.0;
 
   for (int i = 1; i < argc;)
     {
@@ -196,6 +198,10 @@ parse_parameters(int              argc,
       else if (label == "--file_prefix")
         {
           my_params.file_prefix = std::string(argv[i + 1]);
+
+          if (my_params.file_prefix != "")
+            my_params.file_prefix += "_";
+
           i += 2;
         }
       else if (label == "--fe_degree")
@@ -218,6 +224,11 @@ parse_parameters(int              argc,
           alpha = std::atof(argv[i + 1]);
           i += 2;
         }
+      else if (label == "--rescale_matrix")
+        {
+          my_params.rescale_matrix = true;
+          i += 1;
+        }
       else
         {
           AssertThrow(false, ExcNotImplemented());
@@ -229,8 +240,6 @@ parse_parameters(int              argc,
       auto h = 1.21 / (n_subdivisions_1D / 2);
       radius = h * (std::floor(radius / h) + alpha);
     }
-
-  std::cout << radius << std::endl;
 
   // general settings
   params.fe_degree    = fe_degree;
@@ -282,10 +291,12 @@ main(int argc, char **argv)
   stiffness_matrix_operator.reinit(params);
 
   if (my_params.compute_kappa_M)
-    compute_condition_number(mass_matrix_operator.get_sparse_matrix());
+    compute_condition_number(mass_matrix_operator.get_sparse_matrix(),
+                             my_params.rescale_matrix);
 
   if (my_params.compute_kappa_S)
-    compute_condition_number(stiffness_matrix_operator.get_sparse_matrix());
+    compute_condition_number(stiffness_matrix_operator.get_sparse_matrix(),
+                             my_params.rescale_matrix);
 
   if (my_params.compute_gev)
     compute_max_generalized_eigenvalues_symmetric(
@@ -294,11 +305,11 @@ main(int argc, char **argv)
 
   if (my_params.write_M)
     write_matrix_to_file(mass_matrix_operator.get_sparse_matrix(),
-                         my_params.file_prefix + "_M.dat",
+                         my_params.file_prefix + "M.dat",
                          my_params.write_binary_file);
 
   if (my_params.write_S)
     write_matrix_to_file(stiffness_matrix_operator.get_sparse_matrix(),
-                         my_params.file_prefix + "_S.dat",
+                         my_params.file_prefix + "S.dat",
                          my_params.write_binary_file);
 }
