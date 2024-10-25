@@ -238,7 +238,7 @@ parse_parameters(int              argc,
   if (alpha >= 0.0)
     {
       auto h = 1.21 / (n_subdivisions_1D / 2);
-      radius = h * (std::floor(radius / h) + alpha);
+      radius = h * (std::floor(radius / h) - alpha);
     }
 
   // general settings
