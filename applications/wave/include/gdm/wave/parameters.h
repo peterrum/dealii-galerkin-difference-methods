@@ -17,6 +17,8 @@ struct Parameters
   double       geometry_left;
   double       geometry_right;
 
+  std::function<Point<dim>(const Point<dim>)> mapping_q_cache_function;
+
   // mass matrix
   double ghost_parameter_M = -1.0;
 
