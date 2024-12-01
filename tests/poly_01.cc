@@ -3,12 +3,11 @@
 using namespace dealii;
 
 
-int
-main()
+void
+test(const unsigned int fe_degree)
 {
   const unsigned int dim            = 1;
   const unsigned int n_subdivisions = 20;
-  const unsigned int fe_degree      = 3;
 
   const auto all_polynomials = GDM::generate_polynomials_1D(fe_degree);
 
@@ -32,4 +31,14 @@ main()
         }
       std::cout << std::endl << std::endl;
     }
+  std::cout << std::endl << std::endl;
+}
+
+
+int
+main()
+{
+  test(1);
+  test(3);
+  test(5);
 }
