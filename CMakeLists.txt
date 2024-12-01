@@ -41,4 +41,5 @@ IF(EXISTS ${CMAKE_SOURCE_DIR}/tests/CMakeLists.txt)
 ENDIF()
 
 enable_testing()
+ADD_SUBDIRECTORY(prototypes)
 ADD_SUBDIRECTORY(tests)
