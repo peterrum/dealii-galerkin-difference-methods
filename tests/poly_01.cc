@@ -41,4 +41,6 @@ main()
   test(1);
   test(3);
   test(5);
+  test(7);
+  test(9);
 }
