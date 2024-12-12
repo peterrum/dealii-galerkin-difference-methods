@@ -203,6 +203,6 @@ test(const unsigned int fe_degree)
 int
 main()
 {
-  for (const unsigned int fe_degree : {1, 3, 5})
+  for (const unsigned int fe_degree : {1, 3, 5, 7, 9})
     test<1>(fe_degree);
 }
