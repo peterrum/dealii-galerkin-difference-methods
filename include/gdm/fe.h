@@ -24,7 +24,10 @@ namespace GDM
     std::string
     get_name() const override
     {
-      return "FE_GDM";
+      std::ostringstream namebuf;
+      namebuf << "FE_GDM<" << Utilities::dim_string(dim, dim) << ">("
+              << this->degree << ")";
+      return namebuf.str();
     }
 
     std::unique_ptr<FiniteElement<dim>>
@@ -40,7 +43,9 @@ namespace GDM
       std::vector<unsigned int> dofs_per_object(dim + 1);
       dofs_per_object[dim] = n;
 
-      FiniteElementData<dim> fe_data(dofs_per_object, 1, 0 /*not relevant*/);
+      FiniteElementData<dim> fe_data(dofs_per_object,
+                                     1,
+                                     std::round(std::pow(n, 1.0 / dim)) - 1);
 
       return fe_data;
     }
