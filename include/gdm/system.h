@@ -292,26 +292,26 @@ namespace GDM
                                    }),
                        points_all.end());
 
-      std::sort(points_all.begin(),
-                points_all.end(),
-                [](const auto &a, const auto &b) {
-                  std::vector<double> a_(dim);
-                  std::vector<double> b_(dim);
+      std::stable_sort(points_all.begin(),
+                       points_all.end(),
+                       [](const auto &a, const auto &b) {
+                         std::vector<double> a_(dim);
+                         std::vector<double> b_(dim);
 
-                  a.second.unroll(a_.begin(), a_.end());
-                  std::reverse(a_.begin(), a_.end());
+                         a.second.unroll(a_.begin(), a_.end());
+                         std::reverse(a_.begin(), a_.end());
 
-                  b.second.unroll(b_.begin(), b_.end());
-                  std::reverse(b_.begin(), b_.end());
+                         b.second.unroll(b_.begin(), b_.end());
+                         std::reverse(b_.begin(), b_.end());
 
-                  for (unsigned int d = 0; d < dim; ++d)
-                    {
-                      if (std::abs(a_[d] - b_[d]) > 1e-8 /*epsilon*/)
-                        return a_[d] < b_[d];
-                    }
+                         for (unsigned int d = 0; d < dim; ++d)
+                           {
+                             if (std::abs(a_[d] - b_[d]) > 1e-8 /*epsilon*/)
+                               return a_[d] < b_[d];
+                           }
 
-                  return true;
-                });
+                         return true;
+                       });
 
       std::vector<dealii::types::global_dof_index> result(
         dof_handler.n_locally_owned_dofs());
