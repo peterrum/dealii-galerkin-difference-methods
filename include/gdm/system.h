@@ -195,6 +195,9 @@ namespace GDM
       void
       get_dof_indices(std::vector<types::global_dof_index> &dof_indices) const
       {
+        AssertThrow(system.fe[0 /*TODO*/].n_dofs_per_cell() ==
+                      dof_indices.size(),
+                    ExcNotImplemented());
         AssertThrow(system.n_components == 1, ExcNotImplemented());
 
         const auto indices =
@@ -422,8 +425,6 @@ namespace GDM
     make_periodicity_constraints(const unsigned int         d,
                                  AffineConstraints<Number> &constraints) const
     {
-      AssertThrow(n_components == 1, ExcNotImplemented());
-
       unsigned int n0 = 1;
       for (unsigned int i = d + 1; i < dim; ++i)
         n0 *= n_subdivisions[i] + 1;
@@ -440,14 +441,20 @@ namespace GDM
             const unsigned int i0 = i * n2 + j;
             const unsigned int i1 = i0 + n_subdivisions[d] * n1;
 
-            if (is_locally_active.is_element(i1) == false)
-              continue;
+            for (unsigned int c = 0; c < n_components; ++c)
+              {
+                if (is_locally_active.is_element(i1 * n_components + c) ==
+                    false)
+                  continue;
 
-            if (constraints.is_constrained(i1))
-              continue;
+                if (constraints.is_constrained(i1 * n_components + c))
+                  continue;
 
-            constraints.add_line(i1);
-            constraints.add_entry(i1, i0, 1.0);
+                constraints.add_line(i1 * n_components + c);
+                constraints.add_entry(i1 * n_components + c,
+                                      i0 * n_components + c,
+                                      1.0);
+              }
           }
     }
 
@@ -457,8 +464,6 @@ namespace GDM
     make_zero_boundary_constraints(const unsigned int         surface,
                                    AffineConstraints<Number> &constraints) const
     {
-      AssertThrow(n_components == 1, ExcNotImplemented());
-
       const unsigned int d = surface / 2; // direction
       const unsigned int s = surface % 2; // left or right surface
 
@@ -478,10 +483,14 @@ namespace GDM
             const unsigned i0 =
               i * n2 + (s == 0 ? 0 : n_subdivisions[d]) * n1 + j;
 
-            if (is_locally_active.is_element(i0) == false)
-              continue;
+            for (unsigned int c = 0; c < n_components; ++c)
+              {
+                if (is_locally_active.is_element(i0 * n_components + c) ==
+                    false)
+                  continue;
 
-            constraints.constrain_dof_to_zero(i0);
+                constraints.constrain_dof_to_zero(i0 * n_components + c);
+              }
           }
     }
 
@@ -561,9 +570,7 @@ namespace GDM
     types::global_dof_index
     n_dofs() const
     {
-      AssertThrow(n_components == 1, ExcNotImplemented());
-
-      types::global_dof_index n = 1;
+      types::global_dof_index n = n_components;
 
       for (unsigned int d = 0; d < dim; ++d)
         n *= n_subdivisions[d] + 1;
@@ -692,13 +699,11 @@ namespace GDM
     void
     create_triangulation_pre()
     {
-      AssertThrow(n_components == 1, ExcNotImplemented());
-
       if (comm == MPI_COMM_NULL)
         {
           tria = std::make_shared<Triangulation<dim>>();
 
-          unsigned int dofs = 1;
+          unsigned int dofs = n_components;
           for (unsigned int d = 0; d < dim; ++d)
             dofs *= n_subdivisions[d] + 1;
 
@@ -711,7 +716,7 @@ namespace GDM
           const unsigned int n_procs = Utilities::MPI::n_mpi_processes(comm);
           const unsigned int my_rank = Utilities::MPI::this_mpi_process(comm);
 
-          unsigned int face_dofs = 1;
+          unsigned int face_dofs = n_components;
           for (unsigned int d = 0; d < dim - 1; ++d)
             face_dofs *= n_subdivisions[d] + 1;
 
