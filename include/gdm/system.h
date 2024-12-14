@@ -195,6 +195,8 @@ namespace GDM
       void
       get_dof_indices(std::vector<types::global_dof_index> &dof_indices) const
       {
+        AssertThrow(system.n_components == 1, ExcNotImplemented());
+
         const auto indices =
           index_to_indices<dim>(system.active_cell_index_map[_index],
                                 system.n_subdivisions);
@@ -420,6 +422,8 @@ namespace GDM
     make_periodicity_constraints(const unsigned int         d,
                                  AffineConstraints<Number> &constraints) const
     {
+      AssertThrow(n_components == 1, ExcNotImplemented());
+
       unsigned int n0 = 1;
       for (unsigned int i = d + 1; i < dim; ++i)
         n0 *= n_subdivisions[i] + 1;
@@ -453,6 +457,8 @@ namespace GDM
     make_zero_boundary_constraints(const unsigned int         surface,
                                    AffineConstraints<Number> &constraints) const
     {
+      AssertThrow(n_components == 1, ExcNotImplemented());
+
       const unsigned int d = surface / 2; // direction
       const unsigned int s = surface % 2; // left or right surface
 
@@ -555,6 +561,8 @@ namespace GDM
     types::global_dof_index
     n_dofs() const
     {
+      AssertThrow(n_components == 1, ExcNotImplemented());
+
       types::global_dof_index n = 1;
 
       for (unsigned int d = 0; d < dim; ++d)
@@ -684,6 +692,8 @@ namespace GDM
     void
     create_triangulation_pre()
     {
+      AssertThrow(n_components == 1, ExcNotImplemented());
+
       if (comm == MPI_COMM_NULL)
         {
           tria = std::make_shared<Triangulation<dim>>();
