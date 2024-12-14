@@ -14,6 +14,7 @@
 
 #include <gdm/data_out.h>
 #include <gdm/system.h>
+#include <gdm/vector_tools.h>
 
 #include <fstream>
 
@@ -29,6 +30,9 @@ test()
 
   using Number     = double;
   using VectorType = Vector<Number>;
+
+  FunctionFromFunctionObjects<dim> function(
+    [&](const auto &p, const auto c) { return p[0] + c; }, n_components);
 
   // Create GDM system
   GDM::System<dim> system(fe_degree, n_components);
@@ -49,7 +53,6 @@ test()
 
   // Create constraints
   AffineConstraints<Number> constraints;
-  system.make_zero_boundary_constraints(constraints);
   constraints.close();
 
   // Categorize cells
@@ -75,7 +78,8 @@ test()
   hp::FEValues<dim> fe_values_collection(mapping,
                                          fe,
                                          quadrature,
-                                         update_values | update_JxW_values);
+                                         update_values | update_JxW_values |
+                                           update_quadrature_points);
 
   std::vector<types::global_dof_index> dof_indices;
   for (const auto &cell : system.locally_active_cell_iterators())
@@ -109,7 +113,8 @@ test()
       for (const unsigned int q_index : fe_values.quadrature_point_indices())
         for (const unsigned int i : fe_values.dof_indices())
           cell_vector(i) +=
-            1.0 * fe_values.shape_value(i, q_index) * fe_values.JxW(q_index);
+            function.value(fe_values.quadrature_point(q_index)) *
+            fe_values.shape_value(i, q_index) * fe_values.JxW(q_index);
 
       // assemble
       constraints.distribute_local_to_global(
@@ -124,7 +129,22 @@ test()
   ReductionControl     solver_control(100, 1.e-10, 1.e-8);
   SolverCG<VectorType> solver(solver_control);
   solver.solve(sparse_matrix, solution, rhs, preconditioner);
-  std::cout << solver_control.last_step() << std::endl << std::endl;
+
+  // computer error
+  Vector<Number> cell_wise_error;
+  GDM::VectorTools::integrate_difference(mapping,
+                                         system,
+                                         solution,
+                                         function,
+                                         cell_wise_error,
+                                         quadrature,
+                                         VectorTools::NormType::L2_norm);
+  const auto error =
+    VectorTools::compute_global_error(system.get_triangulation(),
+                                      cell_wise_error,
+                                      VectorTools::NormType::L2_norm);
+
+  std::cout << "error: " << error << std::endl;
 }
 
 

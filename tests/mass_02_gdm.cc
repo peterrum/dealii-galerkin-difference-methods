@@ -134,7 +134,7 @@ test()
   SolverCG<VectorType> solver(solver_control);
   solver.solve(sparse_matrix, solution, rhs, preconditioner);
 
-
+  // computer error
   Vector<Number> cell_wise_error;
   GDM::VectorTools::integrate_difference(mapping,
                                          system,
