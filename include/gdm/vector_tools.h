@@ -44,8 +44,8 @@ namespace GDM
                                                update_JxW_values);
 
       std::vector<types::global_dof_index> dof_indices;
-      std::vector<Number>                  values;
-      std::vector<Number>                  values_exact;
+      std::vector<Vector<Number>>          values;
+      std::vector<Vector<Number>>          values_exact;
       for (const auto &cell : system.locally_active_cell_iterators())
         {
           fe_values_collection.reinit(cell->dealii_iterator(),
@@ -55,6 +55,8 @@ namespace GDM
 
           const auto &fe_values = fe_values_collection.get_present_fe_values();
 
+          const unsigned int n_components = fe_values.get_fe().n_components();
+
           const unsigned int dofs_per_cell =
             fe_values.get_fe().n_dofs_per_cell();
 
@@ -62,18 +64,21 @@ namespace GDM
           dof_indices.resize(dofs_per_cell);
           cell->get_dof_indices(dof_indices);
 
-          values.resize(fe_values.n_quadrature_points);
+          values.resize(fe_values.n_quadrature_points,
+                        Vector<Number>(n_components));
           fe_values.get_function_values(fe_function, dof_indices, values);
 
-          values_exact.resize(fe_values.n_quadrature_points);
-          exact_solution.value_list(fe_values.get_quadrature_points(),
-                                    values_exact);
+          values_exact.resize(fe_values.n_quadrature_points,
+                              Vector<Number>(n_components));
+          exact_solution.vector_value_list(fe_values.get_quadrature_points(),
+                                           values_exact);
 
           Number diff = 0.0;
 
-          for (const auto q : fe_values.dof_indices())
-            diff +=
-              Utilities::pow(values[q] - values_exact[q], 2) * fe_values.JxW(q);
+          for (const auto q : fe_values.quadrature_point_indices())
+            for (unsigned int c = 0; c < n_components; ++c)
+              diff += Utilities::pow(values[q][c] - values_exact[q][c], 2) *
+                      fe_values.JxW(q);
 
           difference[cell->dealii_iterator()->active_cell_index()] =
             std::sqrt(diff);
