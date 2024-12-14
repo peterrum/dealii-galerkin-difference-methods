@@ -774,7 +774,7 @@ namespace GDM
         }
 
       dof_handler.reinit(*tria);
-      dof_handler.distribute_dofs(FE_Q<dim>(1));
+      dof_handler.distribute_dofs(FESystem<dim>(FE_Q<dim>(1), n_components));
       internal::compute_renumbering_lex(dof_handler);
     }
 
