@@ -10,14 +10,15 @@ using namespace dealii;
 
 template <int dim>
 void
-test(const unsigned int fe_degree)
+test(const unsigned int fe_degree, const unsigned int n_components = 1)
 {
   const unsigned int n_subdivisions = 10;
 
   const QIterated<dim> quadrature(QGaussLobatto<1>(2), n_subdivisions);
 
   const auto fe_collection =
-    GDM::generate_fe_collection<dim>(GDM::generate_polynomials_1D(fe_degree));
+    GDM::generate_fe_collection<dim>(GDM::generate_polynomials_1D(fe_degree),
+                                     n_components);
 
   for (const auto &fe : fe_collection)
     {
@@ -43,4 +44,6 @@ main()
   test<1>(5);
   test<1>(7);
   test<1>(9);
+
+  test<1>(3, 2);
 }
