@@ -195,6 +195,13 @@ namespace GDM
       void
       get_dof_indices(std::vector<types::global_dof_index> &dof_indices) const
       {
+        AssertThrow(system.fe[0 /*TODO*/].n_dofs_per_cell() ==
+                      dof_indices.size(),
+                    ExcNotImplemented());
+
+        const unsigned int n_components = system.n_components;
+        const auto        &fe           = system.fe[0 /*TODO*/];
+
         const auto indices =
           index_to_indices<dim>(system.active_cell_index_map[_index],
                                 system.n_subdivisions);
@@ -230,9 +237,11 @@ namespace GDM
 
                 const auto index = indices_to_index<dim>(offset, n_dofs);
 
-                AssertIndexRange(index, system.n_dofs());
+                AssertIndexRange(index, system.n_dofs() / n_components);
 
-                dof_indices[c] = index;
+                for (unsigned int comp = 0; comp < n_components; ++comp)
+                  dof_indices[fe.component_to_system_index(comp, c)] =
+                    index * n_components + comp;
               }
       }
 
@@ -292,26 +301,26 @@ namespace GDM
                                    }),
                        points_all.end());
 
-      std::sort(points_all.begin(),
-                points_all.end(),
-                [](const auto &a, const auto &b) {
-                  std::vector<double> a_(dim);
-                  std::vector<double> b_(dim);
+      std::stable_sort(points_all.begin(),
+                       points_all.end(),
+                       [](const auto &a, const auto &b) {
+                         std::vector<double> a_(dim);
+                         std::vector<double> b_(dim);
 
-                  a.second.unroll(a_.begin(), a_.end());
-                  std::reverse(a_.begin(), a_.end());
+                         a.second.unroll(a_.begin(), a_.end());
+                         std::reverse(a_.begin(), a_.end());
 
-                  b.second.unroll(b_.begin(), b_.end());
-                  std::reverse(b_.begin(), b_.end());
+                         b.second.unroll(b_.begin(), b_.end());
+                         std::reverse(b_.begin(), b_.end());
 
-                  for (unsigned int d = 0; d < dim; ++d)
-                    {
-                      if (std::abs(a_[d] - b_[d]) > 1e-8 /*epsilon*/)
-                        return a_[d] < b_[d];
-                    }
+                         for (unsigned int d = 0; d < dim; ++d)
+                           {
+                             if (std::abs(a_[d] - b_[d]) > 1e-8 /*epsilon*/)
+                               return a_[d] < b_[d];
+                           }
 
-                  return true;
-                });
+                         return true;
+                       });
 
       std::vector<dealii::types::global_dof_index> result(
         dof_handler.n_locally_owned_dofs());
@@ -336,6 +345,7 @@ namespace GDM
            const bool         add_ghost_layer = false)
       : comm(MPI_COMM_NULL)
       , fe_degree(fe_degree)
+      , n_components(n_components)
       , fe(generate_fe_collection<dim>(generate_polynomials_1D(fe_degree),
                                        n_components))
       , add_ghost_layer(add_ghost_layer)
@@ -347,6 +357,7 @@ namespace GDM
            const bool         add_ghost_layer = false)
       : comm(comm)
       , fe_degree(fe_degree)
+      , n_components(n_components)
       , fe(generate_fe_collection<dim>(generate_polynomials_1D(fe_degree),
                                        n_components))
       , add_ghost_layer(add_ghost_layer)
@@ -434,14 +445,20 @@ namespace GDM
             const unsigned int i0 = i * n2 + j;
             const unsigned int i1 = i0 + n_subdivisions[d] * n1;
 
-            if (is_locally_active.is_element(i1) == false)
-              continue;
+            for (unsigned int c = 0; c < n_components; ++c)
+              {
+                if (is_locally_active.is_element(i1 * n_components + c) ==
+                    false)
+                  continue;
 
-            if (constraints.is_constrained(i1))
-              continue;
+                if (constraints.is_constrained(i1 * n_components + c))
+                  continue;
 
-            constraints.add_line(i1);
-            constraints.add_entry(i1, i0, 1.0);
+                constraints.add_line(i1 * n_components + c);
+                constraints.add_entry(i1 * n_components + c,
+                                      i0 * n_components + c,
+                                      1.0);
+              }
           }
     }
 
@@ -470,10 +487,14 @@ namespace GDM
             const unsigned i0 =
               i * n2 + (s == 0 ? 0 : n_subdivisions[d]) * n1 + j;
 
-            if (is_locally_active.is_element(i0) == false)
-              continue;
+            for (unsigned int c = 0; c < n_components; ++c)
+              {
+                if (is_locally_active.is_element(i0 * n_components + c) ==
+                    false)
+                  continue;
 
-            constraints.constrain_dof_to_zero(i0);
+                constraints.constrain_dof_to_zero(i0 * n_components + c);
+              }
           }
     }
 
@@ -553,7 +574,7 @@ namespace GDM
     types::global_dof_index
     n_dofs() const
     {
-      types::global_dof_index n = 1;
+      types::global_dof_index n = n_components;
 
       for (unsigned int d = 0; d < dim; ++d)
         n *= n_subdivisions[d] + 1;
@@ -686,7 +707,7 @@ namespace GDM
         {
           tria = std::make_shared<Triangulation<dim>>();
 
-          unsigned int dofs = 1;
+          unsigned int dofs = n_components;
           for (unsigned int d = 0; d < dim; ++d)
             dofs *= n_subdivisions[d] + 1;
 
@@ -699,7 +720,7 @@ namespace GDM
           const unsigned int n_procs = Utilities::MPI::n_mpi_processes(comm);
           const unsigned int my_rank = Utilities::MPI::this_mpi_process(comm);
 
-          unsigned int face_dofs = 1;
+          unsigned int face_dofs = n_components;
           for (unsigned int d = 0; d < dim - 1; ++d)
             face_dofs *= n_subdivisions[d] + 1;
 
@@ -772,7 +793,7 @@ namespace GDM
         }
 
       dof_handler.reinit(*tria);
-      dof_handler.distribute_dofs(FE_Q<dim>(1));
+      dof_handler.distribute_dofs(FESystem<dim>(FE_Q<dim>(1), n_components));
       internal::compute_renumbering_lex(dof_handler);
     }
 
@@ -781,6 +802,7 @@ namespace GDM
 
     // finite element
     const unsigned int          fe_degree;
+    const unsigned int          n_components;
     const hp::FECollection<dim> fe;
 
     const bool add_ghost_layer;
