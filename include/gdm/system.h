@@ -198,7 +198,9 @@ namespace GDM
         AssertThrow(system.fe[0 /*TODO*/].n_dofs_per_cell() ==
                       dof_indices.size(),
                     ExcNotImplemented());
-        AssertThrow(system.n_components == 1, ExcNotImplemented());
+
+        const unsigned int n_components = system.n_components;
+        const auto        &fe           = system.fe[0 /*TODO*/];
 
         const auto indices =
           index_to_indices<dim>(system.active_cell_index_map[_index],
@@ -235,9 +237,11 @@ namespace GDM
 
                 const auto index = indices_to_index<dim>(offset, n_dofs);
 
-                AssertIndexRange(index, system.n_dofs());
+                AssertIndexRange(index, system.n_dofs() / n_components);
 
-                dof_indices[c] = index;
+                for (unsigned int comp = 0; comp < n_components; ++comp)
+                  dof_indices[fe.component_to_system_index(comp, c)] =
+                    index * n_components + comp;
               }
       }
 
