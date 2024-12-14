@@ -336,6 +336,7 @@ namespace GDM
            const bool         add_ghost_layer = false)
       : comm(MPI_COMM_NULL)
       , fe_degree(fe_degree)
+      , n_components(n_components)
       , fe(generate_fe_collection<dim>(generate_polynomials_1D(fe_degree),
                                        n_components))
       , add_ghost_layer(add_ghost_layer)
@@ -347,6 +348,7 @@ namespace GDM
            const bool         add_ghost_layer = false)
       : comm(comm)
       , fe_degree(fe_degree)
+      , n_components(n_components)
       , fe(generate_fe_collection<dim>(generate_polynomials_1D(fe_degree),
                                        n_components))
       , add_ghost_layer(add_ghost_layer)
@@ -781,6 +783,7 @@ namespace GDM
 
     // finite element
     const unsigned int          fe_degree;
+    const unsigned int          n_components;
     const hp::FECollection<dim> fe;
 
     const bool add_ghost_layer;
