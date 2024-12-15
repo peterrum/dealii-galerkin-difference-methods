@@ -11,7 +11,8 @@ template <unsigned int dim, typename Number>
 class StiffnessMatrixOperator
 {
 public:
-  using VectorType = LinearAlgebra::distributed::Vector<Number>;
+  using VectorType      = LinearAlgebra::distributed::Vector<Number>;
+  using BlockVectorType = LinearAlgebra::distributed::BlockVector<Number>;
 
   StiffnessMatrixOperator(const Discretization<dim, Number> &discretization)
     : discretization(discretization)
@@ -204,8 +205,8 @@ public:
                       surface_fe_values.normal_vector(q);
                     for (const unsigned int i : surface_fe_values.dof_indices())
                       {
-                        // left hand side: - <v, ∂u/∂n> - <∂v/∂n, u> + γ_D/h <v,
-                        // u>
+                        // left hand side:
+                        // - <v, ∂u/∂n> - <∂v/∂n, u> + γ_D/h <v, u>
                         if (compute_impl_part)
                           cell_vector(i) -=
                             (-normal * surface_fe_values.shape_grad(i, q) *
@@ -303,6 +304,18 @@ public:
         }
 
     vec_rhs.compress(VectorOperation::add);
+  }
+
+  void
+  compute_rhs(BlockVectorType       &vec_rhs,
+              const BlockVectorType &solution,
+              const bool             compute_impl_part,
+              const double           time) const
+  {
+    (void)vec_rhs;
+    (void)solution;
+    (void)compute_impl_part;
+    (void)time;
   }
 
 private:

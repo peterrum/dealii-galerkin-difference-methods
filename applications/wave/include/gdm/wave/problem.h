@@ -126,6 +126,74 @@ public:
             time.advance_time();
           }
       }
+    else if (params.simulation_type == "heat-rk")
+      {
+        const double start_t = params.start_t;
+        const double end_t   = params.end_t;
+        const double delta_t =
+          params.cfl * std::pow(discretization.get_dx(), params.cfl_pow);
+
+        std::cout << delta_t << std::endl;
+
+        const TimeStepping::runge_kutta_method runge_kutta_method =
+          TimeStepping::runge_kutta_method::RK_CLASSIC_FOURTH_ORDER;
+
+        // Compute mass matrix
+        const auto &mass_matrix_0 = mass_matrix_operator.get_sparse_matrix();
+        const auto &mass_matrix_1 = mass_matrix_operator.get_sparse_matrix();
+
+        // Initialize vectors
+        BlockVectorType vec_solution(2);
+        discretization.initialize_dof_vector(vec_solution.block(0));
+        discretization.initialize_dof_vector(vec_solution.block(1));
+        this->set_initial_condition(vec_solution.block(0));
+        this->set_initial_condition(vec_solution.block(1));
+
+        // Setup solver
+        this->setup_solver(mass_matrix_0);
+        this->setup_solver(mass_matrix_1);
+
+        const auto fu_rhs = [&](const double           time,
+                                const BlockVectorType &solution) {
+          BlockVectorType result, vec_rhs;
+          result.reinit(solution);
+          vec_rhs.reinit(solution);
+
+          // du/dt = f(t, u)
+          stiffness_matrix_operator.compute_rhs(vec_rhs, solution, true, time);
+          this->solve(mass_matrix_0, result.block(0), vec_rhs.block(0));
+          this->solve(mass_matrix_1, result.block(1), vec_rhs.block(1));
+
+          return result;
+        };
+
+        // Perform time stepping
+        DiscreteTime time(start_t, end_t, delta_t);
+
+        TimeStepping::ExplicitRungeKutta<BlockVectorType> rk;
+        rk.initialize(runge_kutta_method);
+
+        this->postprocess(0.0, vec_solution.block(0) /*TODO*/);
+
+        while ((time.is_at_end() == false))
+          {
+            rk.evolve_one_time_step(fu_rhs,
+                                    time.get_current_time(),
+                                    time.get_next_step_size(),
+                                    vec_solution);
+
+            discretization.get_affine_constraints().distribute(
+              vec_solution.block(0));
+            discretization.get_affine_constraints().distribute(
+              vec_solution.block(1));
+
+            this->postprocess(time.get_current_time() +
+                                time.get_next_step_size(),
+                              vec_solution.block(0) /*TODO*/);
+
+            time.advance_time();
+          }
+      }
     else if (params.simulation_type == "heat-impl")
       {
         const double start_t = params.start_t;
