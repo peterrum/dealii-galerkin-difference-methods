@@ -13,8 +13,11 @@ class MassMatrixOperator
 public:
   using VectorType = LinearAlgebra::distributed::Vector<Number>;
 
-  MassMatrixOperator(const Discretization<dim, Number> &discretization)
+  MassMatrixOperator(const Discretization<dim, Number>    &discretization,
+                     const NonMatching::LocationToLevelSet location =
+                       NonMatching::LocationToLevelSet::inside)
     : discretization(discretization)
+    , location(location)
     , ghost_parameter_M(-1.0)
   {}
 
@@ -33,7 +36,8 @@ public:
   }
 
 private:
-  const Discretization<dim, Number> &discretization;
+  const Discretization<dim, Number>    &discretization;
+  const NonMatching::LocationToLevelSet location;
 
   double ghost_parameter_M;
 
@@ -59,6 +63,11 @@ private:
     const VectorType            &level_set = discretization.get_level_set();
     const DoFHandler<dim>       &level_set_dof_handler =
       discretization.get_level_set_dof_handler();
+
+    const NonMatching::LocationToLevelSet inverse_location =
+      (location == NonMatching::LocationToLevelSet::inside) ?
+        NonMatching::LocationToLevelSet::outside :
+        NonMatching::LocationToLevelSet::inside;
 
     // 1) create sparsity pattern
     if (sparse_matrix.m() == 0 || sparse_matrix.n() == 0)
@@ -86,19 +95,26 @@ private:
         mesh_classifier.location_to_level_set(cell->neighbor(face_index));
 
       if (cell_location == NonMatching::LocationToLevelSet::intersected &&
-          neighbor_location != NonMatching::LocationToLevelSet::outside)
+          neighbor_location != inverse_location)
         return true;
 
       if (neighbor_location == NonMatching::LocationToLevelSet::intersected &&
-          cell_location != NonMatching::LocationToLevelSet::outside)
+          cell_location != inverse_location)
         return true;
 
       return false;
     };
 
     NonMatching::RegionUpdateFlags region_update_flags;
-    region_update_flags.inside = update_values | update_gradients |
-                                 update_JxW_values | update_quadrature_points;
+    if (location == NonMatching::LocationToLevelSet::inside)
+      region_update_flags.inside = update_values | update_gradients |
+                                   update_JxW_values | update_quadrature_points;
+    else if (location == NonMatching::LocationToLevelSet::outside)
+      region_update_flags.outside = update_values | update_gradients |
+                                    update_JxW_values |
+                                    update_quadrature_points;
+    else
+      AssertThrow(false, ExcNotImplemented());
     region_update_flags.surface = update_values | update_gradients |
                                   update_JxW_values | update_quadrature_points |
                                   update_normal_vectors;
@@ -120,7 +136,7 @@ private:
     for (const auto &cell : system.locally_active_cell_iterators())
       if (cell->is_locally_owned() &&
           (mesh_classifier.location_to_level_set(cell->dealii_iterator()) !=
-           NonMatching::LocationToLevelSet::outside))
+           inverse_location))
         {
           non_matching_fe_values.reinit(cell->dealii_iterator(),
                                         numbers::invalid_unsigned_int,
@@ -130,7 +146,10 @@ private:
           const double cell_side_length =
             cell->dealii_iterator()->minimum_vertex_distance();
 
-          const auto &fe_values = non_matching_fe_values.get_inside_fe_values();
+          const auto &fe_values =
+            (location == NonMatching::LocationToLevelSet::inside) ?
+              non_matching_fe_values.get_inside_fe_values() :
+              non_matching_fe_values.get_outside_fe_values();
 
           const unsigned int dofs_per_cell = fe[0].dofs_per_cell;
 

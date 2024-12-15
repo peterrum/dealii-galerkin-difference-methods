@@ -31,7 +31,8 @@ public:
     , params(params)
     , discretization()
     , mass_matrix_operator(discretization)
-    , mass_matrix_operator_opt(discretization)
+    , mass_matrix_operator_opt(discretization,
+                               NonMatching::LocationToLevelSet::outside)
     , stiffness_matrix_operator(discretization)
   {}
 
@@ -444,9 +445,11 @@ private:
     if (location == NonMatching::LocationToLevelSet::inside)
       region_update_flags_error.inside =
         update_values | update_JxW_values | update_quadrature_points;
-    if (location == NonMatching::LocationToLevelSet::outside)
+    else if (location == NonMatching::LocationToLevelSet::outside)
       region_update_flags_error.outside =
         update_values | update_JxW_values | update_quadrature_points;
+    else
+      AssertThrow(false, ExcNotImplemented());
 
     NonMatching::FEValues<dim> non_matching_fe_values_error(
       fe,
