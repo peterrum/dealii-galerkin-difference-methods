@@ -171,7 +171,7 @@ fill_parameters(Parameters<dim> &params, const std::string &simulation_name)
       params.ghost_parameter_A = 1.5;
       params.nitsche_parameter = 5.0 * params.fe_degree;
 
-      params.function_interface_dbc =
+      params.function_domain_dbc =
         std::make_shared<ScalarFunctionFromFunctionObject<dim>>(
           [](const auto t, const auto &p) {
             if (dim == 1)
@@ -183,6 +183,9 @@ fill_parameters(Parameters<dim> &params, const std::string &simulation_name)
 
             return 0.0;
           });
+
+      // TODO: replace by coupling
+      params.function_interface_dbc = params.function_domain_dbc;
 
       params.function_rhs =
         std::make_shared<ScalarFunctionFromFunctionObject<dim>>(
@@ -201,7 +204,7 @@ fill_parameters(Parameters<dim> &params, const std::string &simulation_name)
           });
 
       // time stepping
-      params.exact_solution = params.function_interface_dbc;
+      params.exact_solution = params.function_domain_dbc;
       params.start_t        = 0.0;
       params.end_t          = 0.1;
 

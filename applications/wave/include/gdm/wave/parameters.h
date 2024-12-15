@@ -24,6 +24,7 @@ struct Parameters
   // stiffness matrix
   double                         ghost_parameter_A = -1.0;
   double                         nitsche_parameter = -1.0;
+  std::shared_ptr<Function<dim>> function_domain_dbc;
   std::shared_ptr<Function<dim>> function_interface_dbc;
   std::shared_ptr<Function<dim>> function_rhs;
 

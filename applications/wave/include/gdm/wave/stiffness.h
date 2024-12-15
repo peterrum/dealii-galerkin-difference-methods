@@ -26,6 +26,7 @@ public:
     this->ghost_parameter_A = params.ghost_parameter_A;
     this->nitsche_parameter = params.nitsche_parameter;
 
+    this->function_domain_dbc    = params.function_domain_dbc;
     this->function_interface_dbc = params.function_interface_dbc;
     this->function_rhs           = params.function_rhs;
   }
@@ -69,6 +70,9 @@ public:
 
     if (function_interface_dbc)
       function_interface_dbc->set_time(time);
+
+    if (function_domain_dbc)
+      function_domain_dbc->set_time(time);
 
     if (function_rhs)
       function_rhs->set_time(time);
@@ -115,6 +119,26 @@ public:
                                                       mesh_classifier,
                                                       level_set_dof_handler,
                                                       level_set);
+
+    NonMatching::RegionUpdateFlags region_update_flags_face;
+    if (location == NonMatching::LocationToLevelSet::inside)
+      region_update_flags_face.inside =
+        update_values | update_gradients | update_JxW_values |
+        update_quadrature_points | update_normal_vectors;
+    else if (location == NonMatching::LocationToLevelSet::outside)
+      region_update_flags_face.outside =
+        update_values | update_gradients | update_JxW_values |
+        update_quadrature_points | update_normal_vectors;
+    else
+      AssertThrow(false, ExcNotImplemented());
+
+    NonMatching::FEInterfaceValues<dim> non_matching_fe_interface_values(
+      fe,
+      quadrature_1D,
+      region_update_flags_face,
+      mesh_classifier,
+      level_set_dof_handler,
+      level_set);
 
     FEInterfaceValues<dim> fe_interface_values(
       mapping,
@@ -234,7 +258,78 @@ public:
                   }
               }
 
-          // (IV) face integral for apply GP
+          // (IV) face integral for apply DBC
+          if (function_domain_dbc)
+            for (const auto f : cell->dealii_iterator()->face_indices())
+              if (cell->dealii_iterator()->face(f)->at_boundary())
+                {
+                  non_matching_fe_interface_values.reinit(
+                    cell->dealii_iterator(),
+                    f,
+                    numbers::invalid_unsigned_int,
+                    numbers::invalid_unsigned_int,
+                    cell->active_fe_index());
+
+                  if (const auto &surface_fe_values_ptr =
+                        (location == NonMatching::LocationToLevelSet::inside) ?
+                          non_matching_fe_interface_values
+                            .get_inside_fe_values() :
+                          non_matching_fe_interface_values
+                            .get_outside_fe_values())
+                    {
+                      const auto &surface_fe_values =
+                        surface_fe_values_ptr->get_fe_face_values(0);
+
+                      std::vector<Number> quadrature_values(
+                        surface_fe_values.n_quadrature_points);
+                      surface_fe_values.get_function_values(solution,
+                                                            dof_indices,
+                                                            quadrature_values);
+
+                      std::vector<Tensor<1, dim, Number>> quadrature_gradients(
+                        surface_fe_values.n_quadrature_points);
+                      surface_fe_values.get_function_gradients(
+                        solution, dof_indices, quadrature_gradients);
+
+
+                      for (const unsigned int q :
+                           surface_fe_values.quadrature_point_indices())
+                        {
+                          const Point<dim> &point =
+                            surface_fe_values.quadrature_point(q);
+                          const Tensor<1, dim> normal =
+                            surface_fe_values.normal_vector(q);
+
+                          for (const unsigned int i :
+                               surface_fe_values.dof_indices())
+                            {
+                              // left hand side:
+                              // - <v, ∂u/∂n> - <∂v/∂n, u> + γ_D/h <v, u>
+                              if (compute_impl_part)
+                                cell_vector(i) -=
+                                  (-normal *
+                                     surface_fe_values.shape_grad(i, q) *
+                                     quadrature_values[q] +
+                                   -normal * quadrature_gradients[q] *
+                                     surface_fe_values.shape_value(i, q) +
+                                   nitsche_parameter / cell_side_length *
+                                     surface_fe_values.shape_value(i, q) *
+                                     quadrature_values[q]) *
+                                  surface_fe_values.JxW(q);
+
+                              // right hand side: <γ_D/h v - ∂v/∂n, g_D>
+                              cell_vector(i) +=
+                                function_domain_dbc->value(point) *
+                                (nitsche_parameter / cell_side_length *
+                                   surface_fe_values.shape_value(i, q) -
+                                 normal * surface_fe_values.shape_grad(i, q)) *
+                                surface_fe_values.JxW(q);
+                            }
+                        }
+                    }
+                }
+
+          // (V) face integral for apply GP
           if (compute_impl_part)
             for (const unsigned int f : cell->dealii_iterator()->face_indices())
               if (face_has_ghost_penalty(cell->dealii_iterator(), f))
@@ -348,6 +443,7 @@ private:
   double ghost_parameter_A;
   double nitsche_parameter;
 
+  std::shared_ptr<Function<dim>> function_domain_dbc;
   std::shared_ptr<Function<dim>> function_interface_dbc;
   std::shared_ptr<Function<dim>> function_rhs;
 
