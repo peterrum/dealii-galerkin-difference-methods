@@ -39,10 +39,10 @@ public:
   }
 
   void
-  compute_rhs(VectorType       &vec_rhs,
-              const VectorType &solution,
-              const bool        compute_impl_part,
-              const double      time) const
+  compute_rhs_internal(VectorType       &vec_rhs,
+                       const VectorType &solution,
+                       const bool        compute_impl_part,
+                       const double      time) const
   {
     // 0) extract information from discretization class
     const hp::MappingCollection<dim> &mapping = discretization.get_mapping();
@@ -307,15 +307,28 @@ public:
   }
 
   void
+  compute_rhs(VectorType       &vec_rhs,
+              const VectorType &solution,
+              const bool        compute_impl_part,
+              const double      time) const
+  {
+    compute_rhs_internal(vec_rhs, solution, compute_impl_part, time);
+  }
+
+  void
   compute_rhs(BlockVectorType       &vec_rhs,
               const BlockVectorType &solution,
               const bool             compute_impl_part,
               const double           time) const
   {
-    (void)vec_rhs;
-    (void)solution;
-    (void)compute_impl_part;
-    (void)time;
+    compute_rhs_internal(vec_rhs.block(0),
+                         solution.block(0),
+                         compute_impl_part,
+                         time);
+    compute_rhs_internal(vec_rhs.block(1),
+                         solution.block(1),
+                         compute_impl_part,
+                         time);
   }
 
 private:
