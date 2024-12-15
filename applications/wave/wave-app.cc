@@ -59,7 +59,8 @@ fill_parameters(Parameters<dim> &params, const std::string &simulation_name)
       // output
       params.output_fe_degree = params.fe_degree;
     }
-  else if (simulation_name == "heat")
+  else if (simulation_name == "heat" || simulation_name == "heat-rk" ||
+           simulation_name == "heat-impl")
     {
       // adopted from:
       // Gustav Ludvigsson, Kyle R. Steffen, Simon Sticko, Siyang Wang,
@@ -70,7 +71,9 @@ fill_parameters(Parameters<dim> &params, const std::string &simulation_name)
       // https://link.springer.com/article/10.1007/s10915-017-0637-y
 
       // general settings
-      params.simulation_type = "heat-impl"; // "heat-rk" or "heat-impl"
+      params.simulation_type = (simulation_name == "heat") ?
+                                 std::string("heat-impl") :
+                                 simulation_name; // "heat-rk" or "heat-impl"
       params.fe_degree       = 3;
       params.n_components    = 1;
 
