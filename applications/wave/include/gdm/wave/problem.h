@@ -277,6 +277,73 @@ public:
             time.advance_time();
           }
       }
+    else if ((params.simulation_type == "wave-rk") && (!params.composite))
+      {
+        const double start_t = params.start_t;
+        const double end_t   = params.end_t;
+        const double delta_t =
+          params.cfl * std::pow(discretization.get_dx(), params.cfl_pow);
+
+        const TimeStepping::runge_kutta_method runge_kutta_method =
+          TimeStepping::runge_kutta_method::RK_CLASSIC_FOURTH_ORDER;
+
+        // Compute mass matrix
+        const auto &mass_matrix = mass_matrix_operator.get_sparse_matrix();
+
+        // Initialize vectors
+        BlockVectorType vec_solution(2);
+        discretization.initialize_dof_vector(vec_solution.block(0));
+        discretization.initialize_dof_vector(vec_solution.block(1));
+        this->set_initial_condition(vec_solution.block(0));
+
+        // Setup solver
+        this->setup_solver(mass_matrix);
+
+        const auto fu_rhs = [&](const double           time,
+                                const BlockVectorType &solution) {
+          BlockVectorType result;
+          result.reinit(solution);
+          VectorType vec_rhs;
+          vec_rhs.reinit(solution.block(0));
+
+          // du/dt = v
+          result.block(0) = solution.block(1);
+
+          // dv/dt = f(t, u)
+          stiffness_matrix_operator.compute_rhs(vec_rhs,
+                                                solution.block(0),
+                                                true,
+                                                time);
+          this->solve(mass_matrix, result.block(1), vec_rhs);
+
+          return result;
+        };
+
+        // Perform time stepping
+        DiscreteTime time(start_t, end_t, delta_t);
+
+        TimeStepping::ExplicitRungeKutta<BlockVectorType> rk;
+        rk.initialize(runge_kutta_method);
+
+        this->postprocess(0.0, vec_solution.block(0));
+
+        while ((time.is_at_end() == false))
+          {
+            rk.evolve_one_time_step(fu_rhs,
+                                    time.get_current_time(),
+                                    time.get_next_step_size(),
+                                    vec_solution);
+
+            discretization.get_affine_constraints().distribute(
+              vec_solution.block(0));
+
+            this->postprocess(time.get_current_time() +
+                                time.get_next_step_size(),
+                              vec_solution.block(0));
+
+            time.advance_time();
+          }
+      }
     else if (params.simulation_type == "wave-rk")
       {
         const double start_t = params.start_t;
