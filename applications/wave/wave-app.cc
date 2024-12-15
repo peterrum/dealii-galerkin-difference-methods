@@ -325,7 +325,7 @@ fill_parameters(Parameters<dim> &params, const std::string &simulation_name)
           });
       params.function_rhs = {};
 
-      params.function_interface_dbc = params.function_domain_dbc;
+      // params.function_interface_dbc = params.function_domain_dbc;
 
       // time stepping
       params.exact_solution = params.function_domain_dbc;

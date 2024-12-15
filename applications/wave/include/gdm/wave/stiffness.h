@@ -527,10 +527,13 @@ public:
                 {
                   const Tensor<1, dim> normal =
                     surface_fe_values.normal_vector(q);
+
+                  const auto tau_parameter = 0.5 * nitsche_parameter;
+
                   for (const unsigned int i : surface_fe_values.dof_indices())
                     {
                       const auto quadrature_value_jump =
-                        (quadrature_values_1[q] - quadrature_values_0[q]);
+                        (quadrature_values_0[q] - quadrature_values_1[q]);
                       const auto quadrature_gradient_avg =
                         0.5 *
                         (quadrature_gradients_0[q] + quadrature_gradients_1[q]);
@@ -539,8 +542,8 @@ public:
                         (-0.5 * normal * surface_fe_values.shape_grad(i, q) *
                            quadrature_value_jump -
                          surface_fe_values.shape_value(i, q) * normal *
-                           quadrature_gradient_avg -
-                         nitsche_parameter / cell_side_length *
+                           quadrature_gradient_avg +
+                         tau_parameter / cell_side_length *
                            surface_fe_values.shape_value(i, q) *
                            quadrature_value_jump) *
                         surface_fe_values.JxW(q);
@@ -550,7 +553,7 @@ public:
                            quadrature_value_jump +
                          surface_fe_values.shape_value(i, q) * normal *
                            quadrature_gradient_avg -
-                         nitsche_parameter / cell_side_length *
+                         tau_parameter / cell_side_length *
                            surface_fe_values.shape_value(i, q) *
                            quadrature_value_jump) *
                         surface_fe_values.JxW(q);

@@ -1,556 +1,1112 @@
     0  0.00000 1.10541699e-04 1.26972392e-04 1.33184078e-04
+    0  0.00000 4.53613916e-05 2.20037013e-05 1.58304141e-04
  [L] solved in 2
  [L] solved in 2
  [L] solved in 2
  [L] solved in 2
-    1  0.01815 1.10135927e-04 1.26476768e-04 1.32679840e-04
  [L] solved in 2
  [L] solved in 2
  [L] solved in 2
  [L] solved in 2
-    2  0.03630 1.08946901e-04 1.25168895e-04 1.31199743e-04
+    1  0.01815 1.10135867e-04 1.26491792e-04 1.32679445e-04
+    1  0.01815 3.58340150e-05 1.77938639e-05 1.12759259e-04
  [L] solved in 2
  [L] solved in 2
  [L] solved in 2
  [L] solved in 2
-    3  0.05445 1.06981457e-04 1.23048591e-04 1.28805892e-04
  [L] solved in 2
  [L] solved in 2
  [L] solved in 2
  [L] solved in 2
-    4  0.07260 1.04220496e-04 1.19901999e-04 1.25559514e-04
+    2  0.03630 1.09334391e-04 1.26578302e-04 1.31170192e-04
+    2  0.03630 3.40785715e-05 1.66214155e-05 1.01560303e-04
  [L] solved in 2
  [L] solved in 2
  [L] solved in 2
  [L] solved in 2
-    5  0.09075 1.00679905e-04 1.15823174e-04 1.21516521e-04
  [L] solved in 2
  [L] solved in 2
  [L] solved in 2
  [L] solved in 2
-    6  0.10890 9.64089844e-05 1.10921006e-04 1.16403462e-04
+    3  0.05445 1.07114208e-04 1.23947923e-04 1.28875882e-04
+    3  0.05445 2.88251101e-05 1.50035834e-05 8.85521836e-05
  [L] solved in 2
  [L] solved in 2
  [L] solved in 2
  [L] solved in 2
-    7  0.12705 9.14411683e-05 1.05214422e-04 1.10464228e-04
  [L] solved in 2
  [L] solved in 2
  [L] solved in 2
  [L] solved in 2
-    8  0.14520 8.58013030e-05 9.87543838e-05 1.03918423e-04
+    4  0.07260 1.04243997e-04 1.19882259e-04 1.25506048e-04
+    4  0.07260 3.50968077e-05 1.92350154e-05 1.01534498e-04
  [L] solved in 2
  [L] solved in 2
  [L] solved in 2
  [L] solved in 2
-    9  0.16335 7.95428178e-05 9.15601503e-05 9.60297136e-05
  [L] solved in 2
  [L] solved in 2
  [L] solved in 2
  [L] solved in 2
-   10  0.18150 7.27191886e-05 8.36519728e-05 8.75118427e-05
+    5  0.09075 1.00837274e-04 1.15772827e-04 1.21281694e-04
+    5  0.09075 3.71379738e-05 2.10318992e-05 1.05597914e-04
  [L] solved in 2
  [L] solved in 2
  [L] solved in 2
  [L] solved in 2
-   11  0.19965 6.53672607e-05 7.51260888e-05 7.92309349e-05
  [L] solved in 2
  [L] solved in 2
  [L] solved in 2
  [L] solved in 2
-   12  0.21780 5.75410778e-05 6.60493409e-05 7.16867279e-05
+    6  0.10890 9.65050157e-05 1.10377742e-04 1.16259439e-04
+    6  0.10890 3.74504981e-05 2.13276638e-05 1.05335556e-04
  [L] solved in 2
  [L] solved in 2
  [L] solved in 2
  [L] solved in 2
-   13  0.23595 4.93043322e-05 5.66524576e-05 6.25500435e-05
  [L] solved in 2
  [L] solved in 2
  [L] solved in 2
  [L] solved in 2
-   14  0.25410 4.07062044e-05 4.69177456e-05 5.16590833e-05
+    7  0.12705 9.16876819e-05 1.05156422e-04 1.10339984e-04
+    7  0.12705 3.63475555e-05 2.08142689e-05 9.51721271e-05
  [L] solved in 2
  [L] solved in 2
  [L] solved in 2
  [L] solved in 2
-   15  0.27225 3.18080539e-05 3.67730325e-05 4.11753555e-05
  [L] solved in 2
  [L] solved in 2
  [L] solved in 2
  [L] solved in 2
-   16  0.29040 2.26877729e-05 2.62575104e-05 3.04542166e-05
+    8  0.14520 8.66195925e-05 1.00802514e-04 1.03466865e-04
+    8  0.14520 3.39719291e-05 1.95658290e-05 7.87992681e-05
  [L] solved in 2
  [L] solved in 2
  [L] solved in 2
  [L] solved in 2
-   17  0.30855 1.34084875e-05 1.54812574e-05 1.86595513e-05
  [L] solved in 2
  [L] solved in 2
  [L] solved in 2
  [L] solved in 2
-   18  0.32670 4.19311704e-06 4.76684900e-06 7.64229455e-06
+    9  0.16335 8.16308047e-05 9.60486287e-05 9.64521581e-05
+    9  0.16335 2.97300196e-05 1.63940563e-05 8.70052201e-05
  [L] solved in 2
  [L] solved in 2
  [L] solved in 2
  [L] solved in 2
-   19  0.34485 5.91145011e-06 6.85550654e-06 9.26061565e-06
  [L] solved in 2
  [L] solved in 2
  [L] solved in 2
  [L] solved in 2
-   20  0.36300 1.51748019e-05 1.74707266e-05 2.01234048e-05
+   10  0.18150 7.64104851e-05 9.03394313e-05 9.17140079e-05
+   10  0.18150 2.53236475e-05 1.32174362e-05 8.55704760e-05
  [L] solved in 2
  [L] solved in 2
  [L] solved in 2
  [L] solved in 2
-   21  0.38115 2.43999489e-05 2.80987711e-05 3.09936664e-05
  [L] solved in 2
  [L] solved in 2
  [L] solved in 2
  [L] solved in 2
-   22  0.39930 3.34566626e-05 3.84745624e-05 4.23987764e-05
+   11  0.19965 7.04583931e-05 8.40668932e-05 8.05048924e-05
+   11  0.19965 2.28407773e-05 1.12017167e-05 7.73911222e-05
  [L] solved in 2
  [L] solved in 2
  [L] solved in 2
  [L] solved in 2
-   23  0.41745 4.22806175e-05 4.84815593e-05 5.27276091e-05
  [L] solved in 2
  [L] solved in 2
  [L] solved in 2
  [L] solved in 2
-   24  0.43560 5.08088960e-05 5.82371366e-05 6.19085460e-05
+   12  0.21780 6.40718393e-05 7.66604301e-05 7.85354804e-05
+   12  0.21780 2.29757307e-05 1.18701655e-05 6.50858999e-05
  [L] solved in 2
  [L] solved in 2
  [L] solved in 2
  [L] solved in 2
-   25  0.45375 5.89878221e-05 6.78269788e-05 7.16612143e-05
  [L] solved in 2
  [L] solved in 2
  [L] solved in 2
  [L] solved in 2
-   26  0.47190 6.67535018e-05 7.69626062e-05 8.12872331e-05
+   13  0.23595 5.73906856e-05 6.72634559e-05 8.04454034e-05
+   13  0.23595 2.49195944e-05 1.36607611e-05 7.28847786e-05
  [L] solved in 2
  [L] solved in 2
  [L] solved in 2
  [L] solved in 2
-   27  0.49005 7.40349548e-05 8.53674345e-05 8.98785712e-05
  [L] solved in 2
  [L] solved in 2
  [L] solved in 2
  [L] solved in 2
-   28  0.50820 8.07745782e-05 9.30176769e-05 9.74777439e-05
+   14  0.25410 5.06837397e-05 5.81165803e-05 8.50894660e-05
+   14  0.25410 2.74887962e-05 1.53683177e-05 7.84332676e-05
  [L] solved in 2
  [L] solved in 2
  [L] solved in 2
  [L] solved in 2
-   29  0.52635 8.69233055e-05 9.99187645e-05 1.05127719e-04
  [L] solved in 2
  [L] solved in 2
  [L] solved in 2
  [L] solved in 2
-   30  0.54450 9.24343953e-05 1.06125737e-04 1.11382191e-04
+   15  0.27225 4.39792282e-05 4.93503716e-05 8.33436768e-05
+   15  0.27225 3.00060142e-05 1.69341665e-05 7.47583796e-05
  [L] solved in 2
  [L] solved in 2
  [L] solved in 2
  [L] solved in 2
-   31  0.56265 9.72739097e-05 1.11718943e-04 1.17192675e-04
  [L] solved in 2
  [L] solved in 2
  [L] solved in 2
  [L] solved in 2
-   32  0.58080 1.01416029e-04 1.16512716e-04 1.22561244e-04
+   16  0.29040 3.79057634e-05 3.99304171e-05 7.67508631e-05
+   16  0.29040 3.15930675e-05 1.78499631e-05 7.91219062e-05
  [L] solved in 2
  [L] solved in 2
  [L] solved in 2
  [L] solved in 2
-   33  0.59895 1.04827629e-04 1.20503055e-04 1.26864848e-04
  [L] solved in 2
  [L] solved in 2
  [L] solved in 2
  [L] solved in 2
-   34  0.61710 1.07474127e-04 1.23626554e-04 1.29806963e-04
+   17  0.30855 3.38973140e-05 3.16371474e-05 7.25690298e-05
+   17  0.30855 3.14668586e-05 1.79030239e-05 7.97434693e-05
  [L] solved in 2
  [L] solved in 2
  [L] solved in 2
  [L] solved in 2
-   35  0.63525 1.09333167e-04 1.25788199e-04 1.31691065e-04
  [L] solved in 2
  [L] solved in 2
  [L] solved in 2
  [L] solved in 2
-   36  0.65340 1.10392751e-04 1.26913204e-04 1.33492414e-04
+   18  0.32670 3.27151548e-05 2.60597127e-05 7.87417546e-05
+   18  0.32670 2.99628821e-05 1.71864400e-05 7.31288385e-05
  [L] solved in 2
  [L] solved in 2
  [L] solved in 2
  [L] solved in 2
-   37  0.67155 1.10645129e-04 1.27125561e-04 1.33894424e-04
  [L] solved in 2
  [L] solved in 2
  [L] solved in 2
  [L] solved in 2
-   38  0.68970 1.10088859e-04 1.26522758e-04 1.33402595e-04
+   19  0.34485 3.39393839e-05 2.81292879e-05 8.29163844e-05
+   19  0.34485 2.78665981e-05 1.60162087e-05 7.70649602e-05
  [L] solved in 2
  [L] solved in 2
  [L] solved in 2
  [L] solved in 2
-   39  0.70785 1.08733936e-04 1.25065619e-04 1.32055555e-04
  [L] solved in 2
  [L] solved in 2
  [L] solved in 2
  [L] solved in 2
-   40  0.72600 1.06598558e-04 1.22798220e-04 1.30272488e-04
+   20  0.36300 3.67313497e-05 3.57690683e-05 8.30080118e-05
+   20  0.36300 2.55869327e-05 1.46516498e-05 7.04463593e-05
  [L] solved in 2
  [L] solved in 2
  [L] solved in 2
  [L] solved in 2
-   41  0.74415 1.03694628e-04 1.19593787e-04 1.27462063e-04
  [L] solved in 2
  [L] solved in 2
  [L] solved in 2
  [L] solved in 2
-   42  0.76230 1.00028025e-04 1.15384178e-04 1.22247021e-04
+   21  0.38115 4.02976748e-05 4.26836186e-05 8.42163426e-05
+   21  0.38115 2.36221757e-05 1.36363214e-05 6.19889458e-05
  [L] solved in 2
  [L] solved in 2
  [L] solved in 2
  [L] solved in 2
-   43  0.78045 9.56256872e-05 1.10217292e-04 1.15530470e-04
  [L] solved in 2
  [L] solved in 2
  [L] solved in 2
  [L] solved in 2
-   44  0.79860 9.05379006e-05 1.04262809e-04 1.08870667e-04
+   22  0.39930 4.41835924e-05 4.89646769e-05 7.60942103e-05
+   22  0.39930 2.23507374e-05 1.30157894e-05 5.98052998e-05
  [L] solved in 2
  [L] solved in 2
  [L] solved in 2
  [L] solved in 2
-   45  0.81675 8.47992290e-05 9.75690231e-05 1.01883660e-04
  [L] solved in 2
  [L] solved in 2
  [L] solved in 2
  [L] solved in 2
-   46  0.83490 7.84291562e-05 9.01420077e-05 9.43026802e-05
+   23  0.41745 4.83137168e-05 5.50517881e-05 6.97743550e-05
+   23  0.41745 2.17128221e-05 1.28538050e-05 5.98701677e-05
  [L] solved in 2
  [L] solved in 2
  [L] solved in 2
  [L] solved in 2
-   47  0.85305 7.14824034e-05 8.22213787e-05 8.57539212e-05
  [L] solved in 2
  [L] solved in 2
  [L] solved in 2
  [L] solved in 2
-   48  0.87120 6.40393665e-05 7.37009412e-05 7.84309364e-05
+   24  0.43560 5.26089945e-05 6.04895428e-05 7.89302962e-05
+   24  0.43560 2.13054316e-05 1.25382128e-05 5.68207499e-05
  [L] solved in 2
  [L] solved in 2
  [L] solved in 2
  [L] solved in 2
-   49  0.88935 5.61446191e-05 6.47259130e-05 7.11205438e-05
  [L] solved in 2
  [L] solved in 2
  [L] solved in 2
  [L] solved in 2
-   50  0.90750 4.78235223e-05 5.52483991e-05 6.16005990e-05
+   25  0.45375 5.69709880e-05 6.70822499e-05 8.86482765e-05
+   25  0.45375 2.11102958e-05 1.20437207e-05 5.83604601e-05
  [L] solved in 2
  [L] solved in 2
  [L] solved in 2
  [L] solved in 2
-   51  0.92565 3.91426291e-05 4.53372283e-05 5.00153203e-05
  [L] solved in 2
  [L] solved in 2
  [L] solved in 2
  [L] solved in 2
-   52  0.94380 3.01819047e-05 3.50195027e-05 3.82766965e-05
+   26  0.47190 6.12796909e-05 7.14771174e-05 9.39611720e-05
+   26  0.47190 2.14360362e-05 1.15377886e-05 6.18964824e-05
  [L] solved in 2
  [L] solved in 2
  [L] solved in 2
  [L] solved in 2
-   53  0.96195 2.09939724e-05 2.44215362e-05 2.70619907e-05
  [L] solved in 2
  [L] solved in 2
  [L] solved in 2
  [L] solved in 2
-   54  0.98010 1.16896823e-05 1.39518806e-05 1.47765682e-05
+   27  0.49005 6.54512289e-05 7.45987349e-05 1.01430235e-04
+   27  0.49005 2.22804841e-05 1.12996394e-05 6.53799009e-05
  [L] solved in 2
  [L] solved in 2
  [L] solved in 2
  [L] solved in 2
-   55  0.99825 3.04764484e-06 3.72147432e-06 6.63005231e-06
  [L] solved in 2
  [L] solved in 2
  [L] solved in 2
  [L] solved in 2
-   56  1.01640 7.74019926e-06 8.99831397e-06 1.03367051e-05
+   28  0.50820 6.94216644e-05 7.77826780e-05 9.94690858e-05
+   28  0.50820 2.32052438e-05 1.20840822e-05 6.81497535e-05
  [L] solved in 2
  [L] solved in 2
  [L] solved in 2
  [L] solved in 2
-   57  1.03455 1.68747086e-05 1.93298013e-05 2.18199055e-05
  [L] solved in 2
  [L] solved in 2
  [L] solved in 2
  [L] solved in 2
-   58  1.05270 2.60520839e-05 2.98871091e-05 3.26134963e-05
+   29  0.52635 7.31339796e-05 8.12454720e-05 1.04575790e-04
+   29  0.52635 2.41041858e-05 1.27778540e-05 7.00206583e-05
  [L] solved in 2
  [L] solved in 2
  [L] solved in 2
  [L] solved in 2
-   59  1.07085 3.50872029e-05 4.02351657e-05 4.42830060e-05
  [L] solved in 2
  [L] solved in 2
  [L] solved in 2
  [L] solved in 2
-   60  1.08900 4.38786213e-05 5.04154638e-05 5.49902616e-05
+   30  0.54450 7.65347387e-05 8.42855052e-05 1.10973284e-04
+   30  0.54450 2.53364864e-05 1.39662765e-05 7.12966645e-05
  [L] solved in 2
  [L] solved in 2
  [L] solved in 2
  [L] solved in 2
-   61  1.10715 5.23693571e-05 6.02788045e-05 6.45386404e-05
  [L] solved in 2
  [L] solved in 2
  [L] solved in 2
  [L] solved in 2
-   62  1.12530 6.04971905e-05 6.96936010e-05 7.37970647e-05
+   31  0.56265 7.95958174e-05 8.83166944e-05 1.17182009e-04
+   31  0.56265 2.69367637e-05 1.53168690e-05 7.19992452e-05
  [L] solved in 2
  [L] solved in 2
  [L] solved in 2
  [L] solved in 2
-   63  1.14345 6.81833510e-05 7.84846421e-05 8.30403358e-05
  [L] solved in 2
  [L] solved in 2
  [L] solved in 2
  [L] solved in 2
-   64  1.16160 7.53670647e-05 8.65701282e-05 9.22836901e-05
+   32  0.58080 8.23491051e-05 9.35815315e-05 1.22459968e-04
+   32  0.58080 2.84525031e-05 1.64102096e-05 7.72649809e-05
  [L] solved in 2
  [L] solved in 2
  [L] solved in 2
  [L] solved in 2
-   65  1.17975 8.20039746e-05 9.40455608e-05 1.00247304e-04
  [L] solved in 2
  [L] solved in 2
  [L] solved in 2
  [L] solved in 2
-   66  1.19790 8.80449398e-05 1.00959990e-04 1.06612706e-04
+   33  0.59895 8.48195450e-05 9.78006726e-05 1.26600112e-04
+   33  0.59895 2.96346128e-05 1.72215623e-05 8.14464532e-05
  [L] solved in 2
  [L] solved in 2
  [L] solved in 2
  [L] solved in 2
-   67  1.21605 9.34459983e-05 1.07110155e-04 1.13119991e-04
  [L] solved in 2
  [L] solved in 2
  [L] solved in 2
  [L] solved in 2
-   68  1.23420 9.81755161e-05 1.12460233e-04 1.19123812e-04
+   34  0.61710 8.70011288e-05 1.01797320e-04 1.30446420e-04
+   34  0.61710 3.07813641e-05 1.79779998e-05 8.48333230e-05
  [L] solved in 2
  [L] solved in 2
  [L] solved in 2
  [L] solved in 2
-   69  1.25235 1.02197339e-04 1.17134933e-04 1.23484430e-04
  [L] solved in 2
  [L] solved in 2
  [L] solved in 2
  [L] solved in 2
-   70  1.27050 1.05471116e-04 1.20972559e-04 1.27628472e-04
+   35  0.63525 8.88736234e-05 1.05294258e-04 1.32842460e-04
+   35  0.63525 3.21581401e-05 1.88010424e-05 8.78887728e-05
  [L] solved in 2
  [L] solved in 2
  [L] solved in 2
  [L] solved in 2
-   71  1.28865 1.07969602e-04 1.23925398e-04 1.30327755e-04
  [L] solved in 2
  [L] solved in 2
  [L] solved in 2
  [L] solved in 2
-   72  1.30680 1.09677391e-04 1.25989017e-04 1.32983673e-04
+   36  0.65340 9.04445500e-05 1.07636784e-04 1.33294242e-04
+   36  0.65340 3.36143666e-05 1.96363710e-05 9.03401030e-05
  [L] solved in 2
  [L] solved in 2
  [L] solved in 2
  [L] solved in 2
-   73  1.32495 1.10583681e-04 1.27157131e-04 1.34522025e-04
  [L] solved in 2
  [L] solved in 2
  [L] solved in 2
  [L] solved in 2
-   74  1.34310 1.10687399e-04 1.27419831e-04 1.35520883e-04
+   37  0.67155 9.17472753e-05 1.09611676e-04 1.31889883e-04
+   37  0.67155 3.48661310e-05 2.03169660e-05 9.16548515e-05
  [L] solved in 2
  [L] solved in 2
  [L] solved in 2
  [L] solved in 2
-   75  1.36125 1.09994549e-04 1.26809661e-04 1.34972107e-04
  [L] solved in 2
  [L] solved in 2
  [L] solved in 2
  [L] solved in 2
-   76  1.37940 1.08508640e-04 1.25220294e-04 1.33259884e-04
+   38  0.68970 9.28163825e-05 1.11544318e-04 1.32308650e-04
+   38  0.68970 3.59260926e-05 2.08960222e-05 9.18937705e-05
  [L] solved in 2
  [L] solved in 2
  [L] solved in 2
  [L] solved in 2
-   77  1.39755 1.06235220e-04 1.22645011e-04 1.29543310e-04
  [L] solved in 2
  [L] solved in 2
  [L] solved in 2
  [L] solved in 2
-   78  1.41570 1.03186759e-04 1.19107753e-04 1.25713438e-04
+   39  0.70785 9.36382251e-05 1.11409565e-04 1.32739014e-04
+   39  0.70785 3.69806019e-05 2.14646536e-05 9.15228406e-05
  [L] solved in 2
  [L] solved in 2
  [L] solved in 2
  [L] solved in 2
-   79  1.43385 9.93786402e-05 1.14651464e-04 1.20249877e-04
  [L] solved in 2
  [L] solved in 2
  [L] solved in 2
  [L] solved in 2
-   80  1.45200 9.48381050e-05 1.09323877e-04 1.14401817e-04
+   40  0.72600 9.41860864e-05 1.11957257e-04 1.31502823e-04
+   40  0.72600 3.80013856e-05 2.19385951e-05 9.06256530e-05
  [L] solved in 2
  [L] solved in 2
  [L] solved in 2
  [L] solved in 2
-   81  1.47015 8.96122796e-05 1.03174025e-04 1.07602660e-04
  [L] solved in 2
  [L] solved in 2
  [L] solved in 2
  [L] solved in 2
-   82  1.48830 8.37469097e-05 9.62620363e-05 1.00831630e-04
+   41  0.74415 9.45243281e-05 1.13375145e-04 1.27691111e-04
+   41  0.74415 3.87606767e-05 2.22234122e-05 8.88828573e-05
  [L] solved in 2
  [L] solved in 2
  [L] solved in 2
  [L] solved in 2
-   83  1.50645 7.72751917e-05 8.86939161e-05 9.33630277e-05
  [L] solved in 2
  [L] solved in 2
  [L] solved in 2
  [L] solved in 2
-   84  1.52460 7.02455817e-05 8.06821341e-05 8.46737516e-05
+   42  0.76230 9.47505163e-05 1.13015696e-04 1.27277986e-04
+   42  0.76230 3.91706310e-05 2.22759493e-05 8.62718834e-05
  [L] solved in 2
  [L] solved in 2
  [L] solved in 2
  [L] solved in 2
-   85  1.54275 6.27236199e-05 7.23341213e-05 7.59013853e-05
  [L] solved in 2
  [L] solved in 2
  [L] solved in 2
  [L] solved in 2
-   86  1.56090 5.47471023e-05 6.33928918e-05 6.72866179e-05
+   43  0.78045 9.47795040e-05 1.13854470e-04 1.22979548e-04
+   43  0.78045 3.93616490e-05 2.21884588e-05 8.32416217e-05
  [L] solved in 2
  [L] solved in 2
  [L] solved in 2
  [L] solved in 2
-   87  1.57905 4.63316333e-05 5.38638858e-05 5.73769255e-05
  [L] solved in 2
  [L] solved in 2
  [L] solved in 2
  [L] solved in 2
-   88  1.59720 3.75445567e-05 4.37622340e-05 4.71040959e-05
+   44  0.79860 9.44175060e-05 1.13857424e-04 1.13641739e-04
+   44  0.79860 3.93969956e-05 2.20221131e-05 8.43304728e-05
  [L] solved in 2
  [L] solved in 2
  [L] solved in 2
  [L] solved in 2
-   89  1.61535 2.85192518e-05 3.35361248e-05 3.62712032e-05
  [L] solved in 2
  [L] solved in 2
  [L] solved in 2
  [L] solved in 2
-   90  1.63350 1.93768099e-05 2.31489291e-05 2.45047701e-05
+   45  0.81675 9.37992155e-05 1.11569867e-04 1.14444486e-04
+   45  0.81675 3.91697232e-05 2.18404466e-05 8.45303221e-05
  [L] solved in 2
  [L] solved in 2
  [L] solved in 2
  [L] solved in 2
-   91  1.65165 1.02261311e-05 1.24267073e-05 1.26356707e-05
  [L] solved in 2
  [L] solved in 2
  [L] solved in 2
  [L] solved in 2
-   92  1.66980 2.63088176e-06 2.16432137e-06 1.13221536e-05
+   46  0.83490 9.33049834e-05 1.10921873e-04 1.14581234e-04
+   46  0.83490 3.86144950e-05 2.15986110e-05 8.40472425e-05
  [L] solved in 2
  [L] solved in 2
  [L] solved in 2
  [L] solved in 2
-   93  1.68795 9.30695790e-06 1.04110245e-05 1.24634768e-05
  [L] solved in 2
  [L] solved in 2
  [L] solved in 2
  [L] solved in 2
-   94  1.70610 1.84994888e-05 2.08865308e-05 2.38747895e-05
+   47  0.85305 9.27813619e-05 1.11842508e-04 1.14631828e-04
+   47  0.85305 3.78488998e-05 2.11825146e-05 8.55985001e-05
  [L] solved in 2
  [L] solved in 2
  [L] solved in 2
  [L] solved in 2
-   95  1.72425 2.76875769e-05 3.14768583e-05 3.46898968e-05
  [L] solved in 2
  [L] solved in 2
  [L] solved in 2
  [L] solved in 2
-   96  1.74240 3.67154644e-05 4.18645865e-05 4.57210051e-05
+   48  0.87120 9.15356776e-05 1.11220183e-04 1.13652631e-04
+   48  0.87120 3.70003401e-05 2.06325836e-05 8.73506001e-05
  [L] solved in 2
  [L] solved in 2
  [L] solved in 2
  [L] solved in 2
-   97  1.76055 4.54944040e-05 5.21633355e-05 5.63267226e-05
  [L] solved in 2
  [L] solved in 2
  [L] solved in 2
  [L] solved in 2
-   98  1.77870 5.39452139e-05 6.20206176e-05 6.64029629e-05
+   49  0.88935 8.96034840e-05 1.09687339e-04 1.11696751e-04
+   49  0.88935 3.60537045e-05 2.00489631e-05 8.82827861e-05
  [L] solved in 2
  [L] solved in 2
  [L] solved in 2
  [L] solved in 2
-   99  1.79685 6.20023509e-05 7.12855795e-05 7.62003804e-05
  [L] solved in 2
  [L] solved in 2
  [L] solved in 2
  [L] solved in 2
-  100  1.81500 6.96074231e-05 7.98864692e-05 8.56053513e-05
+   50  0.90750 8.80625431e-05 1.09074734e-04 1.09151766e-04
+   50  0.90750 3.49382022e-05 1.94800795e-05 8.71793350e-05
  [L] solved in 2
  [L] solved in 2
  [L] solved in 2
  [L] solved in 2
-  101  1.83315 7.67015037e-05 8.78149769e-05 9.38114523e-05
  [L] solved in 2
  [L] solved in 2
  [L] solved in 2
  [L] solved in 2
-  102  1.85130 8.32342386e-05 9.51173603e-05 1.00824579e-04
+   51  0.92565 8.71721377e-05 1.07865713e-04 1.06027919e-04
+   51  0.92565 3.36655852e-05 1.91657024e-05 8.38639650e-05
  [L] solved in 2
  [L] solved in 2
  [L] solved in 2
  [L] solved in 2
-  103  1.86945 8.91688547e-05 1.01818929e-04 1.07510121e-04
  [L] solved in 2
  [L] solved in 2
  [L] solved in 2
  [L] solved in 2
-  104  1.88760 9.44657272e-05 1.07926757e-04 1.14005202e-04
+   52  0.94380 8.54107732e-05 1.05694875e-04 1.01936836e-04
+   52  0.94380 3.23105956e-05 1.86852351e-05 7.89190445e-05
  [L] solved in 2
  [L] solved in 2
  [L] solved in 2
  [L] solved in 2
-  105  1.90575 9.90740731e-05 1.13303096e-04 1.18961322e-04
  [L] solved in 2
  [L] solved in 2
  [L] solved in 2
  [L] solved in 2
-  106  1.92390 1.02950571e-04 1.17860194e-04 1.23587048e-04
+   53  0.96195 8.17837697e-05 1.01415708e-04 9.67421678e-05
+   53  0.96195 3.09135912e-05 1.80539288e-05 7.29383179e-05
  [L] solved in 2
  [L] solved in 2
  [L] solved in 2
  [L] solved in 2
-  107  1.94205 1.06071604e-04 1.21597106e-04 1.28621485e-04
  [L] solved in 2
  [L] solved in 2
  [L] solved in 2
  [L] solved in 2
-  108  1.96020 1.08421915e-04 1.24483788e-04 1.32082626e-04
+   54  0.98010 7.78723823e-05 9.61149021e-05 9.07677138e-05
+   54  0.98010 2.94807011e-05 1.72779938e-05 6.72473415e-05
  [L] solved in 2
  [L] solved in 2
  [L] solved in 2
  [L] solved in 2
-  109  1.97835 1.09987975e-04 1.26495169e-04 1.34569460e-04
  [L] solved in 2
  [L] solved in 2
  [L] solved in 2
  [L] solved in 2
-  110  1.99650 1.10761970e-04 1.27615418e-04 1.35623725e-04
+   55  0.99825 7.57728501e-05 9.61253912e-05 8.42689995e-05
+   55  0.99825 2.80339819e-05 1.63673229e-05 6.57642723e-05
  [L] solved in 2
  [L] solved in 2
  [L] solved in 2
  [L] solved in 2
-  111  2.00000 1.10819134e-04 1.27721338e-04 1.35622149e-04
+ [L] solved in 2
+ [L] solved in 2
+ [L] solved in 2
+ [L] solved in 2
+   56  1.01640 7.44939301e-05 9.44926827e-05 8.21249383e-05
+   56  1.01640 2.66138442e-05 1.53443900e-05 6.53026621e-05
+ [L] solved in 2
+ [L] solved in 2
+ [L] solved in 2
+ [L] solved in 2
+ [L] solved in 2
+ [L] solved in 2
+ [L] solved in 2
+ [L] solved in 2
+   57  1.03455 7.11316193e-05 8.94270118e-05 8.03545642e-05
+   57  1.03455 2.52410123e-05 1.43894091e-05 6.34923602e-05
+ [L] solved in 2
+ [L] solved in 2
+ [L] solved in 2
+ [L] solved in 2
+ [L] solved in 2
+ [L] solved in 2
+ [L] solved in 2
+ [L] solved in 2
+   58  1.05270 6.50473082e-05 8.09854334e-05 7.80840206e-05
+   58  1.05270 2.39524057e-05 1.38153188e-05 6.10613992e-05
+ [L] solved in 2
+ [L] solved in 2
+ [L] solved in 2
+ [L] solved in 2
+ [L] solved in 2
+ [L] solved in 2
+ [L] solved in 2
+ [L] solved in 2
+   59  1.07085 5.89028272e-05 7.22094941e-05 7.50546083e-05
+   59  1.07085 2.28537411e-05 1.34258018e-05 6.18992239e-05
+ [L] solved in 2
+ [L] solved in 2
+ [L] solved in 2
+ [L] solved in 2
+ [L] solved in 2
+ [L] solved in 2
+ [L] solved in 2
+ [L] solved in 2
+   60  1.08900 5.54687804e-05 6.79221630e-05 7.20183694e-05
+   60  1.08900 2.20664598e-05 1.30236756e-05 6.32815193e-05
+ [L] solved in 2
+ [L] solved in 2
+ [L] solved in 2
+ [L] solved in 2
+ [L] solved in 2
+ [L] solved in 2
+ [L] solved in 2
+ [L] solved in 2
+   61  1.10715 5.39983224e-05 6.56586065e-05 7.80271596e-05
+   61  1.10715 2.16350748e-05 1.25049581e-05 6.35427035e-05
+ [L] solved in 2
+ [L] solved in 2
+ [L] solved in 2
+ [L] solved in 2
+ [L] solved in 2
+ [L] solved in 2
+ [L] solved in 2
+ [L] solved in 2
+   62  1.12530 5.16246250e-05 6.14155031e-05 8.20308989e-05
+   62  1.12530 2.15685407e-05 1.18786192e-05 6.21678730e-05
+ [L] solved in 2
+ [L] solved in 2
+ [L] solved in 2
+ [L] solved in 2
+ [L] solved in 2
+ [L] solved in 2
+ [L] solved in 2
+ [L] solved in 2
+   63  1.14345 4.71826560e-05 5.51129881e-05 6.91762429e-05
+   63  1.14345 2.19025544e-05 1.13718878e-05 6.42882373e-05
+ [L] solved in 2
+ [L] solved in 2
+ [L] solved in 2
+ [L] solved in 2
+ [L] solved in 2
+ [L] solved in 2
+ [L] solved in 2
+ [L] solved in 2
+   64  1.16160 4.23890203e-05 4.92599120e-05 7.02123508e-05
+   64  1.16160 2.26084482e-05 1.14651158e-05 6.73855790e-05
+ [L] solved in 2
+ [L] solved in 2
+ [L] solved in 2
+ [L] solved in 2
+ [L] solved in 2
+ [L] solved in 2
+ [L] solved in 2
+ [L] solved in 2
+   65  1.17975 4.01980816e-05 4.76057783e-05 6.12960828e-05
+   65  1.17975 2.35358633e-05 1.21808492e-05 6.96798497e-05
+ [L] solved in 2
+ [L] solved in 2
+ [L] solved in 2
+ [L] solved in 2
+ [L] solved in 2
+ [L] solved in 2
+ [L] solved in 2
+ [L] solved in 2
+   66  1.19790 4.15257813e-05 4.95704975e-05 6.42765319e-05
+   66  1.19790 2.45486050e-05 1.30529495e-05 7.10381475e-05
+ [L] solved in 2
+ [L] solved in 2
+ [L] solved in 2
+ [L] solved in 2
+ [L] solved in 2
+ [L] solved in 2
+ [L] solved in 2
+ [L] solved in 2
+   67  1.21605 4.45974210e-05 5.21821785e-05 8.16155184e-05
+   67  1.21605 2.56484183e-05 1.41939744e-05 7.15219367e-05
+ [L] solved in 2
+ [L] solved in 2
+ [L] solved in 2
+ [L] solved in 2
+ [L] solved in 2
+ [L] solved in 2
+ [L] solved in 2
+ [L] solved in 2
+   68  1.23420 4.78711686e-05 5.75624402e-05 8.58970598e-05
+   68  1.23420 2.68902199e-05 1.52414023e-05 7.35458530e-05
+ [L] solved in 2
+ [L] solved in 2
+ [L] solved in 2
+ [L] solved in 2
+ [L] solved in 2
+ [L] solved in 2
+ [L] solved in 2
+ [L] solved in 2
+   69  1.25235 5.12780046e-05 6.19686737e-05 8.00728044e-05
+   69  1.25235 2.82592827e-05 1.62085355e-05 7.84767931e-05
+ [L] solved in 2
+ [L] solved in 2
+ [L] solved in 2
+ [L] solved in 2
+ [L] solved in 2
+ [L] solved in 2
+ [L] solved in 2
+ [L] solved in 2
+   70  1.27050 5.52430012e-05 6.86614419e-05 6.74472535e-05
+   70  1.27050 2.96915782e-05 1.71561575e-05 8.28082857e-05
+ [L] solved in 2
+ [L] solved in 2
+ [L] solved in 2
+ [L] solved in 2
+ [L] solved in 2
+ [L] solved in 2
+ [L] solved in 2
+ [L] solved in 2
+   71  1.28865 5.98009850e-05 7.52290676e-05 7.59459822e-05
+   71  1.28865 3.11472841e-05 1.81261327e-05 8.63607040e-05
+ [L] solved in 2
+ [L] solved in 2
+ [L] solved in 2
+ [L] solved in 2
+ [L] solved in 2
+ [L] solved in 2
+ [L] solved in 2
+ [L] solved in 2
+   72  1.30680 6.46128878e-05 8.00456366e-05 8.66737489e-05
+   72  1.30680 3.25946060e-05 1.90367901e-05 8.90313349e-05
+ [L] solved in 2
+ [L] solved in 2
+ [L] solved in 2
+ [L] solved in 2
+ [L] solved in 2
+ [L] solved in 2
+ [L] solved in 2
+ [L] solved in 2
+   73  1.32495 6.93047417e-05 8.52087935e-05 9.49519365e-05
+   73  1.32495 3.39565952e-05 1.98575336e-05 9.07175600e-05
+ [L] solved in 2
+ [L] solved in 2
+ [L] solved in 2
+ [L] solved in 2
+ [L] solved in 2
+ [L] solved in 2
+ [L] solved in 2
+ [L] solved in 2
+   74  1.34310 7.36545694e-05 9.06309018e-05 9.58322402e-05
+   74  1.34310 3.51470093e-05 2.05346192e-05 9.13769097e-05
+ [L] solved in 2
+ [L] solved in 2
+ [L] solved in 2
+ [L] solved in 2
+ [L] solved in 2
+ [L] solved in 2
+ [L] solved in 2
+ [L] solved in 2
+   75  1.36125 7.75912959e-05 9.59364126e-05 9.37108397e-05
+   75  1.36125 3.61675138e-05 2.10579666e-05 9.11780819e-05
+ [L] solved in 2
+ [L] solved in 2
+ [L] solved in 2
+ [L] solved in 2
+ [L] solved in 2
+ [L] solved in 2
+ [L] solved in 2
+ [L] solved in 2
+   76  1.37940 8.10838691e-05 1.00115700e-04 9.92288515e-05
+   76  1.37940 3.71142425e-05 2.15580161e-05 9.04608342e-05
+ [L] solved in 2
+ [L] solved in 2
+ [L] solved in 2
+ [L] solved in 2
+ [L] solved in 2
+ [L] solved in 2
+ [L] solved in 2
+ [L] solved in 2
+   77  1.39755 8.40671380e-05 1.04501582e-04 1.05804370e-04
+   77  1.39755 3.80590381e-05 2.20184978e-05 8.94571837e-05
+ [L] solved in 2
+ [L] solved in 2
+ [L] solved in 2
+ [L] solved in 2
+ [L] solved in 2
+ [L] solved in 2
+ [L] solved in 2
+ [L] solved in 2
+   78  1.41570 8.64829769e-05 1.08402946e-04 1.09368959e-04
+   78  1.41570 3.89461138e-05 2.23791592e-05 8.80796587e-05
+ [L] solved in 2
+ [L] solved in 2
+ [L] solved in 2
+ [L] solved in 2
+ [L] solved in 2
+ [L] solved in 2
+ [L] solved in 2
+ [L] solved in 2
+   79  1.43385 8.83372589e-05 1.11890305e-04 1.11266485e-04
+   79  1.43385 3.96008019e-05 2.25515100e-05 8.60172652e-05
+ [L] solved in 2
+ [L] solved in 2
+ [L] solved in 2
+ [L] solved in 2
+ [L] solved in 2
+ [L] solved in 2
+ [L] solved in 2
+ [L] solved in 2
+   80  1.45200 8.96965008e-05 1.13645749e-04 1.15716676e-04
+   80  1.45200 3.98220381e-05 2.24510244e-05 8.49523567e-05
+ [L] solved in 2
+ [L] solved in 2
+ [L] solved in 2
+ [L] solved in 2
+ [L] solved in 2
+ [L] solved in 2
+ [L] solved in 2
+ [L] solved in 2
+   81  1.47015 9.06609479e-05 1.13888279e-04 1.17151487e-04
+   81  1.47015 3.94936761e-05 2.20014776e-05 8.46326881e-05
+ [L] solved in 2
+ [L] solved in 2
+ [L] solved in 2
+ [L] solved in 2
+ [L] solved in 2
+ [L] solved in 2
+ [L] solved in 2
+ [L] solved in 2
+   82  1.48830 9.13221236e-05 1.13164328e-04 1.19839238e-04
+   82  1.48830 3.86727975e-05 2.16321154e-05 8.29678489e-05
+ [L] solved in 2
+ [L] solved in 2
+ [L] solved in 2
+ [L] solved in 2
+ [L] solved in 2
+ [L] solved in 2
+ [L] solved in 2
+ [L] solved in 2
+   83  1.50645 9.16948410e-05 1.12395700e-04 1.20307911e-04
+   83  1.50645 3.76163497e-05 2.11309508e-05 8.28077885e-05
+ [L] solved in 2
+ [L] solved in 2
+ [L] solved in 2
+ [L] solved in 2
+ [L] solved in 2
+ [L] solved in 2
+ [L] solved in 2
+ [L] solved in 2
+   84  1.52460 9.17040140e-05 1.12003373e-04 1.21698057e-04
+   84  1.52460 3.66927141e-05 2.06120692e-05 8.37493330e-05
+ [L] solved in 2
+ [L] solved in 2
+ [L] solved in 2
+ [L] solved in 2
+ [L] solved in 2
+ [L] solved in 2
+ [L] solved in 2
+ [L] solved in 2
+   85  1.54275 9.12716021e-05 1.10911027e-04 1.21796371e-04
+   85  1.54275 3.61764227e-05 2.02260597e-05 8.68844691e-05
+ [L] solved in 2
+ [L] solved in 2
+ [L] solved in 2
+ [L] solved in 2
+ [L] solved in 2
+ [L] solved in 2
+ [L] solved in 2
+ [L] solved in 2
+   86  1.56090 9.04155785e-05 1.09918022e-04 1.21540103e-04
+   86  1.56090 3.60289232e-05 2.01026167e-05 9.06235148e-05
+ [L] solved in 2
+ [L] solved in 2
+ [L] solved in 2
+ [L] solved in 2
+ [L] solved in 2
+ [L] solved in 2
+ [L] solved in 2
+ [L] solved in 2
+   87  1.57905 8.92819105e-05 1.08816758e-04 1.19388410e-04
+   87  1.57905 3.58252324e-05 1.99790535e-05 9.25073852e-05
+ [L] solved in 2
+ [L] solved in 2
+ [L] solved in 2
+ [L] solved in 2
+ [L] solved in 2
+ [L] solved in 2
+ [L] solved in 2
+ [L] solved in 2
+   88  1.59720 8.80957979e-05 1.07270595e-04 1.16484810e-04
+   88  1.59720 3.49868999e-05 1.96835419e-05 8.96245745e-05
+ [L] solved in 2
+ [L] solved in 2
+ [L] solved in 2
+ [L] solved in 2
+ [L] solved in 2
+ [L] solved in 2
+ [L] solved in 2
+ [L] solved in 2
+   89  1.61535 8.70527243e-05 1.05865055e-04 1.14156236e-04
+   89  1.61535 3.32464002e-05 1.88679824e-05 8.10453897e-05
+ [L] solved in 2
+ [L] solved in 2
+ [L] solved in 2
+ [L] solved in 2
+ [L] solved in 2
+ [L] solved in 2
+ [L] solved in 2
+ [L] solved in 2
+   90  1.63350 8.62273701e-05 1.04114390e-04 1.06764853e-04
+   90  1.63350 3.08859297e-05 1.76358076e-05 7.05079456e-05
+ [L] solved in 2
+ [L] solved in 2
+ [L] solved in 2
+ [L] solved in 2
+ [L] solved in 2
+ [L] solved in 2
+ [L] solved in 2
+ [L] solved in 2
+   91  1.65165 8.55436081e-05 1.02964112e-04 9.92289669e-05
+   91  1.65165 2.84420016e-05 1.62872406e-05 6.38680688e-05
+ [L] solved in 2
+ [L] solved in 2
+ [L] solved in 2
+ [L] solved in 2
+ [L] solved in 2
+ [L] solved in 2
+ [L] solved in 2
+ [L] solved in 2
+   92  1.66980 8.47852462e-05 1.00839108e-04 1.05358048e-04
+   92  1.66980 2.63285782e-05 1.51797511e-05 5.79749337e-05
+ [L] solved in 2
+ [L] solved in 2
+ [L] solved in 2
+ [L] solved in 2
+ [L] solved in 2
+ [L] solved in 2
+ [L] solved in 2
+ [L] solved in 2
+   93  1.68795 8.37097558e-05 9.95577276e-05 1.08974839e-04
+   93  1.68795 2.49996180e-05 1.45233406e-05 6.73336100e-05
+ [L] solved in 2
+ [L] solved in 2
+ [L] solved in 2
+ [L] solved in 2
+ [L] solved in 2
+ [L] solved in 2
+ [L] solved in 2
+ [L] solved in 2
+   94  1.70610 8.22764076e-05 9.94827564e-05 1.06375248e-04
+   94  1.70610 2.49204374e-05 1.42266921e-05 7.80518297e-05
+ [L] solved in 2
+ [L] solved in 2
+ [L] solved in 2
+ [L] solved in 2
+ [L] solved in 2
+ [L] solved in 2
+ [L] solved in 2
+ [L] solved in 2
+   95  1.72425 8.07584939e-05 9.85991798e-05 1.13761763e-04
+   95  1.72425 2.55492106e-05 1.39937047e-05 8.29099278e-05
+ [L] solved in 2
+ [L] solved in 2
+ [L] solved in 2
+ [L] solved in 2
+ [L] solved in 2
+ [L] solved in 2
+ [L] solved in 2
+ [L] solved in 2
+   96  1.74240 7.95508300e-05 9.72019886e-05 1.20768206e-04
+   96  1.74240 2.53855677e-05 1.38346812e-05 7.88249783e-05
+ [L] solved in 2
+ [L] solved in 2
+ [L] solved in 2
+ [L] solved in 2
+ [L] solved in 2
+ [L] solved in 2
+ [L] solved in 2
+ [L] solved in 2
+   97  1.76055 7.88546336e-05 9.55958992e-05 1.26586984e-04
+   97  1.76055 2.39990181e-05 1.38648746e-05 6.67104541e-05
+ [L] solved in 2
+ [L] solved in 2
+ [L] solved in 2
+ [L] solved in 2
+ [L] solved in 2
+ [L] solved in 2
+ [L] solved in 2
+ [L] solved in 2
+   98  1.77870 7.85718252e-05 9.38728498e-05 1.30872279e-04
+   98  1.77870 2.31513281e-05 1.40854754e-05 5.47788730e-05
+ [L] solved in 2
+ [L] solved in 2
+ [L] solved in 2
+ [L] solved in 2
+ [L] solved in 2
+ [L] solved in 2
+ [L] solved in 2
+ [L] solved in 2
+   99  1.79685 7.84220554e-05 9.23992496e-05 1.33906228e-04
+   99  1.79685 2.42695678e-05 1.35626220e-05 6.19519527e-05
+ [L] solved in 2
+ [L] solved in 2
+ [L] solved in 2
+ [L] solved in 2
+ [L] solved in 2
+ [L] solved in 2
+ [L] solved in 2
+ [L] solved in 2
+  100  1.81500 7.80763757e-05 9.15494753e-05 1.36217235e-04
+  100  1.81500 2.56781806e-05 1.30345585e-05 6.93047157e-05
+ [L] solved in 2
+ [L] solved in 2
+ [L] solved in 2
+ [L] solved in 2
+ [L] solved in 2
+ [L] solved in 2
+ [L] solved in 2
+ [L] solved in 2
+  101  1.83315 7.72997927e-05 8.91227689e-05 1.38016049e-04
+  101  1.83315 2.57117657e-05 1.33235833e-05 7.49614700e-05
+ [L] solved in 2
+ [L] solved in 2
+ [L] solved in 2
+ [L] solved in 2
+ [L] solved in 2
+ [L] solved in 2
+ [L] solved in 2
+ [L] solved in 2
+  102  1.85130 7.61239637e-05 8.63619489e-05 1.38948881e-04
+  102  1.85130 2.55880320e-05 1.41451840e-05 7.73812929e-05
+ [L] solved in 2
+ [L] solved in 2
+ [L] solved in 2
+ [L] solved in 2
+ [L] solved in 2
+ [L] solved in 2
+ [L] solved in 2
+ [L] solved in 2
+  103  1.86945 7.48277241e-05 8.12438107e-05 1.38372251e-04
+  103  1.86945 2.68220727e-05 1.49732504e-05 7.60453123e-05
+ [L] solved in 2
+ [L] solved in 2
+ [L] solved in 2
+ [L] solved in 2
+ [L] solved in 2
+ [L] solved in 2
+ [L] solved in 2
+ [L] solved in 2
+  104  1.88760 7.36316352e-05 7.88832183e-05 1.35900988e-04
+  104  1.88760 2.77463966e-05 1.53122381e-05 7.16956599e-05
+ [L] solved in 2
+ [L] solved in 2
+ [L] solved in 2
+ [L] solved in 2
+ [L] solved in 2
+ [L] solved in 2
+ [L] solved in 2
+ [L] solved in 2
+  105  1.90575 7.24508671e-05 7.72655516e-05 1.31757835e-04
+  105  1.90575 2.67530268e-05 1.49688919e-05 6.77883679e-05
+ [L] solved in 2
+ [L] solved in 2
+ [L] solved in 2
+ [L] solved in 2
+ [L] solved in 2
+ [L] solved in 2
+ [L] solved in 2
+ [L] solved in 2
+  106  1.92390 7.10372665e-05 7.65777161e-05 1.26636519e-04
+  106  1.92390 2.66421131e-05 1.44665377e-05 8.05038528e-05
+ [L] solved in 2
+ [L] solved in 2
+ [L] solved in 2
+ [L] solved in 2
+ [L] solved in 2
+ [L] solved in 2
+ [L] solved in 2
+ [L] solved in 2
+  107  1.94205 6.93050888e-05 7.45677321e-05 1.21206296e-04
+  107  1.94205 3.09370166e-05 1.54784335e-05 1.04590386e-04
+ [L] solved in 2
+ [L] solved in 2
+ [L] solved in 2
+ [L] solved in 2
+ [L] solved in 2
+ [L] solved in 2
+ [L] solved in 2
+ [L] solved in 2
+  108  1.96020 6.73707942e-05 7.10824703e-05 1.15674622e-04
+  108  1.96020 3.64569507e-05 1.81637948e-05 1.20185316e-04
+ [L] solved in 2
+ [L] solved in 2
+ [L] solved in 2
+ [L] solved in 2
+ [L] solved in 2
+ [L] solved in 2
+ [L] solved in 2
+ [L] solved in 2
+  109  1.97835 6.52415274e-05 6.68303314e-05 1.09750993e-04
+  109  1.97835 3.86063717e-05 2.03899538e-05 1.20572603e-04
+ [L] solved in 2
+ [L] solved in 2
+ [L] solved in 2
+ [L] solved in 2
+ [L] solved in 2
+ [L] solved in 2
+ [L] solved in 2
+ [L] solved in 2
+  110  1.99650 6.26538860e-05 6.17906617e-05 1.03000932e-04
+  110  1.99650 3.76324632e-05 2.15751517e-05 1.05651418e-04
+ [L] solved in 2
+ [L] solved in 2
+ [L] solved in 2
+ [L] solved in 2
+ [L] solved in 2
+ [L] solved in 2
+ [L] solved in 2
+ [L] solved in 2
+  111  2.00000 6.19336123e-05 6.06383753e-05 1.01583915e-04
+  111  2.00000 6.58156572e-05 3.52391924e-05 2.42323884e-04
