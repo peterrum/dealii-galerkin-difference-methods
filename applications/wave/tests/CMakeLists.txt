@@ -1,0 +1,3 @@
+SET(TEST_LIBRARIES wave-app)
+SET(TEST_TARGET wave-app)
+DEAL_II_PICKUP_TESTS(wave-app)

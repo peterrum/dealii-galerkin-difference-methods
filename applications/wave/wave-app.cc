@@ -1,3 +1,5 @@
+#include <deal.II/base/parameter_handler.h>
+
 #include <boost/math/special_functions/bessel.hpp>
 
 #include <gdm/wave/problem.h>
@@ -226,20 +228,44 @@ main(int argc, char **argv)
 {
   Utilities::MPI::MPI_InitFinalize mpi(argc, argv, 1);
 
-  if (argc != 3)
+  if ((argc != 3) && ((argc != 2) || (std::string(argv[1]) == "--help")))
     {
       std::cout << "Usage: ./wave-app dim simulation" << std::endl;
       std::cout << std::endl;
       std::cout << "dim         number of dimensions (1-3)" << std::endl;
-      std::cout << "simulation  name of simulation (step84, heat, wave)"
+      std::cout << "simulation  name of simulation (step85, heat, wave)"
                 << std::endl;
+      std::cout << std::endl;
+      std::cout << std::endl;
+      std::cout << std::endl;
+
+      std::cout << "Usage: ./wave-app file" << std::endl;
+      std::cout << std::endl;
+      std::cout << "file        name of parameter file (*.json)" << std::endl;
       std::cout << std::endl;
 
       return 1;
     }
 
-  const unsigned int dim = std::atoi(argv[1]);
-  const std::string  simulation_name(argv[2]);
+  unsigned int dim;
+  std::string  simulation_name;
+
+  if (argc == 3)
+    {
+      dim             = std::atoi(argv[1]);
+      simulation_name = std::string(argv[2]);
+    }
+  else if (argc == 2)
+    {
+      dealii::ParameterHandler prm;
+      prm.add_parameter("simulation name", simulation_name);
+      prm.add_parameter("dim", dim);
+      prm.parse_input(std::string(argv[1]), "", true);
+    }
+  else
+    {
+      AssertThrow(false, ExcNotImplemented());
+    }
 
   if (dim == 1)
     {
