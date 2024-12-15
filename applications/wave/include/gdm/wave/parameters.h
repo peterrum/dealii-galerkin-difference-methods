@@ -11,6 +11,7 @@ struct Parameters
   std::string  simulation_type;
   unsigned int fe_degree;
   unsigned int n_components;
+  bool         composite = false;
 
   // geometry
   unsigned int n_subdivisions_1D;

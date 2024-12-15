@@ -116,19 +116,6 @@ public:
                                                       level_set_dof_handler,
                                                       level_set);
 
-    NonMatching::RegionUpdateFlags region_update_flags_face;
-    region_update_flags_face.inside =
-      update_values | update_gradients | update_JxW_values |
-      update_quadrature_points | update_normal_vectors;
-
-    NonMatching::FEInterfaceValues<dim> non_matching_fe_interface_values(
-      fe,
-      quadrature_1D,
-      region_update_flags_face,
-      mesh_classifier,
-      level_set_dof_handler,
-      level_set);
-
     FEInterfaceValues<dim> fe_interface_values(
       mapping,
       fe,
@@ -216,8 +203,11 @@ public:
                   {
                     const Point<dim> &point =
                       surface_fe_values.quadrature_point(q);
-                    const Tensor<1, dim> &normal =
-                      surface_fe_values.normal_vector(q);
+                    const Tensor<1, dim> normal =
+                      surface_fe_values.normal_vector(q) *
+                      ((location == NonMatching::LocationToLevelSet::inside) ?
+                         1.0 :
+                         -1.0);
                     for (const unsigned int i : surface_fe_values.dof_indices())
                       {
                         // left hand side:

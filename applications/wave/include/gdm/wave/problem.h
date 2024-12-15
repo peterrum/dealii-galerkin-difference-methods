@@ -69,7 +69,7 @@ public:
         // postprocess
         this->postprocess(0.0, vec_solution);
       }
-    else if (params.simulation_type == "heat-rk")
+    else if ((params.simulation_type == "heat-rk") && (!params.composite))
       {
         const double start_t = params.start_t;
         const double end_t   = params.end_t;
@@ -128,6 +128,8 @@ public:
       }
     else if (params.simulation_type == "heat-rk")
       {
+        AssertThrow(params.composite, ExcInternalError());
+
         const double start_t = params.start_t;
         const double end_t   = params.end_t;
         const double delta_t =
@@ -152,7 +154,7 @@ public:
 
         // Setup solver
         this->setup_solver(mass_matrix_0, 0);
-        this->setup_solver(mass_matrix_1, 0);
+        this->setup_solver(mass_matrix_1, 1);
 
         const auto fu_rhs = [&](const double           time,
                                 const BlockVectorType &solution) {

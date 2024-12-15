@@ -149,6 +149,76 @@ fill_parameters(Parameters<dim> &params, const std::string &simulation_name)
       // output
       params.output_fe_degree = params.fe_degree;
     }
+  else if (simulation_name == "heat-composite")
+    {
+      // adopted from: TODO
+
+      // general settings
+      params.simulation_type = "heat-rk";
+      params.fe_degree       = 3;
+      params.n_components    = 1;
+      params.composite       = true;
+
+      // geometry
+      params.n_subdivisions_1D = 40;
+      params.geometry_left     = -1.21;
+      params.geometry_right    = +1.21;
+
+      // mass matrix
+      params.ghost_parameter_M = 0.75;
+
+      // stiffness matrix
+      params.ghost_parameter_A = 1.5;
+      params.nitsche_parameter = 5.0 * params.fe_degree;
+
+      params.function_interface_dbc =
+        std::make_shared<ScalarFunctionFromFunctionObject<dim>>(
+          [](const auto t, const auto &p) {
+            if (dim == 1)
+              return std::pow(p[0], 9.0) * std::exp(-t);
+            else if (dim == 2)
+              return std::pow(p[0], 9.0) * std::pow(p[1], 8.0) * std::exp(-t);
+
+            AssertThrow(false, ExcNotImplemented());
+
+            return 0.0;
+          });
+
+      params.function_rhs =
+        std::make_shared<ScalarFunctionFromFunctionObject<dim>>(
+          [](const auto t, const auto &p) {
+            if (dim == 1)
+              return -std::pow(p[0], 7.0) * std::exp(-t) *
+                     (std::pow(p[0], 2.0) + 72);
+            else if (dim == 2)
+              return -std::pow(p[0], 7.0) * std::pow(p[1], 6.0) * std::exp(-t) *
+                     (std::pow(p[0], 2.0) * std::pow(p[1], 2.0) +
+                      72 * std::pow(p[1], 2.0) + 56 * std::pow(p[0], 2.0));
+
+            AssertThrow(false, ExcNotImplemented());
+
+            return 0.0;
+          });
+
+      // time stepping
+      params.exact_solution = params.function_interface_dbc;
+      params.start_t        = 0.0;
+      params.end_t          = 0.1;
+
+      params.cfl     = 0.3 / params.fe_degree / params.fe_degree;
+      params.cfl_pow = 2.0;
+
+      // linear solvers
+      params.solver_name = "ILU";
+
+      // level set field
+      params.level_set_fe_degree = params.fe_degree;
+      params.level_set_function =
+        std::make_shared<Functions::SignedDistance::Sphere<dim>>();
+
+      // output
+      params.output_fe_degree = params.fe_degree;
+    }
   else if (simulation_name == "wave")
     {
       // adopted from:
