@@ -173,7 +173,12 @@ public:
         TimeStepping::ExplicitRungeKutta<BlockVectorType> rk;
         rk.initialize(runge_kutta_method);
 
-        this->postprocess(0.0, vec_solution.block(0) /*TODO*/);
+        this->postprocess(0.0,
+                          vec_solution.block(0),
+                          NonMatching::LocationToLevelSet::inside);
+        this->postprocess(0.0,
+                          vec_solution.block(1),
+                          NonMatching::LocationToLevelSet::outside);
 
         while ((time.is_at_end() == false))
           {
@@ -189,7 +194,12 @@ public:
 
             this->postprocess(time.get_current_time() +
                                 time.get_next_step_size(),
-                              vec_solution.block(0) /*TODO*/);
+                              vec_solution.block(0),
+                              NonMatching::LocationToLevelSet::inside);
+            this->postprocess(time.get_current_time() +
+                                time.get_next_step_size(),
+                              vec_solution.block(1),
+                              NonMatching::LocationToLevelSet::outside);
 
             time.advance_time();
           }
@@ -400,9 +410,20 @@ private:
   }
 
   void
-  postprocess(const double time, const VectorType &solution)
+  postprocess(const double                          time,
+              const VectorType                     &solution,
+              const NonMatching::LocationToLevelSet location =
+                NonMatching::LocationToLevelSet::inside)
   {
-    static unsigned int counter = 0;
+    static std::array<unsigned int, 2> counter = {{0, 0}};
+
+    auto &my_counter =
+      counter[(location == NonMatching::LocationToLevelSet::inside) ? 0 : 1];
+
+    const NonMatching::LocationToLevelSet inverse_location =
+      (location == NonMatching::LocationToLevelSet::inside) ?
+        NonMatching::LocationToLevelSet::outside :
+        NonMatching::LocationToLevelSet::inside;
 
     const hp::MappingCollection<dim> &mapping = discretization.get_mapping();
     const Quadrature<1>              &quadrature_1D_error =
@@ -419,8 +440,13 @@ private:
     params.exact_solution->set_time(time);
 
     NonMatching::RegionUpdateFlags region_update_flags_error;
-    region_update_flags_error.inside =
-      update_values | update_JxW_values | update_quadrature_points;
+
+    if (location == NonMatching::LocationToLevelSet::inside)
+      region_update_flags_error.inside =
+        update_values | update_JxW_values | update_quadrature_points;
+    if (location == NonMatching::LocationToLevelSet::outside)
+      region_update_flags_error.outside =
+        update_values | update_JxW_values | update_quadrature_points;
 
     NonMatching::FEValues<dim> non_matching_fe_values_error(
       fe,
@@ -438,7 +464,7 @@ private:
     for (const auto &cell : system.locally_active_cell_iterators())
       if (cell->is_locally_owned() &&
           (mesh_classifier.location_to_level_set(cell->dealii_iterator()) !=
-           NonMatching::LocationToLevelSet::outside))
+           inverse_location))
         {
           non_matching_fe_values_error.reinit(cell->dealii_iterator(),
                                               numbers::invalid_unsigned_int,
@@ -487,7 +513,7 @@ private:
 
     if (pcout.is_active())
       printf("%5d %8.5f %14.8e %14.8e %14.8e\n",
-             counter,
+             my_counter,
              time,
              error_L2,
              error_L1,
@@ -529,10 +555,13 @@ private:
 
     data_out.build_patches();
 
-    std::string file_name = "solution_" + std::to_string(counter) + ".vtu";
+    std::string file_name =
+      std::string("solution_") +
+      ((location == NonMatching::LocationToLevelSet::inside) ? "i_" : "o_") +
+      std::to_string(my_counter) + ".vtu";
     data_out.write_vtu_in_parallel(file_name);
 
-    counter++;
+    my_counter++;
   }
 
   const MPI_Comm     comm;
