@@ -31,6 +31,7 @@ public:
     , params(params)
     , discretization()
     , mass_matrix_operator(discretization)
+    , mass_matrix_operator_opt(discretization)
     , stiffness_matrix_operator(discretization)
   {}
 
@@ -136,7 +137,10 @@ public:
 
         // Compute mass matrix
         const auto &mass_matrix_0 = mass_matrix_operator.get_sparse_matrix();
-        const auto &mass_matrix_1 = mass_matrix_operator.get_sparse_matrix();
+
+        mass_matrix_operator_opt.reinit(params);
+        const auto &mass_matrix_1 =
+          mass_matrix_operator_opt.get_sparse_matrix();
 
         // Initialize vectors
         BlockVectorType vec_solution(2);
@@ -146,8 +150,8 @@ public:
         this->set_initial_condition(vec_solution.block(1));
 
         // Setup solver
-        this->setup_solver(mass_matrix_0);
-        this->setup_solver(mass_matrix_1);
+        this->setup_solver(mass_matrix_0, 0);
+        this->setup_solver(mass_matrix_1, 0);
 
         const auto fu_rhs = [&](const double           time,
                                 const BlockVectorType &solution) {
@@ -157,8 +161,8 @@ public:
 
           // du/dt = f(t, u)
           stiffness_matrix_operator.compute_rhs(vec_rhs, solution, true, time);
-          this->solve(mass_matrix_0, result.block(0), vec_rhs.block(0));
-          this->solve(mass_matrix_1, result.block(1), vec_rhs.block(1));
+          this->solve(mass_matrix_0, result.block(0), vec_rhs.block(0), 0);
+          this->solve(mass_matrix_1, result.block(1), vec_rhs.block(1), 1);
 
           return result;
         };
@@ -349,14 +353,15 @@ private:
   }
 
   void
-  setup_solver(const TrilinosWrappers::SparseMatrix &sparse_matrix)
+  setup_solver(const TrilinosWrappers::SparseMatrix &sparse_matrix,
+               const unsigned int                    id = 0)
   {
     if (params.solver_name == "AMG")
-      preconditioner_amg.initialize(sparse_matrix);
+      preconditioner_amg[id].initialize(sparse_matrix);
     else if (params.solver_name == "ILU")
-      preconditioner_ilu.initialize(sparse_matrix);
+      preconditioner_ilu[id].initialize(sparse_matrix);
     else if (params.solver_name == "direct")
-      solver_direct.initialize(sparse_matrix);
+      solver_direct[id].initialize(sparse_matrix);
     else
       AssertThrow(false, ExcNotImplemented());
   }
@@ -364,7 +369,8 @@ private:
   void
   solve(const TrilinosWrappers::SparseMatrix &sparse_matrix,
         VectorType                           &result,
-        const VectorType                     &vec_rhs)
+        const VectorType                     &vec_rhs,
+        const unsigned int                    id = 0)
   {
     if (params.solver_name == "AMG" || params.solver_name == "ILU")
       {
@@ -375,9 +381,9 @@ private:
         SolverCG<VectorType> solver(solver_control);
 
         if (params.solver_name == "AMG")
-          solver.solve(sparse_matrix, result, vec_rhs, preconditioner_amg);
+          solver.solve(sparse_matrix, result, vec_rhs, preconditioner_amg[id]);
         else if (params.solver_name == "ILU")
-          solver.solve(sparse_matrix, result, vec_rhs, preconditioner_ilu);
+          solver.solve(sparse_matrix, result, vec_rhs, preconditioner_ilu[id]);
         else
           AssertThrow(false, ExcNotImplemented());
 
@@ -385,7 +391,7 @@ private:
       }
     else if (params.solver_name == "direct")
       {
-        solver_direct.solve(sparse_matrix, result, vec_rhs);
+        solver_direct[id].solve(sparse_matrix, result, vec_rhs);
       }
     else
       {
@@ -537,9 +543,10 @@ private:
   Discretization<dim, Number> discretization;
 
   MassMatrixOperator<dim, Number>      mass_matrix_operator;
+  MassMatrixOperator<dim, Number>      mass_matrix_operator_opt;
   StiffnessMatrixOperator<dim, Number> stiffness_matrix_operator;
 
-  TrilinosWrappers::PreconditionAMG preconditioner_amg;
-  TrilinosWrappers::PreconditionILU preconditioner_ilu;
-  TrilinosWrappers::SolverDirect    solver_direct;
+  std::array<TrilinosWrappers::PreconditionAMG, 2> preconditioner_amg;
+  std::array<TrilinosWrappers::PreconditionILU, 2> preconditioner_ilu;
+  std::array<TrilinosWrappers::SolverDirect, 2>    solver_direct;
 };
