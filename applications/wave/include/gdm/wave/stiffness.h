@@ -425,16 +425,149 @@ public:
               const bool             compute_impl_part,
               const double           time) const
   {
+    AssertThrow(compute_impl_part, ExcNotImplemented());
+
     compute_rhs_internal(vec_rhs.block(0),
                          solution.block(0),
-                         compute_impl_part,
+                         true,
                          time,
                          NonMatching::LocationToLevelSet::inside);
     compute_rhs_internal(vec_rhs.block(1),
                          solution.block(1),
-                         compute_impl_part,
+                         true,
                          time,
                          NonMatching::LocationToLevelSet::outside);
+
+    // add coupling term
+    if (function_interface_dbc)
+      return; // nothing to do
+
+    // 0) extract information from discretization class
+    const Quadrature<1> &quadrature_1D = discretization.get_quadrature_1D();
+    const Quadrature<dim - 1> &face_quadrature =
+      discretization.get_face_quadrature();
+    const GDM::System<dim>          &system = discretization.get_system();
+    const AffineConstraints<Number> &constraints =
+      discretization.get_affine_constraints();
+    const NonMatching::MeshClassifier<dim> &mesh_classifier =
+      discretization.get_mesh_classifier();
+    const hp::FECollection<dim> &fe        = discretization.get_fe();
+    const VectorType            &level_set = discretization.get_level_set();
+    const DoFHandler<dim>       &level_set_dof_handler =
+      discretization.get_level_set_dof_handler();
+
+    NonMatching::RegionUpdateFlags region_update_flags;
+    region_update_flags.surface = update_values | update_gradients |
+                                  update_JxW_values | update_quadrature_points |
+                                  update_normal_vectors;
+
+    NonMatching::FEValues<dim> non_matching_fe_values(fe,
+                                                      quadrature_1D,
+                                                      region_update_flags,
+                                                      mesh_classifier,
+                                                      level_set_dof_handler,
+                                                      level_set);
+
+    solution.update_ghost_values();
+
+    for (const auto &cell : system.locally_active_cell_iterators())
+      if (cell->is_locally_owned() &&
+          (mesh_classifier.location_to_level_set(cell->dealii_iterator()) ==
+           NonMatching::LocationToLevelSet::intersected))
+        {
+          non_matching_fe_values.reinit(cell->dealii_iterator(),
+                                        numbers::invalid_unsigned_int,
+                                        numbers::invalid_unsigned_int,
+                                        cell->active_fe_index());
+
+          const double cell_side_length =
+            cell->dealii_iterator()->minimum_vertex_distance();
+
+          const unsigned int n_dofs_per_cell = fe[0].dofs_per_cell;
+
+          std::vector<types::global_dof_index> dof_indices(n_dofs_per_cell);
+          cell->get_dof_indices(dof_indices);
+
+          Vector<Number> cell_vector_0(n_dofs_per_cell);
+          Vector<Number> cell_vector_1(n_dofs_per_cell);
+
+          // (II) surface integral to apply BC
+          if (const auto &surface_fe_values_ptr =
+                non_matching_fe_values.get_surface_fe_values())
+            {
+              const auto &surface_fe_values = *surface_fe_values_ptr;
+
+              std::vector<Number> quadrature_values_0(
+                surface_fe_values.n_quadrature_points);
+              surface_fe_values.get_function_values(solution.block(0),
+                                                    dof_indices,
+                                                    quadrature_values_0);
+
+              std::vector<Number> quadrature_values_1(
+                surface_fe_values.n_quadrature_points);
+              surface_fe_values.get_function_values(solution.block(1),
+                                                    dof_indices,
+                                                    quadrature_values_1);
+
+              std::vector<Tensor<1, dim, Number>> quadrature_gradients_0(
+                surface_fe_values.n_quadrature_points);
+              surface_fe_values.get_function_gradients(solution.block(0),
+                                                       dof_indices,
+                                                       quadrature_gradients_0);
+
+              std::vector<Tensor<1, dim, Number>> quadrature_gradients_1(
+                surface_fe_values.n_quadrature_points);
+              surface_fe_values.get_function_gradients(solution.block(1),
+                                                       dof_indices,
+                                                       quadrature_gradients_1);
+
+
+              for (const unsigned int q :
+                   surface_fe_values.quadrature_point_indices())
+                {
+                  const Tensor<1, dim> normal =
+                    surface_fe_values.normal_vector(q);
+                  for (const unsigned int i : surface_fe_values.dof_indices())
+                    {
+                      const auto quadrature_value_jump =
+                        (quadrature_values_0[q] - quadrature_values_1[q]);
+                      const auto quadrature_gradient_avg =
+                        0.5 *
+                        (quadrature_gradients_0[q] + quadrature_gradients_1[q]);
+
+                      cell_vector_0(i) -=
+                        (+0.5 * normal * surface_fe_values.shape_grad(i, q) *
+                           quadrature_value_jump +
+                         -surface_fe_values.shape_value(i, q) * normal *
+                           quadrature_gradient_avg +
+                         nitsche_parameter / cell_side_length *
+                           surface_fe_values.shape_value(i, q) *
+                           quadrature_value_jump) *
+                        surface_fe_values.JxW(q);
+
+                      cell_vector_1(i) -=
+                        (+0.5 * normal * surface_fe_values.shape_grad(i, q) *
+                           quadrature_value_jump +
+                         +surface_fe_values.shape_value(i, q) * normal *
+                           quadrature_gradient_avg +
+                         nitsche_parameter / cell_side_length *
+                           surface_fe_values.shape_value(i, q) *
+                           quadrature_value_jump) *
+                        surface_fe_values.JxW(q);
+                    }
+                }
+            }
+
+          cell->get_dof_indices(dof_indices);
+          constraints.distribute_local_to_global(cell_vector_0,
+                                                 dof_indices,
+                                                 vec_rhs.block(0));
+          constraints.distribute_local_to_global(cell_vector_1,
+                                                 dof_indices,
+                                                 vec_rhs.block(1));
+        }
+
+    vec_rhs.compress(VectorOperation::add);
   }
 
 private:

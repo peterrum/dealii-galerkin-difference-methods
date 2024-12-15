@@ -184,9 +184,6 @@ fill_parameters(Parameters<dim> &params, const std::string &simulation_name)
             return 0.0;
           });
 
-      // TODO: replace by coupling
-      params.function_interface_dbc = params.function_domain_dbc;
-
       params.function_rhs =
         std::make_shared<ScalarFunctionFromFunctionObject<dim>>(
           [](const auto t, const auto &p) {
