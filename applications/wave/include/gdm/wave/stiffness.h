@@ -39,11 +39,17 @@ public:
   }
 
   void
-  compute_rhs_internal(VectorType       &vec_rhs,
-                       const VectorType &solution,
-                       const bool        compute_impl_part,
-                       const double      time) const
+  compute_rhs_internal(VectorType                           &vec_rhs,
+                       const VectorType                     &solution,
+                       const bool                            compute_impl_part,
+                       const double                          time,
+                       const NonMatching::LocationToLevelSet location) const
   {
+    const NonMatching::LocationToLevelSet inverse_location =
+      (location == NonMatching::LocationToLevelSet::inside) ?
+        NonMatching::LocationToLevelSet::outside :
+        NonMatching::LocationToLevelSet::inside;
+
     // 0) extract information from discretization class
     const hp::MappingCollection<dim> &mapping = discretization.get_mapping();
     const Quadrature<1> &quadrature_1D = discretization.get_quadrature_1D();
@@ -79,19 +85,26 @@ public:
         mesh_classifier.location_to_level_set(cell->neighbor(face_index));
 
       if (cell_location == NonMatching::LocationToLevelSet::intersected &&
-          neighbor_location != NonMatching::LocationToLevelSet::outside)
+          neighbor_location != inverse_location)
         return true;
 
       if (neighbor_location == NonMatching::LocationToLevelSet::intersected &&
-          cell_location != NonMatching::LocationToLevelSet::outside)
+          cell_location != inverse_location)
         return true;
 
       return false;
     };
 
     NonMatching::RegionUpdateFlags region_update_flags;
-    region_update_flags.inside = update_values | update_gradients |
-                                 update_JxW_values | update_quadrature_points;
+    if (location == NonMatching::LocationToLevelSet::inside)
+      region_update_flags.inside = update_values | update_gradients |
+                                   update_JxW_values | update_quadrature_points;
+    else if (location == NonMatching::LocationToLevelSet::outside)
+      region_update_flags.outside = update_values | update_gradients |
+                                    update_JxW_values |
+                                    update_quadrature_points;
+    else
+      AssertThrow(false, ExcNotImplemented());
     region_update_flags.surface = update_values | update_gradients |
                                   update_JxW_values | update_quadrature_points |
                                   update_normal_vectors;
@@ -127,7 +140,7 @@ public:
     for (const auto &cell : system.locally_active_cell_iterators())
       if (cell->is_locally_owned() &&
           (mesh_classifier.location_to_level_set(cell->dealii_iterator()) !=
-           NonMatching::LocationToLevelSet::outside))
+           inverse_location))
         {
           non_matching_fe_values.reinit(cell->dealii_iterator(),
                                         numbers::invalid_unsigned_int,
@@ -146,7 +159,9 @@ public:
 
           // (I) cell integral
           if (const auto &fe_values_ptr =
-                non_matching_fe_values.get_inside_fe_values())
+                (location == NonMatching::LocationToLevelSet::inside) ?
+                  non_matching_fe_values.get_inside_fe_values() :
+                  non_matching_fe_values.get_outside_fe_values())
             {
               const auto &fe_values = *fe_values_ptr;
 
@@ -312,7 +327,11 @@ public:
               const bool        compute_impl_part,
               const double      time) const
   {
-    compute_rhs_internal(vec_rhs, solution, compute_impl_part, time);
+    compute_rhs_internal(vec_rhs,
+                         solution,
+                         compute_impl_part,
+                         time,
+                         NonMatching::LocationToLevelSet::inside);
   }
 
   void
@@ -324,11 +343,13 @@ public:
     compute_rhs_internal(vec_rhs.block(0),
                          solution.block(0),
                          compute_impl_part,
-                         time);
+                         time,
+                         NonMatching::LocationToLevelSet::inside);
     compute_rhs_internal(vec_rhs.block(1),
                          solution.block(1),
                          compute_impl_part,
-                         time);
+                         time,
+                         NonMatching::LocationToLevelSet::outside);
   }
 
 private:

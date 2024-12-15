@@ -441,7 +441,6 @@ private:
     params.exact_solution->set_time(time);
 
     NonMatching::RegionUpdateFlags region_update_flags_error;
-
     if (location == NonMatching::LocationToLevelSet::inside)
       region_update_flags_error.inside =
         update_values | update_JxW_values | update_quadrature_points;
@@ -479,7 +478,9 @@ private:
           cell->get_dof_indices(local_dof_indices);
 
           if (const std::optional<FEValues<dim>> &fe_values =
-                non_matching_fe_values_error.get_inside_fe_values())
+                (location == NonMatching::LocationToLevelSet::inside) ?
+                  non_matching_fe_values_error.get_inside_fe_values() :
+                  non_matching_fe_values_error.get_outside_fe_values())
             {
               std::vector<double> solution_values(
                 fe_values->n_quadrature_points);
@@ -553,7 +554,7 @@ private:
         [&](const typename Triangulation<dim>::cell_iterator &cell) {
           return cell->is_active() && cell->is_locally_owned() &&
                  mesh_classifier.location_to_level_set(cell) !=
-                   NonMatching::LocationToLevelSet::outside;
+                   inverse_location;
         });
 
     data_out.build_patches();
