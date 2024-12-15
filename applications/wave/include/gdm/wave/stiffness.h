@@ -530,26 +530,26 @@ public:
                   for (const unsigned int i : surface_fe_values.dof_indices())
                     {
                       const auto quadrature_value_jump =
-                        (quadrature_values_0[q] - quadrature_values_1[q]);
+                        (quadrature_values_1[q] - quadrature_values_0[q]);
                       const auto quadrature_gradient_avg =
                         0.5 *
                         (quadrature_gradients_0[q] + quadrature_gradients_1[q]);
 
                       cell_vector_0(i) -=
-                        (+0.5 * normal * surface_fe_values.shape_grad(i, q) *
-                           quadrature_value_jump +
-                         -surface_fe_values.shape_value(i, q) * normal *
-                           quadrature_gradient_avg +
+                        (-0.5 * normal * surface_fe_values.shape_grad(i, q) *
+                           quadrature_value_jump -
+                         surface_fe_values.shape_value(i, q) * normal *
+                           quadrature_gradient_avg -
                          nitsche_parameter / cell_side_length *
                            surface_fe_values.shape_value(i, q) *
                            quadrature_value_jump) *
                         surface_fe_values.JxW(q);
 
                       cell_vector_1(i) -=
-                        (+0.5 * normal * surface_fe_values.shape_grad(i, q) *
+                        (-0.5 * normal * surface_fe_values.shape_grad(i, q) *
                            quadrature_value_jump +
-                         +surface_fe_values.shape_value(i, q) * normal *
-                           quadrature_gradient_avg +
+                         surface_fe_values.shape_value(i, q) * normal *
+                           quadrature_gradient_avg -
                          nitsche_parameter / cell_side_length *
                            surface_fe_values.shape_value(i, q) *
                            quadrature_value_jump) *
