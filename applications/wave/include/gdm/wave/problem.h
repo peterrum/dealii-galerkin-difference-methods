@@ -74,8 +74,6 @@ public:
         const double delta_t =
           params.cfl * std::pow(discretization.get_dx(), params.cfl_pow);
 
-        std::cout << delta_t << std::endl;
-
         const TimeStepping::runge_kutta_method runge_kutta_method =
           TimeStepping::runge_kutta_method::RK_CLASSIC_FOURTH_ORDER;
 
@@ -132,8 +130,6 @@ public:
         const double end_t   = params.end_t;
         const double delta_t =
           params.cfl * std::pow(discretization.get_dx(), params.cfl_pow);
-
-        std::cout << delta_t << std::endl;
 
         const TimeStepping::runge_kutta_method runge_kutta_method =
           TimeStepping::runge_kutta_method::RK_CLASSIC_FOURTH_ORDER;
