@@ -346,6 +346,8 @@ public:
       }
     else if (params.simulation_type == "wave-rk")
       {
+        AssertThrow(params.composite, ExcInternalError());
+
         const double start_t = params.start_t;
         const double end_t   = params.end_t;
         const double delta_t =
@@ -355,33 +357,41 @@ public:
           TimeStepping::runge_kutta_method::RK_CLASSIC_FOURTH_ORDER;
 
         // Compute mass matrix
-        const auto &mass_matrix = mass_matrix_operator.get_sparse_matrix();
+        const auto &mass_matrix_0 = mass_matrix_operator.get_sparse_matrix();
+
+        mass_matrix_operator_opt.reinit(params);
+        const auto &mass_matrix_1 =
+          mass_matrix_operator_opt.get_sparse_matrix();
 
         // Initialize vectors
-        BlockVectorType vec_solution(2);
+        BlockVectorType vec_solution(4);
         discretization.initialize_dof_vector(vec_solution.block(0));
         discretization.initialize_dof_vector(vec_solution.block(1));
+        discretization.initialize_dof_vector(vec_solution.block(2));
+        discretization.initialize_dof_vector(vec_solution.block(3));
         this->set_initial_condition(vec_solution.block(0));
+        this->set_initial_condition(vec_solution.block(1));
 
         // Setup solver
-        this->setup_solver(mass_matrix);
+        this->setup_solver(mass_matrix_0, 0);
+        this->setup_solver(mass_matrix_1, 1);
 
         const auto fu_rhs = [&](const double           time,
                                 const BlockVectorType &solution) {
           BlockVectorType result;
           result.reinit(solution);
-          VectorType vec_rhs;
-          vec_rhs.reinit(solution.block(0));
+          BlockVectorType vec_rhs(2);
+          vec_rhs.block(0).reinit(solution.block(0));
+          vec_rhs.block(1).reinit(solution.block(1));
 
           // du/dt = v
-          result.block(0) = solution.block(1);
+          result.block(0) = solution.block(2);
+          result.block(1) = solution.block(3);
 
           // dv/dt = f(t, u)
-          stiffness_matrix_operator.compute_rhs(vec_rhs,
-                                                solution.block(0),
-                                                true,
-                                                time);
-          this->solve(mass_matrix, result.block(1), vec_rhs);
+          stiffness_matrix_operator.compute_rhs(vec_rhs, solution, true, time);
+          this->solve(mass_matrix_0, result.block(2), vec_rhs.block(0), 0);
+          this->solve(mass_matrix_1, result.block(3), vec_rhs.block(1), 1);
 
           return result;
         };
@@ -392,7 +402,12 @@ public:
         TimeStepping::ExplicitRungeKutta<BlockVectorType> rk;
         rk.initialize(runge_kutta_method);
 
-        this->postprocess(0.0, vec_solution.block(0));
+        this->postprocess(0.0,
+                          vec_solution.block(0),
+                          NonMatching::LocationToLevelSet::inside);
+        this->postprocess(0.0,
+                          vec_solution.block(1),
+                          NonMatching::LocationToLevelSet::outside);
 
         while ((time.is_at_end() == false))
           {
@@ -403,10 +418,17 @@ public:
 
             discretization.get_affine_constraints().distribute(
               vec_solution.block(0));
+            discretization.get_affine_constraints().distribute(
+              vec_solution.block(1));
 
             this->postprocess(time.get_current_time() +
                                 time.get_next_step_size(),
-                              vec_solution.block(0));
+                              vec_solution.block(0),
+                              NonMatching::LocationToLevelSet::inside);
+            this->postprocess(time.get_current_time() +
+                                time.get_next_step_size(),
+                              vec_solution.block(1),
+                              NonMatching::LocationToLevelSet::outside);
 
             time.advance_time();
           }
