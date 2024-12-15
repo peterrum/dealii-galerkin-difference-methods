@@ -235,7 +235,7 @@ main(int argc, char **argv)
                 << std::endl;
       std::cout << std::endl;
 
-      return 9;
+      return 1;
     }
 
   const unsigned int dim = std::atoi(argv[1]);
