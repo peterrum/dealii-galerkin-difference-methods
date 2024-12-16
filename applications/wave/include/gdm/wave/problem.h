@@ -31,6 +31,8 @@ public:
     , params(params)
     , discretization()
     , mass_matrix_operator(discretization)
+    , mass_matrix_operator_opt(discretization,
+                               NonMatching::LocationToLevelSet::outside)
     , stiffness_matrix_operator(discretization)
   {}
 
@@ -67,14 +69,12 @@ public:
         // postprocess
         this->postprocess(0.0, vec_solution);
       }
-    else if (params.simulation_type == "heat-rk")
+    else if ((params.simulation_type == "heat-rk") && (!params.composite))
       {
         const double start_t = params.start_t;
         const double end_t   = params.end_t;
         const double delta_t =
           params.cfl * std::pow(discretization.get_dx(), params.cfl_pow);
-
-        std::cout << delta_t << std::endl;
 
         const TimeStepping::runge_kutta_method runge_kutta_method =
           TimeStepping::runge_kutta_method::RK_CLASSIC_FOURTH_ORDER;
@@ -122,6 +122,87 @@ public:
             this->postprocess(time.get_current_time() +
                                 time.get_next_step_size(),
                               vec_solution);
+
+            time.advance_time();
+          }
+      }
+    else if (params.simulation_type == "heat-rk")
+      {
+        AssertThrow(params.composite, ExcInternalError());
+
+        const double start_t = params.start_t;
+        const double end_t   = params.end_t;
+        const double delta_t =
+          params.cfl * std::pow(discretization.get_dx(), params.cfl_pow);
+
+        const TimeStepping::runge_kutta_method runge_kutta_method =
+          TimeStepping::runge_kutta_method::RK_CLASSIC_FOURTH_ORDER;
+
+        // Compute mass matrix
+        const auto &mass_matrix_0 = mass_matrix_operator.get_sparse_matrix();
+
+        mass_matrix_operator_opt.reinit(params);
+        const auto &mass_matrix_1 =
+          mass_matrix_operator_opt.get_sparse_matrix();
+
+        // Initialize vectors
+        BlockVectorType vec_solution(2);
+        discretization.initialize_dof_vector(vec_solution.block(0));
+        discretization.initialize_dof_vector(vec_solution.block(1));
+        this->set_initial_condition(vec_solution.block(0));
+        this->set_initial_condition(vec_solution.block(1));
+
+        // Setup solver
+        this->setup_solver(mass_matrix_0, 0);
+        this->setup_solver(mass_matrix_1, 1);
+
+        const auto fu_rhs = [&](const double           time,
+                                const BlockVectorType &solution) {
+          BlockVectorType result, vec_rhs;
+          result.reinit(solution);
+          vec_rhs.reinit(solution);
+
+          // du/dt = f(t, u)
+          stiffness_matrix_operator.compute_rhs(vec_rhs, solution, true, time);
+          this->solve(mass_matrix_0, result.block(0), vec_rhs.block(0), 0);
+          this->solve(mass_matrix_1, result.block(1), vec_rhs.block(1), 1);
+
+          return result;
+        };
+
+        // Perform time stepping
+        DiscreteTime time(start_t, end_t, delta_t);
+
+        TimeStepping::ExplicitRungeKutta<BlockVectorType> rk;
+        rk.initialize(runge_kutta_method);
+
+        this->postprocess(0.0,
+                          vec_solution.block(0),
+                          NonMatching::LocationToLevelSet::inside);
+        this->postprocess(0.0,
+                          vec_solution.block(1),
+                          NonMatching::LocationToLevelSet::outside);
+
+        while ((time.is_at_end() == false))
+          {
+            rk.evolve_one_time_step(fu_rhs,
+                                    time.get_current_time(),
+                                    time.get_next_step_size(),
+                                    vec_solution);
+
+            discretization.get_affine_constraints().distribute(
+              vec_solution.block(0));
+            discretization.get_affine_constraints().distribute(
+              vec_solution.block(1));
+
+            this->postprocess(time.get_current_time() +
+                                time.get_next_step_size(),
+                              vec_solution.block(0),
+                              NonMatching::LocationToLevelSet::inside);
+            this->postprocess(time.get_current_time() +
+                                time.get_next_step_size(),
+                              vec_solution.block(1),
+                              NonMatching::LocationToLevelSet::outside);
 
             time.advance_time();
           }
@@ -196,7 +277,7 @@ public:
             time.advance_time();
           }
       }
-    else if (params.simulation_type == "wave-rk")
+    else if ((params.simulation_type == "wave-rk") && (!params.composite))
       {
         const double start_t = params.start_t;
         const double end_t   = params.end_t;
@@ -263,6 +344,95 @@ public:
             time.advance_time();
           }
       }
+    else if (params.simulation_type == "wave-rk")
+      {
+        AssertThrow(params.composite, ExcInternalError());
+
+        const double start_t = params.start_t;
+        const double end_t   = params.end_t;
+        const double delta_t =
+          params.cfl * std::pow(discretization.get_dx(), params.cfl_pow);
+
+        const TimeStepping::runge_kutta_method runge_kutta_method =
+          TimeStepping::runge_kutta_method::RK_CLASSIC_FOURTH_ORDER;
+
+        // Compute mass matrix
+        const auto &mass_matrix_0 = mass_matrix_operator.get_sparse_matrix();
+
+        mass_matrix_operator_opt.reinit(params);
+        const auto &mass_matrix_1 =
+          mass_matrix_operator_opt.get_sparse_matrix();
+
+        // Initialize vectors
+        BlockVectorType vec_solution(4);
+        discretization.initialize_dof_vector(vec_solution.block(0));
+        discretization.initialize_dof_vector(vec_solution.block(1));
+        discretization.initialize_dof_vector(vec_solution.block(2));
+        discretization.initialize_dof_vector(vec_solution.block(3));
+        this->set_initial_condition(vec_solution.block(0));
+        this->set_initial_condition(vec_solution.block(1));
+
+        // Setup solver
+        this->setup_solver(mass_matrix_0, 0);
+        this->setup_solver(mass_matrix_1, 1);
+
+        const auto fu_rhs = [&](const double           time,
+                                const BlockVectorType &solution) {
+          BlockVectorType result;
+          result.reinit(solution);
+          BlockVectorType vec_rhs(2);
+          vec_rhs.block(0).reinit(solution.block(0));
+          vec_rhs.block(1).reinit(solution.block(1));
+
+          // du/dt = v
+          result.block(0) = solution.block(2);
+          result.block(1) = solution.block(3);
+
+          // dv/dt = f(t, u)
+          stiffness_matrix_operator.compute_rhs(vec_rhs, solution, true, time);
+          this->solve(mass_matrix_0, result.block(2), vec_rhs.block(0), 0);
+          this->solve(mass_matrix_1, result.block(3), vec_rhs.block(1), 1);
+
+          return result;
+        };
+
+        // Perform time stepping
+        DiscreteTime time(start_t, end_t, delta_t);
+
+        TimeStepping::ExplicitRungeKutta<BlockVectorType> rk;
+        rk.initialize(runge_kutta_method);
+
+        this->postprocess(0.0,
+                          vec_solution.block(0),
+                          NonMatching::LocationToLevelSet::inside);
+        this->postprocess(0.0,
+                          vec_solution.block(1),
+                          NonMatching::LocationToLevelSet::outside);
+
+        while ((time.is_at_end() == false))
+          {
+            rk.evolve_one_time_step(fu_rhs,
+                                    time.get_current_time(),
+                                    time.get_next_step_size(),
+                                    vec_solution);
+
+            discretization.get_affine_constraints().distribute(
+              vec_solution.block(0));
+            discretization.get_affine_constraints().distribute(
+              vec_solution.block(1));
+
+            this->postprocess(time.get_current_time() +
+                                time.get_next_step_size(),
+                              vec_solution.block(0),
+                              NonMatching::LocationToLevelSet::inside);
+            this->postprocess(time.get_current_time() +
+                                time.get_next_step_size(),
+                              vec_solution.block(1),
+                              NonMatching::LocationToLevelSet::outside);
+
+            time.advance_time();
+          }
+      }
     else
       {
         AssertThrow(false, ExcNotImplemented());
@@ -285,14 +455,15 @@ private:
   }
 
   void
-  setup_solver(const TrilinosWrappers::SparseMatrix &sparse_matrix)
+  setup_solver(const TrilinosWrappers::SparseMatrix &sparse_matrix,
+               const unsigned int                    id = 0)
   {
     if (params.solver_name == "AMG")
-      preconditioner_amg.initialize(sparse_matrix);
+      preconditioner_amg[id].initialize(sparse_matrix);
     else if (params.solver_name == "ILU")
-      preconditioner_ilu.initialize(sparse_matrix);
+      preconditioner_ilu[id].initialize(sparse_matrix);
     else if (params.solver_name == "direct")
-      solver_direct.initialize(sparse_matrix);
+      solver_direct[id].initialize(sparse_matrix);
     else
       AssertThrow(false, ExcNotImplemented());
   }
@@ -300,7 +471,8 @@ private:
   void
   solve(const TrilinosWrappers::SparseMatrix &sparse_matrix,
         VectorType                           &result,
-        const VectorType                     &vec_rhs)
+        const VectorType                     &vec_rhs,
+        const unsigned int                    id = 0)
   {
     if (params.solver_name == "AMG" || params.solver_name == "ILU")
       {
@@ -311,9 +483,9 @@ private:
         SolverCG<VectorType> solver(solver_control);
 
         if (params.solver_name == "AMG")
-          solver.solve(sparse_matrix, result, vec_rhs, preconditioner_amg);
+          solver.solve(sparse_matrix, result, vec_rhs, preconditioner_amg[id]);
         else if (params.solver_name == "ILU")
-          solver.solve(sparse_matrix, result, vec_rhs, preconditioner_ilu);
+          solver.solve(sparse_matrix, result, vec_rhs, preconditioner_ilu[id]);
         else
           AssertThrow(false, ExcNotImplemented());
 
@@ -321,7 +493,7 @@ private:
       }
     else if (params.solver_name == "direct")
       {
-        solver_direct.solve(sparse_matrix, result, vec_rhs);
+        solver_direct[id].solve(sparse_matrix, result, vec_rhs);
       }
     else
       {
@@ -330,9 +502,20 @@ private:
   }
 
   void
-  postprocess(const double time, const VectorType &solution)
+  postprocess(const double                          time,
+              const VectorType                     &solution,
+              const NonMatching::LocationToLevelSet location =
+                NonMatching::LocationToLevelSet::inside)
   {
-    static unsigned int counter = 0;
+    static std::array<unsigned int, 2> counter = {{0, 0}};
+
+    auto &my_counter =
+      counter[(location == NonMatching::LocationToLevelSet::inside) ? 0 : 1];
+
+    const NonMatching::LocationToLevelSet inverse_location =
+      (location == NonMatching::LocationToLevelSet::inside) ?
+        NonMatching::LocationToLevelSet::outside :
+        NonMatching::LocationToLevelSet::inside;
 
     const hp::MappingCollection<dim> &mapping = discretization.get_mapping();
     const Quadrature<1>              &quadrature_1D_error =
@@ -349,8 +532,14 @@ private:
     params.exact_solution->set_time(time);
 
     NonMatching::RegionUpdateFlags region_update_flags_error;
-    region_update_flags_error.inside =
-      update_values | update_JxW_values | update_quadrature_points;
+    if (location == NonMatching::LocationToLevelSet::inside)
+      region_update_flags_error.inside =
+        update_values | update_JxW_values | update_quadrature_points;
+    else if (location == NonMatching::LocationToLevelSet::outside)
+      region_update_flags_error.outside =
+        update_values | update_JxW_values | update_quadrature_points;
+    else
+      AssertThrow(false, ExcNotImplemented());
 
     NonMatching::FEValues<dim> non_matching_fe_values_error(
       fe,
@@ -368,7 +557,7 @@ private:
     for (const auto &cell : system.locally_active_cell_iterators())
       if (cell->is_locally_owned() &&
           (mesh_classifier.location_to_level_set(cell->dealii_iterator()) !=
-           NonMatching::LocationToLevelSet::outside))
+           inverse_location))
         {
           non_matching_fe_values_error.reinit(cell->dealii_iterator(),
                                               numbers::invalid_unsigned_int,
@@ -380,7 +569,9 @@ private:
           cell->get_dof_indices(local_dof_indices);
 
           if (const std::optional<FEValues<dim>> &fe_values =
-                non_matching_fe_values_error.get_inside_fe_values())
+                (location == NonMatching::LocationToLevelSet::inside) ?
+                  non_matching_fe_values_error.get_inside_fe_values() :
+                  non_matching_fe_values_error.get_outside_fe_values())
             {
               std::vector<double> solution_values(
                 fe_values->n_quadrature_points);
@@ -417,7 +608,7 @@ private:
 
     if (pcout.is_active())
       printf("%5d %8.5f %14.8e %14.8e %14.8e\n",
-             counter,
+             my_counter,
              time,
              error_L2,
              error_L1,
@@ -454,15 +645,18 @@ private:
         [&](const typename Triangulation<dim>::cell_iterator &cell) {
           return cell->is_active() && cell->is_locally_owned() &&
                  mesh_classifier.location_to_level_set(cell) !=
-                   NonMatching::LocationToLevelSet::outside;
+                   inverse_location;
         });
 
     data_out.build_patches();
 
-    std::string file_name = "solution_" + std::to_string(counter) + ".vtu";
+    std::string file_name =
+      std::string("solution_") +
+      ((location == NonMatching::LocationToLevelSet::inside) ? "i_" : "o_") +
+      std::to_string(my_counter) + ".vtu";
     data_out.write_vtu_in_parallel(file_name);
 
-    counter++;
+    my_counter++;
   }
 
   const MPI_Comm     comm;
@@ -473,9 +667,10 @@ private:
   Discretization<dim, Number> discretization;
 
   MassMatrixOperator<dim, Number>      mass_matrix_operator;
+  MassMatrixOperator<dim, Number>      mass_matrix_operator_opt;
   StiffnessMatrixOperator<dim, Number> stiffness_matrix_operator;
 
-  TrilinosWrappers::PreconditionAMG preconditioner_amg;
-  TrilinosWrappers::PreconditionILU preconditioner_ilu;
-  TrilinosWrappers::SolverDirect    solver_direct;
+  std::array<TrilinosWrappers::PreconditionAMG, 2> preconditioner_amg;
+  std::array<TrilinosWrappers::PreconditionILU, 2> preconditioner_ilu;
+  std::array<TrilinosWrappers::SolverDirect, 2>    solver_direct;
 };

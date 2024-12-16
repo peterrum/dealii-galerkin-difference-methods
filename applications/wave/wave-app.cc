@@ -1,3 +1,5 @@
+#include <deal.II/base/parameter_handler.h>
+
 #include <boost/math/special_functions/bessel.hpp>
 
 #include <gdm/wave/problem.h>
@@ -57,7 +59,8 @@ fill_parameters(Parameters<dim> &params, const std::string &simulation_name)
       // output
       params.output_fe_degree = params.fe_degree;
     }
-  else if (simulation_name == "heat")
+  else if (simulation_name == "heat" || simulation_name == "heat-rk" ||
+           simulation_name == "heat-impl")
     {
       // adopted from:
       // Gustav Ludvigsson, Kyle R. Steffen, Simon Sticko, Siyang Wang,
@@ -68,7 +71,9 @@ fill_parameters(Parameters<dim> &params, const std::string &simulation_name)
       // https://link.springer.com/article/10.1007/s10915-017-0637-y
 
       // general settings
-      params.simulation_type = "heat-impl"; // "heat-rk" or "heat-impl"
+      params.simulation_type = (simulation_name == "heat") ?
+                                 std::string("heat-impl") :
+                                 simulation_name; // "heat-rk" or "heat-impl"
       params.fe_degree       = 3;
       params.n_components    = 1;
 
@@ -132,6 +137,76 @@ fill_parameters(Parameters<dim> &params, const std::string &simulation_name)
         {
           AssertThrow(false, ExcNotImplemented());
         }
+
+      // linear solvers
+      params.solver_name = "ILU";
+
+      // level set field
+      params.level_set_fe_degree = params.fe_degree;
+      params.level_set_function =
+        std::make_shared<Functions::SignedDistance::Sphere<dim>>();
+
+      // output
+      params.output_fe_degree = params.fe_degree;
+    }
+  else if (simulation_name == "heat-composite")
+    {
+      // adopted from: TODO
+
+      // general settings
+      params.simulation_type = "heat-rk";
+      params.fe_degree       = 3;
+      params.n_components    = 1;
+      params.composite       = true;
+
+      // geometry
+      params.n_subdivisions_1D = 40;
+      params.geometry_left     = -1.21;
+      params.geometry_right    = +1.21;
+
+      // mass matrix
+      params.ghost_parameter_M = 0.75;
+
+      // stiffness matrix
+      params.ghost_parameter_A = 1.5;
+      params.nitsche_parameter = 5.0 * params.fe_degree;
+
+      params.function_domain_dbc =
+        std::make_shared<ScalarFunctionFromFunctionObject<dim>>(
+          [](const auto t, const auto &p) {
+            if (dim == 1)
+              return std::pow(p[0], 9.0) * std::exp(-t);
+            else if (dim == 2)
+              return std::pow(p[0], 9.0) * std::pow(p[1], 8.0) * std::exp(-t);
+
+            AssertThrow(false, ExcNotImplemented());
+
+            return 0.0;
+          });
+
+      params.function_rhs =
+        std::make_shared<ScalarFunctionFromFunctionObject<dim>>(
+          [](const auto t, const auto &p) {
+            if (dim == 1)
+              return -std::pow(p[0], 7.0) * std::exp(-t) *
+                     (std::pow(p[0], 2.0) + 72);
+            else if (dim == 2)
+              return -std::pow(p[0], 7.0) * std::pow(p[1], 6.0) * std::exp(-t) *
+                     (std::pow(p[0], 2.0) * std::pow(p[1], 2.0) +
+                      72 * std::pow(p[1], 2.0) + 56 * std::pow(p[0], 2.0));
+
+            AssertThrow(false, ExcNotImplemented());
+
+            return 0.0;
+          });
+
+      // time stepping
+      params.exact_solution = params.function_domain_dbc;
+      params.start_t        = 0.0;
+      params.end_t          = 0.1;
+
+      params.cfl     = 0.3 / params.fe_degree / params.fe_degree;
+      params.cfl_pow = 2.0;
 
       // linear solvers
       params.solver_name = "ILU";
@@ -208,6 +283,68 @@ fill_parameters(Parameters<dim> &params, const std::string &simulation_name)
       // output
       params.output_fe_degree = params.fe_degree;
     }
+  else if (simulation_name == "wave-composite")
+    {
+      // adopted from: TODO
+
+      // general settings
+      params.simulation_type = "wave-rk";
+      params.fe_degree       = 3;
+      params.n_components    = 1;
+      params.composite       = true;
+
+      // geometry
+      params.n_subdivisions_1D = 40;
+      params.geometry_left     = -1.21;
+      params.geometry_right    = +1.21;
+
+      // mass matrix
+      params.ghost_parameter_M = 0.25 * std::sqrt(3.0);
+
+      // stiffness matrix
+      params.ghost_parameter_A = 0.50 * std::sqrt(3.0);
+      params.nitsche_parameter = 5.0 * params.fe_degree;
+      params.function_domain_dbc =
+        std::make_shared<ScalarFunctionFromFunctionObject<dim>>(
+          [](const auto t, const auto &p) {
+            const auto r = p.norm();
+
+            if (dim == 1)
+              {
+                const auto wave_number = 1.5 * numbers::PI;
+                return std::cos(wave_number * r) * std::cos(wave_number * t);
+              }
+            else if (dim == 2)
+              {
+                const auto wave_number = 3.0 * numbers::PI;
+                return boost::math::cyl_bessel_j(0, wave_number * r) *
+                       std::cos(wave_number * t);
+              }
+            else
+              AssertThrow(false, ExcNotImplemented());
+          });
+      params.function_rhs = {};
+
+      // params.function_interface_dbc = params.function_domain_dbc;
+
+      // time stepping
+      params.exact_solution = params.function_domain_dbc;
+      params.start_t        = 0.0;
+      params.end_t          = 2.0;
+      params.cfl            = 0.3;
+      params.cfl_pow        = 1.0;
+
+      // linear solvers
+      params.solver_name = "AMG";
+
+      // level set field
+      params.level_set_fe_degree = params.fe_degree;
+      params.level_set_function =
+        std::make_shared<Functions::SignedDistance::Sphere<dim>>();
+
+      // output
+      params.output_fe_degree = params.fe_degree;
+    }
   else
     {
       AssertThrow(false, ExcNotImplemented());
@@ -226,20 +363,44 @@ main(int argc, char **argv)
 {
   Utilities::MPI::MPI_InitFinalize mpi(argc, argv, 1);
 
-  if (argc != 3)
+  if ((argc != 3) && ((argc != 2) || (std::string(argv[1]) == "--help")))
     {
       std::cout << "Usage: ./wave-app dim simulation" << std::endl;
       std::cout << std::endl;
       std::cout << "dim         number of dimensions (1-3)" << std::endl;
-      std::cout << "simulation  name of simulation (step84, heat, wave)"
+      std::cout << "simulation  name of simulation (step85, heat, wave)"
                 << std::endl;
       std::cout << std::endl;
+      std::cout << std::endl;
+      std::cout << std::endl;
 
-      return 9;
+      std::cout << "Usage: ./wave-app file" << std::endl;
+      std::cout << std::endl;
+      std::cout << "file        name of parameter file (*.json)" << std::endl;
+      std::cout << std::endl;
+
+      return 1;
     }
 
-  const unsigned int dim = std::atoi(argv[1]);
-  const std::string  simulation_name(argv[2]);
+  unsigned int dim;
+  std::string  simulation_name;
+
+  if (argc == 3)
+    {
+      dim             = std::atoi(argv[1]);
+      simulation_name = std::string(argv[2]);
+    }
+  else if (argc == 2)
+    {
+      dealii::ParameterHandler prm;
+      prm.add_parameter("simulation name", simulation_name);
+      prm.add_parameter("dim", dim);
+      prm.parse_input(std::string(argv[1]), "", true);
+    }
+  else
+    {
+      AssertThrow(false, ExcNotImplemented());
+    }
 
   if (dim == 1)
     {

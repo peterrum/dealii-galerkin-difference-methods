@@ -12,3 +12,6 @@ FOREACH ( source_file ${SOURCE_FILES} )
     target_include_directories(${exec} PRIVATE "include")
 
 ENDFOREACH ( source_file ${SOURCE_FILES} )
+
+ADD_SUBDIRECTORY(tests)
+
