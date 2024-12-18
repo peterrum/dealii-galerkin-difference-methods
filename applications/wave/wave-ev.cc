@@ -155,6 +155,7 @@ parse_parameters(int              argc,
   unsigned int fe_degree         = 5;
   unsigned int n_subdivisions_1D = 100;
   double       alpha             = -1.0;
+  bool         align             = false;
 
   for (int i = 1; i < argc;)
     {
@@ -224,6 +225,11 @@ parse_parameters(int              argc,
           alpha = std::atof(argv[i + 1]);
           i += 2;
         }
+      else if (label == "--align")
+        {
+          align = true;
+          i += 1;
+        }
       else if (label == "--rescale_matrix")
         {
           my_params.rescale_matrix = true;
@@ -235,20 +241,44 @@ parse_parameters(int              argc,
         }
     }
 
-  if (alpha >= 0.0)
+  unsigned int n_relevant_cells = numbers::invalid_unsigned_int;
+
+  if ((alpha >= 0.0) && align)
+    {
+      const auto h = 1.21 / (n_subdivisions_1D / 2);
+
+      n_relevant_cells = 2 * std::floor(radius / h);
+      radius           = h * (n_relevant_cells / 2 - alpha);
+
+      params.mapping_q_cache_function = [radius](const auto p) {
+        auto pp = p;
+
+        pp[0] = (p[0] >= 0.0 ? +1.0 : -1.0) * std::min(std::abs(p[0]), radius);
+
+        return pp;
+      };
+
+      radius = 2.0;
+    }
+  else if (alpha >= 0.0)
     {
       auto h = 1.21 / (n_subdivisions_1D / 2);
-      radius = h * (std::floor(radius / h) - alpha);
+
+      n_relevant_cells = 2 * std::floor(radius / h);
+      radius           = h * (n_relevant_cells / 2 - alpha);
+      n_relevant_cells = n_subdivisions_1D;
     }
+  else
+    n_relevant_cells = n_subdivisions_1D;
 
   // general settings
   params.fe_degree    = fe_degree;
   params.n_components = 1;
 
   // geometry
-  params.n_subdivisions_1D = n_subdivisions_1D;
-  params.geometry_left     = -1.21;
-  params.geometry_right    = +1.21;
+  params.n_subdivisions_1D = n_relevant_cells;
+  params.geometry_left     = -1.21 / n_subdivisions_1D * n_relevant_cells;
+  params.geometry_right    = +1.21 / n_subdivisions_1D * n_relevant_cells;
 
   // mass matrix
   params.ghost_parameter_M = scale * 0.25 * std::sqrt(3.0);

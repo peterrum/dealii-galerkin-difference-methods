@@ -5,6 +5,8 @@
 
 #include <deal.II/dofs/dof_tools.h>
 
+#include <deal.II/fe/mapping_q_cache.h>
+
 #include <deal.II/lac/la_parallel_vector.h>
 
 #include <deal.II/non_matching/fe_immersed_values.h>
@@ -47,15 +49,32 @@ public:
                                   geometry_left,
                                   geometry_right);
 
+    const auto &tria = system->get_triangulation();
+
     dx = (geometry_right - geometry_left) / n_subdivisions_1D;
 
     // Create mapping
-    mapping.push_back(MappingQ1<dim>());
+    if (params.mapping_q_cache_function)
+      {
+        MappingQ1<dim> mapping_q1;
+
+        MappingQCache<dim> mapping_q_cache(1 /*TODO*/);
+
+        mapping_q_cache.initialize(
+          mapping_q1,
+          tria,
+          [&](const auto &, const auto &p) {
+            return params.mapping_q_cache_function(p);
+          },
+          false);
+
+        mapping.push_back(mapping_q_cache);
+      }
+    else
+      mapping.push_back(MappingQ1<dim>());
 
     // Categorize cells
     system->categorize();
-
-    const auto &tria = system->get_triangulation();
 
     // level set and classify cells
     level_set_dof_handler.reinit(tria);

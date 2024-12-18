@@ -119,8 +119,14 @@ private:
                                   update_JxW_values | update_quadrature_points |
                                   update_normal_vectors;
 
-    NonMatching::FEValues<dim> non_matching_fe_values(fe,
-                                                      quadrature_1D,
+    hp::FECollection<dim> fe_collection(fe);
+    hp::QCollection<dim>  quadrature_collection(quadrature_1D);
+    hp::QCollection<1>    quadrature_1D_collection(quadrature_1D);
+
+    NonMatching::FEValues<dim> non_matching_fe_values(mapping,
+                                                      fe_collection,
+                                                      quadrature_collection,
+                                                      quadrature_1D_collection,
                                                       region_update_flags,
                                                       mesh_classifier,
                                                       level_set_dof_handler,
