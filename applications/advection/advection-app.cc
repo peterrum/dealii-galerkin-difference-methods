@@ -1083,8 +1083,6 @@ test(ConvergenceTable  &table,
                               time.get_next_step_size(),
                               solution);
 
-      constraints.distribute(solution);
-
       // output result
       error =
         fu_postprocessing(time.get_current_time() + time.get_next_step_size(),
