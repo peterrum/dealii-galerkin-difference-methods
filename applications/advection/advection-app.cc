@@ -1117,43 +1117,12 @@ main(int argc, char **argv)
 {
   Utilities::MPI::MPI_InitFinalize mpi(argc, argv, 1);
 
+  const std::string case_name = "parallel-convergence";
+
   ConvergenceTable table;
 
-  if (false)
-    {
-      const unsigned int n_subdivisions_1D = 10;
-      const double       cfl               = 0.1;
-
-      for (const unsigned int fe_degree : {1, 3, 5})
-        test<2>(table, fe_degree, n_subdivisions_1D, cfl, false);
-
-      for (const unsigned int fe_degree : {1, 3, 5})
-        test<2>(table, fe_degree, n_subdivisions_1D, cfl, true);
-
-      if (Utilities::MPI::this_mpi_process(MPI_COMM_WORLD) == 0)
-        {
-          table.write_text(std::cout);
-          std::cout << std::endl;
-        }
-    }
-
-  if (false)
-    {
-      const unsigned int fe_degree         = 5;
-      const unsigned int n_subdivisions_1D = 40;
-      const double       cfl               = 0.1;
-
-      for (double factor = 0.5; factor <= 2.0; factor += 0.1)
-        test<2>(table, fe_degree, n_subdivisions_1D, cfl, true, factor, true);
-
-      if (Utilities::MPI::this_mpi_process(MPI_COMM_WORLD) == 0)
-        {
-          table.write_text(std::cout);
-          std::cout << std::endl;
-        }
-    }
-
-  if (false)
+  // parallel ramp: fe degree, cfl, h
+  if (case_name == "parallel-convergence")
     {
       const double factor = 5.0;
 
@@ -1178,7 +1147,8 @@ main(int argc, char **argv)
         }
     }
 
-  if (true)
+  // parallel ramp: fe degree, ramp degree
+  if (case_name == "parallel-ramp-degree")
     {
       for (const unsigned int fe_degree : {3, 5})
         {
@@ -1201,7 +1171,8 @@ main(int argc, char **argv)
         }
     }
 
-  if (false)
+  // non-parallel ramp: fe degree, advection direction
+  if (case_name == "non-parallel-advection-direction")
     {
       for (const unsigned int fe_degree : {3, 5})
         {
