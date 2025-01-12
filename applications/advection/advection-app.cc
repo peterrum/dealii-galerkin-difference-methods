@@ -53,12 +53,8 @@ template <int dim, typename Number = double>
 class ExactSolution : public dealii::Function<dim, Number>
 {
 public:
-  ExactSolution(const double x_shift,
-                const double phi,
-                const double phi_add,
-                const double time = 0.)
-    : dealii::Function<dim, Number>(1, time)
-    , x_shift(x_shift)
+  ExactSolution(const double x_shift, const double phi, const double phi_add)
+    : x_shift(x_shift)
     , phi(phi)
   {
     advection[0] = 2.0 * std::cos(phi + phi_add);
@@ -95,10 +91,8 @@ class ExactSolutionDerivative : public dealii::Function<dim, Number>
 public:
   ExactSolutionDerivative(const double x_shift,
                           const double phi,
-                          const double phi_add,
-                          const double time = 0.)
-    : dealii::Function<dim, Number>(1, time)
-    , x_shift(x_shift)
+                          const double phi_add)
+    : x_shift(x_shift)
     , phi(phi)
   {
     advection[0] = 2.0 * std::cos(phi + phi_add);
