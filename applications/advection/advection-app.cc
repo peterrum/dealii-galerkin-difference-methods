@@ -142,18 +142,15 @@ test(ConvergenceTable  &table,
   const double phi     = (numbers::PI * increment / 180.0) * factor; // TODO
   const double phi_add = (numbers::PI * increment / 180.0) * factor_rotation;
   const double x_shift = 0.2001;
-  const unsigned int n_components           = 1;
-  const unsigned int fe_degree_time_stepper = fe_degree;
-  const unsigned int fe_degree_level_set    = 1;
-  const unsigned int fe_degree_output       = 2;
-  const double       dx                     = (1.0 / n_subdivisions_1D);
-  const double       max_vel                = 2.0;
-  const double       sandra_factor =
-    false ? (1.0 / (2 * fe_degree_time_stepper + 1)) : 1.0;
-  const double delta_t = dx * cfl * sandra_factor / max_vel;
-  const double start_t = 0.0;
-  const double end_t   = 0.1;
-  const double alpha   = 0.0;
+  const unsigned int                     n_components        = 1;
+  const unsigned int                     fe_degree_level_set = 1;
+  const unsigned int                     fe_degree_output    = 2;
+  const double                           dx      = (1.0 / n_subdivisions_1D);
+  const double                           max_vel = 2.0;
+  const double                           delta_t = dx * cfl / max_vel;
+  const double                           start_t = 0.0;
+  const double                           end_t   = 0.1;
+  const double                           alpha   = 0.0;
   const TimeStepping::runge_kutta_method runge_kutta_method =
     TimeStepping::runge_kutta_method::RK_CLASSIC_FOURTH_ORDER;
   const std::string solver_name = "ILU";
