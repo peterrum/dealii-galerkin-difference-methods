@@ -127,33 +127,6 @@ private:
 
 
 
-template <typename SparseMatrixType>
-void
-eigenvalue_estimates(const SparseMatrixType &matrix_a)
-{
-  LAPACKFullMatrix<double> lapack_full_matrix(matrix_a.m(), matrix_a.n());
-
-
-  for (const auto &entry : matrix_a)
-    lapack_full_matrix.set(entry.row(), entry.column(), entry.value());
-
-  lapack_full_matrix.compute_eigenvalues();
-
-  std::vector<double> eigenvalues;
-
-  for (unsigned int i = 0; i < lapack_full_matrix.m(); ++i)
-    eigenvalues.push_back(lapack_full_matrix.eigenvalue(i).real());
-
-  std::sort(eigenvalues.begin(), eigenvalues.end());
-
-  printf("%10.2e %10.2e %10.2e \n",
-         eigenvalues[0],
-         eigenvalues.back(),
-         eigenvalues.back() / eigenvalues[0]);
-}
-
-
-
 template <int dim>
 void
 test(ConvergenceTable  &table,
@@ -1102,11 +1075,6 @@ test(ConvergenceTable  &table,
   table.set_scientific("error_1_face", true);
   table.add_value("error_inf_face", error[3]);
   table.set_scientific("error_inf_face", true);
-
-  if (false)
-    {
-      eigenvalue_estimates(sparse_matrix);
-    }
 
   pcout << std::endl;
 }
