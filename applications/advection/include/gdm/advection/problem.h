@@ -17,7 +17,7 @@ public:
 
   AdvectionProblem(const Parameters<dim> &params)
     : comm(MPI_COMM_WORLD)
-    , pcout(std::cout, Utilities::MPI::this_mpi_process(comm) == 0)
+    , pcout(std::cout, (Utilities::MPI::this_mpi_process(comm) == 0) && false)
     , params(params)
     , discretization()
   {}
@@ -28,19 +28,16 @@ public:
     discretization.reinit(params);
 
     // settings
-    const unsigned int fe_degree           = params.fe_degree;
-    const unsigned int n_subdivisions_1D   = params.n_subdivisions_1D;
-    const bool         do_ghost_penalty    = true;
-    const unsigned int n_components        = 1;
-    const unsigned int fe_degree_level_set = 1;
-    const unsigned int fe_degree_output    = 2;
-    const double       dx                  = (1.0 / n_subdivisions_1D);
-    const double       max_vel             = 2.0;
-    const double       start_t             = params.start_t;
-    const double       end_t               = params.end_t;
-    const double       cfl                 = params.cfl;
-    const double       delta_t             = dx * cfl / max_vel;
-    const double       alpha               = 0.0;
+    const unsigned int fe_degree         = params.fe_degree;
+    const unsigned int n_subdivisions_1D = params.n_subdivisions_1D;
+    const unsigned int fe_degree_output  = 2;
+    const double       dx                = (1.0 / n_subdivisions_1D);
+    const double       max_vel           = 2.0;
+    const double       start_t           = params.start_t;
+    const double       end_t             = params.end_t;
+    const double       cfl               = params.cfl;
+    const double       delta_t           = dx * cfl / max_vel;
+    const double       alpha             = 0.0;
     const TimeStepping::runge_kutta_method runge_kutta_method =
       TimeStepping::runge_kutta_method::RK_CLASSIC_FOURTH_ORDER;
     const std::string solver_name = "ILU";
@@ -50,59 +47,23 @@ public:
     auto advection          = params.advection;
     auto level_set_function = params.level_set_function;
 
-    const double ghost_parameter = 0.5;
-
-    const MPI_Comm comm = MPI_COMM_WORLD;
-
-    ConditionalOStream pcout(std::cout,
-                             (Utilities::MPI::this_mpi_process(comm) == 0) &&
-                               false);
+    const double       ghost_parameter = 0.5;
     ConditionalOStream pcout_detail(
       std::cout, (Utilities::MPI::this_mpi_process(comm) == 0) && false);
 
-    // Create GDM system
-    GDM::System<dim> system(comm, fe_degree, n_components, do_ghost_penalty);
-
-    // Create mesh
-    system.subdivided_hyper_cube(n_subdivisions_1D, 0, 1);
-
-    // Create finite elements
-    const auto &fe = system.get_fe();
-
-    // Create mapping
-    hp::MappingCollection<dim> mapping;
-    mapping.push_back(MappingQ1<dim>());
-
-    // Categorize cells
-    system.categorize();
-
-    const auto &tria = system.get_triangulation();
-
-    // level set and classify cells
-    const FE_Q<dim> fe_level_set(fe_degree_level_set);
-    DoFHandler<dim> level_set_dof_handler(tria);
-    level_set_dof_handler.distribute_dofs(fe_level_set);
-
-    VectorType level_set;
-    level_set.reinit(level_set_dof_handler.locally_owned_dofs(),
-                     DoFTools::extract_locally_relevant_dofs(
-                       level_set_dof_handler),
-                     comm);
-
-    NonMatching::MeshClassifier<dim> mesh_classifier(level_set_dof_handler,
-                                                     level_set);
-    VectorTools::interpolate(level_set_dof_handler,
-                             *level_set_function,
-                             level_set);
-
-    level_set.update_ghost_values();
-    mesh_classifier.reclassify();
+    const auto                      &mapping = discretization.get_mapping();
+    const auto                      &system  = discretization.get_system();
+    const AffineConstraints<Number> &constraints =
+      discretization.get_affine_constraints();
+    const NonMatching::MeshClassifier<dim> &mesh_classifier =
+      discretization.get_mesh_classifier();
+    const hp::FECollection<dim> &fe        = discretization.get_fe();
+    const VectorType            &level_set = discretization.get_level_set();
+    const DoFHandler<dim>       &level_set_dof_handler =
+      discretization.get_level_set_dof_handler();
 
     const auto face_has_ghost_penalty = [&](const auto        &cell,
                                             const unsigned int face_index) {
-      if (!do_ghost_penalty)
-        return false;
-
       if (cell->at_boundary(face_index))
         return false;
 
@@ -123,17 +84,10 @@ public:
       return false;
     };
 
-    AffineConstraints<Number> constraints;
-    constraints.close();
-
     // compute mass matrix
     TrilinosWrappers::SparsityPattern sparsity_pattern(
       system.locally_owned_dofs(), MPI_COMM_WORLD);
-
-    if (do_ghost_penalty)
-      system.create_flux_sparsity_pattern(constraints, sparsity_pattern);
-    else
-      system.create_sparsity_pattern(constraints, sparsity_pattern);
+    system.create_flux_sparsity_pattern(constraints, sparsity_pattern);
     sparsity_pattern.compress();
 
     TrilinosWrappers::SparseMatrix sparse_matrix;
