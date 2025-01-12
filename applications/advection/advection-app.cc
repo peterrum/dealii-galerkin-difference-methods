@@ -173,7 +173,8 @@ test(ConvergenceTable  &table,
   table.add_value("rot_0", rotation_0);
   table.add_value("rot_1", rotation_1);
 
-  test<dim>(table, params);
+  AdvectionProblem<dim> problem(params);
+  problem.run(table);
 }
 
 
