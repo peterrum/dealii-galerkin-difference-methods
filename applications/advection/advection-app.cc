@@ -113,12 +113,6 @@ public:
            (std::cos(phi) * (-advection[0]) + std::sin(phi) * (-advection[1]));
   }
 
-  const dealii::Tensor<1, dim> &
-  get_transport_direction() const
-  {
-    return advection;
-  }
-
 private:
   dealii::Tensor<1, dim> advection;
   const double           x_shift;
@@ -178,6 +172,12 @@ test(ConvergenceTable  &table,
   ExactSolutionDerivative<dim> exact_solution_der(x_shift, phi, phi_add);
   Functions::ConstantFunction<dim, Number> advection(
     exact_solution.get_transport_direction().begin_raw(), dim);
+  const Point<dim> point = {x_shift, 0.0};
+  Tensor<1, dim>   normal;
+  normal[0] = +std::sin(phi);
+  normal[1] = -std::cos(phi);
+  const Functions::SignedDistance::Plane<dim> signed_distance_sphere(point,
+                                                                     normal);
 
   // Create GDM system
   GDM::System<dim> system(comm, fe_degree, n_components, do_ghost_penalty);
@@ -210,13 +210,6 @@ test(ConvergenceTable  &table,
 
   NonMatching::MeshClassifier<dim> mesh_classifier(level_set_dof_handler,
                                                    level_set);
-
-  const Point<dim> point = {x_shift, 0.0};
-  Tensor<1, dim>   normal;
-  normal[0] = +std::sin(phi);
-  normal[1] = -std::cos(phi);
-  const Functions::SignedDistance::Plane<dim> signed_distance_sphere(point,
-                                                                     normal);
   VectorTools::interpolate(level_set_dof_handler,
                            signed_distance_sphere,
                            level_set);
