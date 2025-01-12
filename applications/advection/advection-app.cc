@@ -125,8 +125,10 @@ template <unsigned int dim>
 struct Parameters
 {
   // general settings
+  unsigned int fe_degree;
 
   // geometry
+  unsigned int n_subdivisions_1D;
 
   // mass matrix
 
@@ -135,6 +137,9 @@ struct Parameters
   // time stepping
   std::shared_ptr<Function<dim>> exact_solution;
   std::shared_ptr<Function<dim>> exact_solution_der;
+  double                         start_t;
+  double                         end_t;
+  double                         cfl;
 
   // linear solver
 
@@ -151,27 +156,26 @@ struct Parameters
 
 template <int dim>
 void
-test(ConvergenceTable      &table,
-     const unsigned int     fe_degree,
-     const unsigned int     n_subdivisions_1D,
-     const double           cfl,
-     const Parameters<dim> &params)
+test(ConvergenceTable &table, const Parameters<dim> &params)
 {
   using Number          = double;
   using VectorType      = LinearAlgebra::distributed::Vector<Number>;
   using BlockVectorType = LinearAlgebra::distributed::BlockVector<Number>;
 
   // settings
-  const bool                             do_ghost_penalty    = true;
-  const unsigned int                     n_components        = 1;
-  const unsigned int                     fe_degree_level_set = 1;
-  const unsigned int                     fe_degree_output    = 2;
-  const double                           dx      = (1.0 / n_subdivisions_1D);
-  const double                           max_vel = 2.0;
-  const double                           delta_t = dx * cfl / max_vel;
-  const double                           start_t = 0.0;
-  const double                           end_t   = 0.1;
-  const double                           alpha   = 0.0;
+  const unsigned int fe_degree           = params.fe_degree;
+  const unsigned int n_subdivisions_1D   = params.n_subdivisions_1D;
+  const bool         do_ghost_penalty    = true;
+  const unsigned int n_components        = 1;
+  const unsigned int fe_degree_level_set = 1;
+  const unsigned int fe_degree_output    = 2;
+  const double       dx                  = (1.0 / n_subdivisions_1D);
+  const double       max_vel             = 2.0;
+  const double       start_t             = params.start_t;
+  const double       end_t               = params.end_t;
+  const double       cfl                 = params.cfl;
+  const double       delta_t             = dx * cfl / max_vel;
+  const double       alpha               = 0.0;
   const TimeStepping::runge_kutta_method runge_kutta_method =
     TimeStepping::runge_kutta_method::RK_CLASSIC_FOURTH_ORDER;
   const std::string solver_name = "ILU";
@@ -1102,6 +1106,21 @@ test(ConvergenceTable  &table,
 
   Parameters<dim> params;
 
+  // gerneral settings
+  params.fe_degree = fe_degree;
+
+  // geometry
+  params.n_subdivisions_1D = n_subdivisions_1D;
+
+  // mass matrix
+
+  // stiffness matrix
+
+  // time stepping
+  params.start_t = 0.0;
+  params.end_t   = 0.1;
+  params.cfl     = cfl;
+
   params.exact_solution =
     std::make_shared<ExactSolution<dim>>(x_shift, phi, phi_add);
   params.exact_solution_der =
@@ -1123,7 +1142,7 @@ test(ConvergenceTable  &table,
   table.add_value("rot_0", rotation_0);
   table.add_value("rot_1", rotation_1);
 
-  test<dim>(table, fe_degree, n_subdivisions_1D, cfl, params);
+  test<dim>(table, params);
 }
 
 
