@@ -1,5 +1,6 @@
 #pragma once
 
+#include <gdm/advection/discretization.h>
 #include <gdm/advection/parameters.h>
 #include <gdm/data_out.h>
 #include <gdm/system.h>
@@ -16,11 +17,14 @@ public:
 
   AdvectionProblem(const Parameters<dim> &params)
     : params(params)
+    , discretization()
   {}
 
   void
   run(ConvergenceTable &table)
   {
+    discretization.reinit(params);
+
     // settings
     const unsigned int fe_degree           = params.fe_degree;
     const unsigned int n_subdivisions_1D   = params.n_subdivisions_1D;
@@ -956,4 +960,6 @@ public:
 
 private:
   const Parameters<dim> &params;
+
+  Discretization<dim, Number> discretization;
 };
