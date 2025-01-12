@@ -138,10 +138,13 @@ test(ConvergenceTable  &table,
   Parameters<dim> params;
 
   // gerneral settings
-  params.fe_degree = fe_degree;
+  params.fe_degree    = fe_degree;
+  params.n_components = 1;
 
   // geometry
   params.n_subdivisions_1D = n_subdivisions_1D;
+  params.geometry_left     = 0.0;
+  params.geometry_right    = 1.0;
 
   // mass matrix
 
@@ -163,7 +166,9 @@ test(ConvergenceTable  &table,
 
   params.advection = std::make_shared<Functions::ConstantFunction<dim, double>>(
     advection.begin_raw(), dim);
-  const Point<dim> point = {x_shift, 0.0};
+
+  params.level_set_fe_degree = 1;
+  const Point<dim> point     = {x_shift, 0.0};
   Tensor<1, dim>   normal;
   normal[0] = +std::sin(phi);
   normal[1] = -std::cos(phi);

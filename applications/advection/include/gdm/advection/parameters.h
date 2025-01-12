@@ -7,9 +7,12 @@ struct Parameters
 {
   // general settings
   unsigned int fe_degree;
+  unsigned int n_components;
 
   // geometry
   unsigned int n_subdivisions_1D;
+  double       geometry_left;
+  double       geometry_right;
 
   // mass matrix
 
@@ -28,6 +31,7 @@ struct Parameters
   std::shared_ptr<Function<dim>> advection;
 
   // level set field
+  unsigned int                   level_set_fe_degree;
   std::shared_ptr<Function<dim>> level_set_function;
 
   // output
