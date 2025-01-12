@@ -121,27 +121,48 @@ private:
 
 
 
+template <unsigned int dim>
+struct Parameters
+{
+  // general settings
+
+  // geometry
+
+  // mass matrix
+
+  // stiffness matrix
+
+  // time stepping
+  std::shared_ptr<Function<dim>> exact_solution;
+  std::shared_ptr<Function<dim>> exact_solution_der;
+
+  // linear solver
+
+  // advection
+  std::shared_ptr<Function<dim>> advection;
+
+  // level set field
+  std::shared_ptr<Function<dim>> level_set_function;
+
+  // output
+};
+
+
+
 template <int dim>
 void
-test(ConvergenceTable  &table,
-     const unsigned int fe_degree,
-     const unsigned int n_subdivisions_1D,
-     const double       cfl,
-     const double       factor_rotation,
-     const double       factor)
+test(ConvergenceTable      &table,
+     const unsigned int     fe_degree,
+     const unsigned int     n_subdivisions_1D,
+     const double           cfl,
+     const Parameters<dim> &params)
 {
   using Number          = double;
   using VectorType      = LinearAlgebra::distributed::Vector<Number>;
   using BlockVectorType = LinearAlgebra::distributed::BlockVector<Number>;
 
   // settings
-  const bool   do_ghost_penalty = true;
-  const double increment        = 5.0;
-  const double rotation_0       = increment * factor;
-  const double rotation_1       = increment * (factor + factor_rotation);
-  const double phi     = (numbers::PI * increment / 180.0) * factor; // TODO
-  const double phi_add = (numbers::PI * increment / 180.0) * factor_rotation;
-  const double x_shift = 0.2001;
+  const bool                             do_ghost_penalty    = true;
   const unsigned int                     n_components        = 1;
   const unsigned int                     fe_degree_level_set = 1;
   const unsigned int                     fe_degree_output    = 2;
@@ -155,6 +176,11 @@ test(ConvergenceTable  &table,
     TimeStepping::runge_kutta_method::RK_CLASSIC_FOURTH_ORDER;
   const std::string solver_name = "ILU";
 
+  auto exact_solution     = params.exact_solution;
+  auto exact_solution_der = params.exact_solution_der;
+  auto advection          = params.advection;
+  auto level_set_function = params.level_set_function;
+
   const double ghost_parameter = 0.5;
 
   const MPI_Comm comm = MPI_COMM_WORLD;
@@ -164,17 +190,6 @@ test(ConvergenceTable  &table,
                              false);
   ConditionalOStream pcout_detail(
     std::cout, (Utilities::MPI::this_mpi_process(comm) == 0) && false);
-
-  ExactSolution<dim>           exact_solution(x_shift, phi, phi_add);
-  ExactSolutionDerivative<dim> exact_solution_der(x_shift, phi, phi_add);
-  Functions::ConstantFunction<dim, Number> advection(
-    exact_solution.get_transport_direction().begin_raw(), dim);
-  const Point<dim> point = {x_shift, 0.0};
-  Tensor<1, dim>   normal;
-  normal[0] = +std::sin(phi);
-  normal[1] = -std::cos(phi);
-  const Functions::SignedDistance::Plane<dim> signed_distance_sphere(point,
-                                                                     normal);
 
   // Create GDM system
   GDM::System<dim> system(comm, fe_degree, n_components, do_ghost_penalty);
@@ -208,7 +223,7 @@ test(ConvergenceTable  &table,
   NonMatching::MeshClassifier<dim> mesh_classifier(level_set_dof_handler,
                                                    level_set);
   VectorTools::interpolate(level_set_dof_handler,
-                           signed_distance_sphere,
+                           *level_set_function,
                            level_set);
 
   level_set.update_ghost_values();
@@ -409,7 +424,7 @@ test(ConvergenceTable  &table,
   solution.block(1).reinit(partitioner);
   GDM::VectorTools::interpolate(mapping,
                                 system,
-                                exact_solution,
+                                *exact_solution,
                                 solution.block(1));
 
   // set up BCs
@@ -458,7 +473,7 @@ test(ConvergenceTable  &table,
           const auto &surface_fe_values_ptr =
             non_matching_fe_values.get_surface_fe_values();
 
-          if ((phi_add != 0) && surface_fe_values_ptr)
+          if (surface_fe_values_ptr)
             {
               const auto &fe_face_values = *surface_fe_values_ptr;
 
@@ -500,9 +515,9 @@ test(ConvergenceTable  &table,
   solution.block(0).reinit(all_points.size());
 
   const auto fu_eval_bc = [&](const double time, VectorType &stage_bc) {
-    exact_solution.set_time(time);
+    exact_solution->set_time(time);
     for (unsigned int i = 0; i < all_points.size(); ++i)
-      stage_bc[i] = exact_solution.value(all_points[i]);
+      stage_bc[i] = exact_solution->value(all_points[i]);
   };
 
   // helper function to evaluate right-hand-side vector
@@ -518,9 +533,9 @@ test(ConvergenceTable  &table,
     vec_rhs.reinit(solution); // result of assembly of rhs vector
 
     // evaluate derivative of bc
-    exact_solution_der.set_time(time);
+    exact_solution_der->set_time(time);
     for (unsigned int i = 0; i < all_points.size(); ++i)
-      result.block(0)[i] = exact_solution_der.value(all_points[i]);
+      result.block(0)[i] = exact_solution_der->value(all_points[i]);
 
     // evaluate advection operator
     const QGauss<1> quadrature_1D(fe_degree + 1);
@@ -558,7 +573,7 @@ test(ConvergenceTable  &table,
       hp::QCollection<dim - 1>(QGauss<dim - 1>(fe_degree + 1)),
       update_gradients | update_JxW_values | update_normal_vectors);
 
-    advection.set_time(time);
+    advection->set_time(time);
 
     unsigned int point_counter = 0;
 
@@ -619,9 +634,9 @@ test(ConvergenceTable  &table,
                   for (unsigned int d = 0; d < dim; ++d)
                     {
                       fluxes_value[q] +=
-                        quadrature_gradients[q][d] * advection.value(point, d);
+                        quadrature_gradients[q][d] * advection->value(point, d);
                       fluxes_gradient[q][d] =
-                        quadrature_values[q] * advection.value(point, d);
+                        quadrature_values[q] * advection->value(point, d);
                     }
                 }
 
@@ -638,7 +653,7 @@ test(ConvergenceTable  &table,
             }
 
           // (II) surface integral to apply BC
-          if ((phi_add != 0) && surface_fe_values_ptr)
+          if (surface_fe_values_ptr)
             {
               const auto &fe_face_values = *surface_fe_values_ptr;
 
@@ -656,7 +671,7 @@ test(ConvergenceTable  &table,
                   const auto point  = fe_face_values.quadrature_point(q);
 
                   for (unsigned int d = 0; d < dim; ++d)
-                    fluxes[q] += normal[d] * advection.value(point, d);
+                    fluxes[q] += normal[d] * advection->value(point, d);
                 }
 
               std::vector<Number> u_plus(fe_face_values.n_quadrature_points, 0);
@@ -711,7 +726,7 @@ test(ConvergenceTable  &table,
                         const auto point  = fe_face_values.quadrature_point(q);
 
                         for (unsigned int d = 0; d < dim; ++d)
-                          fluxes[q] += normal[d] * advection.value(point, d);
+                          fluxes[q] += normal[d] * advection->value(point, d);
                       }
 
                     std::vector<Number> u_plus(
@@ -849,7 +864,7 @@ test(ConvergenceTable  &table,
     const auto &solution = stage_bc_and_solution.block(1);
 
     // compute error
-    exact_solution.set_time(time);
+    exact_solution->set_time(time);
 
     // compute error
     const QGauss<1> quadrature_1D_error(fe_degree + 1);
@@ -910,7 +925,7 @@ test(ConvergenceTable  &table,
                 {
                   const Point<dim> &point = fe_values->quadrature_point(q);
                   const double      error_at_point =
-                    solution_values.at(q) - exact_solution.value(point);
+                    solution_values.at(q) - exact_solution->value(point);
 
                   local_error_L2_squared +=
                     Utilities::fixed_power<2>(error_at_point) *
@@ -938,7 +953,7 @@ test(ConvergenceTable  &table,
                   const Point<dim> &point =
                     fe_surface_values->quadrature_point(q);
                   const double error_at_point =
-                    solution_values.at(q) - exact_solution.value(point);
+                    solution_values.at(q) - exact_solution->value(point);
 
                   local_error_L2_face_squared +=
                     Utilities::fixed_power<2>(error_at_point) *
@@ -986,7 +1001,7 @@ test(ConvergenceTable  &table,
     VectorType level_set(partitioner);
     GDM::VectorTools::interpolate(mapping,
                                   system,
-                                  signed_distance_sphere,
+                                  *level_set_function,
                                   level_set);
     level_set.update_ghost_values();
     data_out.add_data_vector(level_set, "level_set");
@@ -994,7 +1009,7 @@ test(ConvergenceTable  &table,
     VectorType analytical_solution(partitioner);
     GDM::VectorTools::interpolate(mapping,
                                   system,
-                                  exact_solution,
+                                  *exact_solution,
                                   analytical_solution);
     analytical_solution.update_ghost_values();
     data_out.add_data_vector(analytical_solution, "analytical_solution");
@@ -1051,8 +1066,6 @@ test(ConvergenceTable  &table,
   table.add_value("fe_degree", fe_degree);
   table.add_value("cfl", cfl);
   table.add_value("n_subdivision", n_subdivisions_1D);
-  table.add_value("rot_0", rotation_0);
-  table.add_value("rot_1", rotation_1);
   table.add_value("error_2", error[2]);
   table.set_scientific("error_2", true);
   table.add_value("error_1", error[1]);
@@ -1067,6 +1080,50 @@ test(ConvergenceTable  &table,
   table.set_scientific("error_inf_face", true);
 
   pcout << std::endl;
+}
+
+
+
+template <int dim>
+void
+test(ConvergenceTable  &table,
+     const unsigned int fe_degree,
+     const unsigned int n_subdivisions_1D,
+     const double       cfl,
+     const double       factor_rotation,
+     const double       factor)
+{
+  const double increment  = 5.0;
+  const double rotation_0 = increment * factor;
+  const double rotation_1 = increment * (factor + factor_rotation);
+  const double phi        = (numbers::PI * increment / 180.0) * factor; // TODO
+  const double phi_add    = (numbers::PI * increment / 180.0) * factor_rotation;
+  const double x_shift    = 0.2001;
+
+  Parameters<dim> params;
+
+  params.exact_solution =
+    std::make_shared<ExactSolution<dim>>(x_shift, phi, phi_add);
+  params.exact_solution_der =
+    std::make_shared<ExactSolutionDerivative<dim>>(x_shift, phi, phi_add);
+
+  dealii::Tensor<1, dim> advection;
+  advection[0] = 2.0 * std::cos(phi + phi_add);
+  advection[1] = 2.0 * std::sin(phi + phi_add);
+
+  params.advection = std::make_shared<Functions::ConstantFunction<dim, double>>(
+    advection.begin_raw(), dim);
+  const Point<dim> point = {x_shift, 0.0};
+  Tensor<1, dim>   normal;
+  normal[0] = +std::sin(phi);
+  normal[1] = -std::cos(phi);
+  params.level_set_function =
+    std::make_shared<Functions::SignedDistance::Plane<dim>>(point, normal);
+
+  table.add_value("rot_0", rotation_0);
+  table.add_value("rot_1", rotation_1);
+
+  test<dim>(table, fe_degree, n_subdivisions_1D, cfl, params);
 }
 
 
