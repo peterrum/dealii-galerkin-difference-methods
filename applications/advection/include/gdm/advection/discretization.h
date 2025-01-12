@@ -88,6 +88,78 @@ public:
       comm);
   }
 
+  const GDM::System<dim> &
+  get_system() const
+  {
+    return *system;
+  }
+
+  const hp::FECollection<dim> &
+  get_fe() const
+  {
+    return system->get_fe();
+  }
+
+  unsigned int
+  get_fe_degree() const
+  {
+    return system->get_fe_degree();
+  }
+
+  const hp::MappingCollection<dim> &
+  get_mapping() const
+  {
+    return mapping;
+  }
+
+  const Quadrature<1> &
+  get_quadrature_1D() const
+  {
+    return quadrature_1D;
+  }
+
+  const Quadrature<dim - 1>
+  get_face_quadrature() const
+  {
+    return face_quadrature;
+  }
+
+  const AffineConstraints<Number> &
+  get_affine_constraints() const
+  {
+    return constraints;
+  }
+
+  void
+  initialize_dof_vector(VectorType &vec) const
+  {
+    vec.reinit(this->partitioner);
+  }
+
+  const DoFHandler<dim> &
+  get_level_set_dof_handler() const
+  {
+    return level_set_dof_handler;
+  }
+
+  const VectorType &
+  get_level_set() const
+  {
+    return level_set;
+  }
+
+  const NonMatching::MeshClassifier<dim> &
+  get_mesh_classifier() const
+  {
+    return *mesh_classifier;
+  }
+
+  double
+  get_dx() const
+  {
+    return dx;
+  }
+
 private:
   std::shared_ptr<GDM::System<dim>> system;
   hp::MappingCollection<dim>        mapping;

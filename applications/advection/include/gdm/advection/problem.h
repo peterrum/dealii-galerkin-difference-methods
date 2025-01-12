@@ -16,7 +16,9 @@ public:
   using BlockVectorType = LinearAlgebra::distributed::BlockVector<Number>;
 
   AdvectionProblem(const Parameters<dim> &params)
-    : params(params)
+    : comm(MPI_COMM_WORLD)
+    , pcout(std::cout, Utilities::MPI::this_mpi_process(comm) == 0)
+    , params(params)
     , discretization()
   {}
 
@@ -959,6 +961,9 @@ public:
   }
 
 private:
+  const MPI_Comm     comm;
+  ConditionalOStream pcout;
+
   const Parameters<dim> &params;
 
   Discretization<dim, Number> discretization;
