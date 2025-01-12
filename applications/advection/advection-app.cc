@@ -134,20 +134,20 @@ test(ConvergenceTable  &table,
      const unsigned int n_subdivisions_1D,
      const double       cfl,
      const double       factor_rotation,
-     const double       factor           = 1.0,
-     const bool         do_ghost_penalty = true)
+     const double       factor)
 {
   using Number          = double;
   using VectorType      = LinearAlgebra::distributed::Vector<Number>;
   using BlockVectorType = LinearAlgebra::distributed::BlockVector<Number>;
 
   // settings
-  const double increment  = 5.0;
-  const double rotation_0 = increment * factor;
-  const double rotation_1 = increment * (factor + factor_rotation);
-  const double phi        = (numbers::PI * increment / 180.0) * factor; // TODO
-  const double phi_add    = (numbers::PI * increment / 180.0) * factor_rotation;
-  const double x_shift    = 0.2001;
+  const bool   do_ghost_penalty = true;
+  const double increment        = 5.0;
+  const double rotation_0       = increment * factor;
+  const double rotation_1       = increment * (factor + factor_rotation);
+  const double phi     = (numbers::PI * increment / 180.0) * factor; // TODO
+  const double phi_add = (numbers::PI * increment / 180.0) * factor_rotation;
+  const double x_shift = 0.2001;
   const unsigned int n_components           = 1;
   const unsigned int fe_degree_time_stepper = fe_degree;
   const unsigned int fe_degree_level_set    = 1;
@@ -1101,8 +1101,7 @@ main(int argc, char **argv)
               for (unsigned int n_subdivisions_1D = 10;
                    n_subdivisions_1D <= 100;
                    n_subdivisions_1D += 10)
-                test<2>(
-                  table, fe_degree, n_subdivisions_1D, cfl, 0.0, factor, true);
+                test<2>(table, fe_degree, n_subdivisions_1D, cfl, 0.0, factor);
 
               if (Utilities::MPI::this_mpi_process(MPI_COMM_WORLD) == 0)
                 {
@@ -1125,8 +1124,7 @@ main(int argc, char **argv)
               const double       cfl = (fe_degree == 3) ? 0.4 : 0.1;
               const unsigned int n_subdivisions_1D = 40;
 
-              test<2>(
-                table, fe_degree, n_subdivisions_1D, cfl, 0.0, factor, true);
+              test<2>(table, fe_degree, n_subdivisions_1D, cfl, 0.0, factor);
             }
 
           if (Utilities::MPI::this_mpi_process(MPI_COMM_WORLD) == 0)
@@ -1156,8 +1154,7 @@ main(int argc, char **argv)
                       n_subdivisions_1D,
                       cfl,
                       factor_rotation - factor,
-                      factor,
-                      true);
+                      factor);
             }
 
           if (Utilities::MPI::this_mpi_process(MPI_COMM_WORLD) == 0)
