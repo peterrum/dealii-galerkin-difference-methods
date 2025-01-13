@@ -3,6 +3,7 @@
 #include <gdm/advection/discretization.h>
 #include <gdm/advection/mass.h>
 #include <gdm/advection/parameters.h>
+#include <gdm/advection/stiffness.h>
 #include <gdm/data_out.h>
 #include <gdm/system.h>
 #include <gdm/vector_tools.h>
@@ -22,6 +23,7 @@ public:
     , params(params)
     , discretization()
     , mass_matrix_operator(discretization)
+    , stiffness_matrix_operator(discretization)
   {}
 
   void
@@ -29,6 +31,7 @@ public:
   {
     discretization.reinit(params);
     mass_matrix_operator.reinit(params);
+    stiffness_matrix_operator.reinit(params);
 
     // settings
     const unsigned int fe_degree         = params.fe_degree;
@@ -793,7 +796,8 @@ private:
 
   Discretization<dim, Number> discretization;
 
-  MassMatrixOperator<dim, Number> mass_matrix_operator;
+  MassMatrixOperator<dim, Number>      mass_matrix_operator;
+  StiffnessMatrixOperator<dim, Number> stiffness_matrix_operator;
 
   std::array<TrilinosWrappers::PreconditionAMG, 2> preconditioner_amg;
   std::array<TrilinosWrappers::PreconditionILU, 2> preconditioner_ilu;

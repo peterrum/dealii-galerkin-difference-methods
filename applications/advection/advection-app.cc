@@ -150,6 +150,7 @@ test(ConvergenceTable  &table,
   params.ghost_parameter_M = 0.5;
 
   // stiffness matrix
+  params.ghost_parameter_A = 0.5;
 
   // time stepping
   params.start_t = 0.0;

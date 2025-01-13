@@ -18,6 +18,7 @@ struct Parameters
   double ghost_parameter_M = -1.0;
 
   // stiffness matrix
+  double ghost_parameter_A = -1.0;
 
   // time stepping
   std::shared_ptr<Function<dim>> exact_solution;
