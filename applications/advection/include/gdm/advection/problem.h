@@ -45,16 +45,7 @@ public:
     const TimeStepping::runge_kutta_method runge_kutta_method =
       TimeStepping::runge_kutta_method::RK_CLASSIC_FOURTH_ORDER;
 
-    auto exact_solution = params.exact_solution;
 
-    auto level_set_function = params.level_set_function;
-
-    const auto                &mapping = discretization.get_mapping();
-    const Quadrature<dim - 1> &face_quadrature =
-      discretization.get_face_quadrature();
-    const auto                      &system = discretization.get_system();
-    const AffineConstraints<Number> &constraints =
-      discretization.get_affine_constraints();
 
     // compute mass matrix
     const auto &mass_matrix = mass_matrix_operator.get_sparse_matrix();
@@ -63,17 +54,10 @@ public:
     this->setup_solver(mass_matrix);
 
     // set up initial condition
-    const auto partitioner = std::make_shared<Utilities::MPI::Partitioner>(
-      system.locally_owned_dofs(),
-      system.locally_relevant_dofs(constraints),
-      comm);
     BlockVectorType solution;
     stiffness_matrix_operator.initialize_dof_vector(solution);
 
-    GDM::VectorTools::interpolate(mapping,
-                                  system,
-                                  *exact_solution,
-                                  solution.block(1));
+    this->set_initial_condition(solution.block(1));
 
     // helper function to evaluate right-hand-side vector
     const auto fu_rhs = [&](const double           time,
@@ -139,6 +123,20 @@ public:
   }
 
 private:
+  void
+  set_initial_condition(VectorType &vector) const
+  {
+    params.exact_solution->set_time(params.start_t);
+
+    const hp::MappingCollection<dim> &mapping = discretization.get_mapping();
+    const GDM::System<dim>           &system  = discretization.get_system();
+
+    GDM::VectorTools::interpolate(mapping,
+                                  system,
+                                  *params.exact_solution,
+                                  vector);
+  }
+
   void
   setup_solver(const TrilinosWrappers::SparseMatrix &sparse_matrix,
                const unsigned int                    id = 0)
