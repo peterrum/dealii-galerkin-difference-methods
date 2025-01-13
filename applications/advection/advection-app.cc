@@ -147,6 +147,7 @@ test(ConvergenceTable  &table,
   params.geometry_right    = 1.0;
 
   // mass matrix
+  params.ghost_parameter_M = 0.5;
 
   // stiffness matrix
 

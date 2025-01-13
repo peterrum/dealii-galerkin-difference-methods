@@ -15,6 +15,7 @@ struct Parameters
   double       geometry_right;
 
   // mass matrix
+  double ghost_parameter_M = -1.0;
 
   // stiffness matrix
 
