@@ -484,9 +484,9 @@ private:
 
   double ghost_parameter_A;
 
-  std::shared_ptr<Function<dim>> exact_solution;     // TODO
-  std::shared_ptr<Function<dim>> exact_solution_der; // TODO
-  std::shared_ptr<Function<dim>> advection;          // TODO
+  std::shared_ptr<Function<dim>> exact_solution;
+  std::shared_ptr<Function<dim>> exact_solution_der;
+  std::shared_ptr<Function<dim>> advection;
 
   mutable TrilinosWrappers::SparsityPattern sparsity_pattern;
   mutable TrilinosWrappers::SparseMatrix    sparse_matrix;
