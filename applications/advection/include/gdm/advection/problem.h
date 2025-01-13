@@ -43,7 +43,6 @@ public:
     const double       alpha             = 0.0;
     const TimeStepping::runge_kutta_method runge_kutta_method =
       TimeStepping::runge_kutta_method::RK_CLASSIC_FOURTH_ORDER;
-    const std::string solver_name = "ILU";
 
     auto exact_solution     = params.exact_solution;
     auto exact_solution_der = params.exact_solution_der;
@@ -93,18 +92,8 @@ public:
     // compute mass matrix
     const auto &mass_matrix = mass_matrix_operator.get_sparse_matrix();
 
-    TrilinosWrappers::PreconditionAMG preconditioner_amg;
-    TrilinosWrappers::PreconditionILU preconditioner_ilu;
-    TrilinosWrappers::SolverDirect    solver_direct;
-
-    if (solver_name == "AMG")
-      preconditioner_amg.initialize(mass_matrix);
-    else if (solver_name == "ILU")
-      preconditioner_ilu.initialize(mass_matrix);
-    else if (solver_name == "direct")
-      solver_direct.initialize(mass_matrix);
-    else
-      AssertThrow(false, ExcNotImplemented());
+    // Setup solver
+    this->setup_solver(mass_matrix);
 
     // set up initial condition
     const auto partitioner = std::make_shared<Utilities::MPI::Partitioner>(
@@ -515,35 +504,7 @@ public:
       vec_rhs.compress(VectorOperation::add);
 
       // invert mass matrix
-      if (solver_name == "AMG" || solver_name == "ILU")
-        {
-          ReductionControl     solver_control(1000, 1.e-20, 1.e-14);
-          SolverCG<VectorType> solver(solver_control);
-
-          if (solver_name == "AMG")
-            solver.solve(mass_matrix,
-                         result.block(1),
-                         vec_rhs,
-                         preconditioner_amg);
-          else if (solver_name == "ILU")
-            solver.solve(mass_matrix,
-                         result.block(1),
-                         vec_rhs,
-                         preconditioner_ilu);
-          else
-            AssertThrow(false, ExcNotImplemented());
-
-          pcout_detail << " [L] solved in " << solver_control.last_step()
-                       << std::endl;
-        }
-      else if (solver_name == "direct")
-        {
-          solver_direct.solve(mass_matrix, result.block(1), vec_rhs);
-        }
-      else
-        {
-          AssertThrow(false, ExcNotImplemented());
-        }
+      this->solve(mass_matrix, result.block(1), vec_rhs);
 
       return result;
     };
@@ -778,6 +739,53 @@ public:
   }
 
 private:
+  void
+  setup_solver(const TrilinosWrappers::SparseMatrix &sparse_matrix,
+               const unsigned int                    id = 0)
+  {
+    if (params.solver_name == "AMG")
+      preconditioner_amg[id].initialize(sparse_matrix);
+    else if (params.solver_name == "ILU")
+      preconditioner_ilu[id].initialize(sparse_matrix);
+    else if (params.solver_name == "direct")
+      solver_direct[id].initialize(sparse_matrix);
+    else
+      AssertThrow(false, ExcNotImplemented());
+  }
+
+  void
+  solve(const TrilinosWrappers::SparseMatrix &sparse_matrix,
+        VectorType                           &result,
+        const VectorType                     &vec_rhs,
+        const unsigned int                    id = 0)
+  {
+    if (params.solver_name == "AMG" || params.solver_name == "ILU")
+      {
+        ReductionControl solver_control(params.solver_max_iterations,
+                                        params.solver_abs_tolerance,
+                                        params.solver_rel_tolerance);
+
+        SolverCG<VectorType> solver(solver_control);
+
+        if (params.solver_name == "AMG")
+          solver.solve(sparse_matrix, result, vec_rhs, preconditioner_amg[id]);
+        else if (params.solver_name == "ILU")
+          solver.solve(sparse_matrix, result, vec_rhs, preconditioner_ilu[id]);
+        else
+          AssertThrow(false, ExcNotImplemented());
+
+        pcout << " [L] solved in " << solver_control.last_step() << std::endl;
+      }
+    else if (params.solver_name == "direct")
+      {
+        solver_direct[id].solve(sparse_matrix, result, vec_rhs);
+      }
+    else
+      {
+        AssertThrow(false, ExcNotImplemented());
+      }
+  }
+
   const MPI_Comm     comm;
   ConditionalOStream pcout;
 

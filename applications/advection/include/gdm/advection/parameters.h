@@ -27,6 +27,10 @@ struct Parameters
   double                         cfl;
 
   // linear solver
+  std::string  solver_name           = "ILU";
+  unsigned int solver_max_iterations = 1000;
+  double       solver_abs_tolerance  = 1.e-20;
+  double       solver_rel_tolerance  = 1.e-14;
 
   // advection
   std::shared_ptr<Function<dim>> advection;
