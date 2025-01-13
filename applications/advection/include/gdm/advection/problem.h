@@ -91,18 +91,18 @@ public:
     };
 
     // compute mass matrix
-    const auto &sparse_matrix = mass_matrix_operator.get_sparse_matrix();
+    const auto &mass_matrix = mass_matrix_operator.get_sparse_matrix();
 
     TrilinosWrappers::PreconditionAMG preconditioner_amg;
     TrilinosWrappers::PreconditionILU preconditioner_ilu;
     TrilinosWrappers::SolverDirect    solver_direct;
 
     if (solver_name == "AMG")
-      preconditioner_amg.initialize(sparse_matrix);
+      preconditioner_amg.initialize(mass_matrix);
     else if (solver_name == "ILU")
-      preconditioner_ilu.initialize(sparse_matrix);
+      preconditioner_ilu.initialize(mass_matrix);
     else if (solver_name == "direct")
-      solver_direct.initialize(sparse_matrix);
+      solver_direct.initialize(mass_matrix);
     else
       AssertThrow(false, ExcNotImplemented());
 
@@ -521,12 +521,12 @@ public:
           SolverCG<VectorType> solver(solver_control);
 
           if (solver_name == "AMG")
-            solver.solve(sparse_matrix,
+            solver.solve(mass_matrix,
                          result.block(1),
                          vec_rhs,
                          preconditioner_amg);
           else if (solver_name == "ILU")
-            solver.solve(sparse_matrix,
+            solver.solve(mass_matrix,
                          result.block(1),
                          vec_rhs,
                          preconditioner_ilu);
@@ -538,7 +538,7 @@ public:
         }
       else if (solver_name == "direct")
         {
-          solver_direct.solve(sparse_matrix, result.block(1), vec_rhs);
+          solver_direct.solve(mass_matrix, result.block(1), vec_rhs);
         }
       else
         {
