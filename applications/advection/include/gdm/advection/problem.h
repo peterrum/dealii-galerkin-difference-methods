@@ -33,79 +33,76 @@ public:
     mass_matrix_operator.reinit(params);
     stiffness_matrix_operator.reinit(params);
 
-    // settings
-    const unsigned int fe_degree         = params.fe_degree;
-    const unsigned int n_subdivisions_1D = params.n_subdivisions_1D;
-    const double       dx                = (1.0 / n_subdivisions_1D);
-    const double       max_vel           = 2.0;
-    const double       start_t           = params.start_t;
-    const double       end_t             = params.end_t;
-    const double       cfl               = params.cfl;
-    const double       delta_t           = dx * cfl / max_vel;
-    const TimeStepping::runge_kutta_method runge_kutta_method =
-      TimeStepping::runge_kutta_method::RK_CLASSIC_FOURTH_ORDER;
+    std::array<double, 6> error{};
 
-
-
-    // compute mass matrix
-    const auto &mass_matrix = mass_matrix_operator.get_sparse_matrix();
-
-    // Setup solver
-    this->setup_solver(mass_matrix);
-
-    // set up initial condition
-    BlockVectorType solution;
-    stiffness_matrix_operator.initialize_dof_vector(solution);
-
-    this->set_initial_condition(solution.block(1));
-
-    // helper function to evaluate right-hand-side vector
-    const auto fu_rhs = [&](const double           time,
-                            const BlockVectorType &stage_bc_and_solution) {
-      BlockVectorType result(2);
-      result.block(0).reinit(stage_bc_and_solution.block(0));
-      result.block(1).reinit(stage_bc_and_solution.block(1));
-
-      stiffness_matrix_operator.compute_rhs(result,
-                                            stage_bc_and_solution,
-                                            time);
-
-      const auto vec_rhs = result.block(1);
-      this->solve(mass_matrix, result.block(1), vec_rhs);
-
-      return result;
-    };
-
-    // set up time stepper
-    DiscreteTime time(start_t, end_t, delta_t);
-
-    TimeStepping::ExplicitRungeKutta<BlockVectorType> rk;
-    rk.initialize(runge_kutta_method);
-
-    auto error = this->postprocess(0.0, solution.block(1));
-
-    // perform time stepping
-    while ((time.is_at_end() == false) && (error[2] < 1.0 /*TODO*/))
+    if (true)
       {
-        stiffness_matrix_operator.initialize_time_step(
-          solution, time.get_current_time()); // evaluate bc
+        const double start_t = params.start_t;
+        const double end_t   = params.end_t;
+        const double max_vel = 2.0;
+        const double delta_t = discretization.get_dx() * params.cfl / max_vel;
 
-        rk.evolve_one_time_step(fu_rhs,
-                                time.get_current_time(),
-                                time.get_next_step_size(),
-                                solution);
+        const TimeStepping::runge_kutta_method runge_kutta_method =
+          TimeStepping::runge_kutta_method::RK_CLASSIC_FOURTH_ORDER;
 
-        // output result
-        error =
-          this->postprocess(time.get_current_time() + time.get_next_step_size(),
-                            solution.block(1));
+        // Compute mass matrix
+        const auto &mass_matrix = mass_matrix_operator.get_sparse_matrix();
 
-        time.advance_time();
+        // Initialize vectors
+        BlockVectorType solution;
+        stiffness_matrix_operator.initialize_dof_vector(solution);
+        this->set_initial_condition(solution.block(1));
+
+        // Setup solver
+        this->setup_solver(mass_matrix);
+
+        // helper function to evaluate right-hand-side vector
+        const auto fu_rhs = [&](const double           time,
+                                const BlockVectorType &stage_bc_and_solution) {
+          BlockVectorType result;
+          result.reinit(stage_bc_and_solution);
+
+          // du/dt = f(t, u)
+          stiffness_matrix_operator.compute_rhs(result,
+                                                stage_bc_and_solution,
+                                                time);
+
+          const auto vec_rhs = result.block(1);
+          this->solve(mass_matrix, result.block(1), vec_rhs);
+
+          return result;
+        };
+
+        // Perform time stepping
+        DiscreteTime time(start_t, end_t, delta_t);
+
+        TimeStepping::ExplicitRungeKutta<BlockVectorType> rk;
+        rk.initialize(runge_kutta_method);
+
+        error = this->postprocess(0.0, solution.block(1));
+
+        while ((time.is_at_end() == false) && (error[2] < 1.0 /*TODO*/))
+          {
+            stiffness_matrix_operator.initialize_time_step(
+              solution, time.get_current_time()); // evaluate bc
+
+            rk.evolve_one_time_step(fu_rhs,
+                                    time.get_current_time(),
+                                    time.get_next_step_size(),
+                                    solution);
+
+            // output result
+            error = this->postprocess(time.get_current_time() +
+                                        time.get_next_step_size(),
+                                      solution.block(1));
+
+            time.advance_time();
+          }
       }
 
-    table.add_value("fe_degree", fe_degree);
-    table.add_value("cfl", cfl);
-    table.add_value("n_subdivision", n_subdivisions_1D);
+    table.add_value("fe_degree", params.fe_degree);
+    table.add_value("cfl", params.cfl);
+    table.add_value("n_subdivision", params.n_subdivisions_1D);
     table.add_value("error_2", error[2]);
     table.set_scientific("error_2", true);
     table.add_value("error_1", error[1]);
