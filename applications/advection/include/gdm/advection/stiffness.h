@@ -28,6 +28,17 @@ public:
     this->exact_solution_der = params.exact_solution_der;
     this->advection          = params.advection;
 
+    this->all_points_0 =
+      collect_boundary_points(NonMatching::LocationToLevelSet::inside);
+
+    if (composite)
+      this->all_points_1 =
+        collect_boundary_points(NonMatching::LocationToLevelSet::outside);
+  }
+
+  std::vector<Point<dim>>
+  collect_boundary_points(const NonMatching::LocationToLevelSet location) const
+  {
     const Quadrature<1> &quadrature_1D = discretization.get_quadrature_1D();
     const Quadrature<dim - 1> &face_quadrature =
       discretization.get_face_quadrature();
@@ -38,6 +49,8 @@ public:
     const VectorType            &level_set = discretization.get_level_set();
     const DoFHandler<dim>       &level_set_dof_handler =
       discretization.get_level_set_dof_handler();
+
+    std::vector<Point<dim>> all_points;
 
     {
       NonMatching::RegionUpdateFlags region_update_flags;
@@ -86,8 +99,7 @@ public:
 
                 for (const auto q : fe_face_values.quadrature_point_indices())
                   {
-                    all_points_0.emplace_back(
-                      fe_face_values.quadrature_point(q));
+                    all_points.emplace_back(fe_face_values.quadrature_point(q));
                   }
               }
 
@@ -112,13 +124,15 @@ public:
                       for (const auto q :
                            fe_face_values.quadrature_point_indices())
                         {
-                          all_points_0.emplace_back(
+                          all_points.emplace_back(
                             fe_face_values.quadrature_point(q));
                         }
                     }
                 }
           }
     }
+
+    return all_points;
   }
 
   void
