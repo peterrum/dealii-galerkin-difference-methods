@@ -111,13 +111,17 @@ public:
           const auto &surface_fe_values_ptr =
             non_matching_fe_values.get_surface_fe_values();
 
-          if (surface_fe_values_ptr)
+          if (composite == false)
             {
-              const auto &fe_face_values = *surface_fe_values_ptr;
-
-              for (const auto q : fe_face_values.quadrature_point_indices())
+              if (surface_fe_values_ptr)
                 {
-                  all_points.emplace_back(fe_face_values.quadrature_point(q));
+                  const auto &fe_face_values = *surface_fe_values_ptr;
+
+                  for (const auto q : fe_face_values.quadrature_point_indices())
+                    {
+                      all_points.emplace_back(
+                        fe_face_values.quadrature_point(q));
+                    }
                 }
             }
 
@@ -225,6 +229,9 @@ public:
 
     const auto block_offset =
       (location == NonMatching::LocationToLevelSet::inside) ? 0 : 2;
+
+    const auto block_offset_plus =
+      (location == NonMatching::LocationToLevelSet::inside) ? 2 : 0;
 
     const auto          &mapping       = discretization.get_mapping();
     const Quadrature<1> &quadrature_1D = discretization.get_quadrature_1D();
@@ -419,8 +426,12 @@ public:
 
               for (const auto q : fe_face_values.quadrature_point_indices())
                 {
-                  const auto normal = fe_face_values.normal_vector(q);
-                  const auto point  = fe_face_values.quadrature_point(q);
+                  auto normal = fe_face_values.normal_vector(q);
+
+                  if (location == NonMatching::LocationToLevelSet::outside)
+                    normal *= -1.0;
+
+                  const auto point = fe_face_values.quadrature_point(q);
 
                   for (unsigned int d = 0; d < dim; ++d)
                     fluxes[q] += normal[d] * advection->value(point, d);
@@ -428,8 +439,18 @@ public:
 
               std::vector<Number> u_plus(fe_face_values.n_quadrature_points, 0);
 
-              for (const auto q : fe_face_values.quadrature_point_indices())
-                u_plus[q] = stage_bc[point_counter++];
+              if (composite)
+                {
+                  fe_face_values.get_function_values(
+                    stage_bc_and_solution.block(block_offset_plus + 1),
+                    dof_indices,
+                    u_plus);
+                }
+              else
+                {
+                  for (const auto q : fe_face_values.quadrature_point_indices())
+                    u_plus[q] = stage_bc[point_counter++];
+                }
 
               for (const unsigned int q_index :
                    fe_face_values.quadrature_point_indices())
