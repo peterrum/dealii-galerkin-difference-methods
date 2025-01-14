@@ -144,13 +144,15 @@ public:
   initialize_time_step(BlockVectorType &stage_bc_and_solution,
                        const double     time)
   {
-    const auto fu_eval_bc = [&](const double time, VectorType &stage_bc) {
-      exact_solution->set_time(time);
-      for (unsigned int i = 0; i < all_points_0.size(); ++i)
-        stage_bc[i] = exact_solution->value(all_points_0[i]);
-    };
+    exact_solution->set_time(time);
+    for (unsigned int i = 0; i < all_points_0.size(); ++i)
+      stage_bc_and_solution.block(0)[i] =
+        exact_solution->value(all_points_0[i]);
 
-    fu_eval_bc(time, stage_bc_and_solution.block(0));
+    if (composite)
+      for (unsigned int i = 0; i < all_points_1.size(); ++i)
+        stage_bc_and_solution.block(2)[i] =
+          exact_solution->value(all_points_1[i]);
   }
 
   void
