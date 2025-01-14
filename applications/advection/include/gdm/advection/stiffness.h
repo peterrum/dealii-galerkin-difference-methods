@@ -22,6 +22,7 @@ public:
   void
   reinit(const Parameters<dim> &params)
   {
+    this->composite          = params.composite;
     this->ghost_parameter_A  = params.ghost_parameter_A;
     this->exact_solution     = params.exact_solution;
     this->exact_solution_der = params.exact_solution_der;
@@ -85,7 +86,8 @@ public:
 
                 for (const auto q : fe_face_values.quadrature_point_indices())
                   {
-                    all_points.emplace_back(fe_face_values.quadrature_point(q));
+                    all_points_0.emplace_back(
+                      fe_face_values.quadrature_point(q));
                   }
               }
 
@@ -110,7 +112,7 @@ public:
                       for (const auto q :
                            fe_face_values.quadrature_point_indices())
                         {
-                          all_points.emplace_back(
+                          all_points_0.emplace_back(
                             fe_face_values.quadrature_point(q));
                         }
                     }
@@ -123,7 +125,7 @@ public:
   initialize_dof_vector(BlockVectorType &vec) const
   {
     vec.reinit(2);
-    vec.block(0).reinit(all_points.size());
+    vec.block(0).reinit(all_points_0.size());
     discretization.initialize_dof_vector(vec.block(1));
   }
 
@@ -133,8 +135,8 @@ public:
   {
     const auto fu_eval_bc = [&](const double time, VectorType &stage_bc) {
       exact_solution->set_time(time);
-      for (unsigned int i = 0; i < all_points.size(); ++i)
-        stage_bc[i] = exact_solution->value(all_points[i]);
+      for (unsigned int i = 0; i < all_points_0.size(); ++i)
+        stage_bc[i] = exact_solution->value(all_points_0[i]);
     };
 
     fu_eval_bc(time, stage_bc_and_solution.block(0));
@@ -145,6 +147,8 @@ public:
               const BlockVectorType &stage_bc_and_solution,
               const double           time) const
   {
+    const auto &all_points = this->all_points_0;
+
     const auto          &mapping       = discretization.get_mapping();
     const Quadrature<1> &quadrature_1D = discretization.get_quadrature_1D();
     const Quadrature<dim - 1> &face_quadrature =
@@ -482,6 +486,7 @@ public:
 private:
   const Discretization<dim, Number> &discretization;
 
+  bool   composite;
   double ghost_parameter_A;
 
   std::shared_ptr<Function<dim>> exact_solution;
@@ -491,5 +496,5 @@ private:
   mutable TrilinosWrappers::SparsityPattern sparsity_pattern;
   mutable TrilinosWrappers::SparseMatrix    sparse_matrix;
 
-  std::vector<Point<dim>> all_points;
+  std::vector<Point<dim>> all_points_0;
 };
