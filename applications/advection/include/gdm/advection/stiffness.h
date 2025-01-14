@@ -52,85 +52,83 @@ public:
 
     std::vector<Point<dim>> all_points;
 
-    {
-      NonMatching::RegionUpdateFlags region_update_flags;
-      region_update_flags.inside = update_values | update_gradients |
-                                   update_JxW_values | update_quadrature_points;
-      region_update_flags.surface =
-        update_values | update_gradients | update_JxW_values |
-        update_quadrature_points | update_normal_vectors;
+    NonMatching::RegionUpdateFlags region_update_flags;
+    region_update_flags.inside = update_values | update_gradients |
+                                 update_JxW_values | update_quadrature_points;
+    region_update_flags.surface = update_values | update_gradients |
+                                  update_JxW_values | update_quadrature_points |
+                                  update_normal_vectors;
 
-      NonMatching::FEValues<dim> non_matching_fe_values(fe,
-                                                        quadrature_1D,
-                                                        region_update_flags,
-                                                        mesh_classifier,
-                                                        level_set_dof_handler,
-                                                        level_set);
+    NonMatching::FEValues<dim> non_matching_fe_values(fe,
+                                                      quadrature_1D,
+                                                      region_update_flags,
+                                                      mesh_classifier,
+                                                      level_set_dof_handler,
+                                                      level_set);
 
-      NonMatching::RegionUpdateFlags region_update_flags_face;
-      region_update_flags_face.inside =
-        update_values | update_gradients | update_JxW_values |
-        update_quadrature_points | update_normal_vectors;
+    NonMatching::RegionUpdateFlags region_update_flags_face;
+    region_update_flags_face.inside =
+      update_values | update_gradients | update_JxW_values |
+      update_quadrature_points | update_normal_vectors;
 
-      NonMatching::FEInterfaceValues<dim> non_matching_fe_interface_values(
-        fe,
-        quadrature_1D,
-        region_update_flags_face,
-        mesh_classifier,
-        level_set_dof_handler,
-        level_set);
+    NonMatching::FEInterfaceValues<dim> non_matching_fe_interface_values(
+      fe,
+      quadrature_1D,
+      region_update_flags_face,
+      mesh_classifier,
+      level_set_dof_handler,
+      level_set);
 
-      for (const auto &cell : system.locally_active_cell_iterators())
-        if (cell->is_locally_owned() &&
-            (mesh_classifier.location_to_level_set(cell->dealii_iterator()) !=
-             NonMatching::LocationToLevelSet::outside))
-          {
-            non_matching_fe_values.reinit(cell->dealii_iterator(),
-                                          numbers::invalid_unsigned_int,
-                                          numbers::invalid_unsigned_int,
-                                          cell->active_fe_index());
+    for (const auto &cell : system.locally_active_cell_iterators())
+      if (cell->is_locally_owned() &&
+          (mesh_classifier.location_to_level_set(cell->dealii_iterator()) !=
+           NonMatching::LocationToLevelSet::outside))
+        {
+          non_matching_fe_values.reinit(cell->dealii_iterator(),
+                                        numbers::invalid_unsigned_int,
+                                        numbers::invalid_unsigned_int,
+                                        cell->active_fe_index());
 
-            const auto &surface_fe_values_ptr =
-              non_matching_fe_values.get_surface_fe_values();
+          const auto &surface_fe_values_ptr =
+            non_matching_fe_values.get_surface_fe_values();
 
-            if (surface_fe_values_ptr)
+          if (surface_fe_values_ptr)
+            {
+              const auto &fe_face_values = *surface_fe_values_ptr;
+
+              for (const auto q : fe_face_values.quadrature_point_indices())
+                {
+                  all_points.emplace_back(fe_face_values.quadrature_point(q));
+                }
+            }
+
+          for (const auto f : cell->dealii_iterator()->face_indices())
+            if (cell->dealii_iterator()->face(f)->at_boundary())
               {
-                const auto &fe_face_values = *surface_fe_values_ptr;
+                non_matching_fe_interface_values.reinit(
+                  cell->dealii_iterator(),
+                  f,
+                  numbers::invalid_unsigned_int,
+                  numbers::invalid_unsigned_int,
+                  cell->active_fe_index());
 
-                for (const auto q : fe_face_values.quadrature_point_indices())
+                const auto &fe_interface_values =
+                  non_matching_fe_interface_values.get_inside_fe_values();
+
+                if (fe_interface_values)
                   {
-                    all_points.emplace_back(fe_face_values.quadrature_point(q));
+                    const auto &fe_face_values =
+                      fe_interface_values->get_fe_face_values(0);
+
+                    for (const auto q :
+                         fe_face_values.quadrature_point_indices())
+                      {
+                        all_points.emplace_back(
+                          fe_face_values.quadrature_point(q));
+                      }
                   }
               }
-
-            for (const auto f : cell->dealii_iterator()->face_indices())
-              if (cell->dealii_iterator()->face(f)->at_boundary())
-                {
-                  non_matching_fe_interface_values.reinit(
-                    cell->dealii_iterator(),
-                    f,
-                    numbers::invalid_unsigned_int,
-                    numbers::invalid_unsigned_int,
-                    cell->active_fe_index());
-
-                  const auto &fe_interface_values =
-                    non_matching_fe_interface_values.get_inside_fe_values();
-
-                  if (fe_interface_values)
-                    {
-                      const auto &fe_face_values =
-                        fe_interface_values->get_fe_face_values(0);
-
-                      for (const auto q :
-                           fe_face_values.quadrature_point_indices())
-                        {
-                          all_points.emplace_back(
-                            fe_face_values.quadrature_point(q));
-                        }
-                    }
-                }
-          }
-    }
+        }
 
     return all_points;
   }
