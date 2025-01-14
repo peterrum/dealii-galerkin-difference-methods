@@ -35,7 +35,7 @@ public:
 
     std::array<double, 6> error{};
 
-    if (true)
+    if (params.composite == false)
       {
         const double start_t = params.start_t;
         const double end_t   = params.end_t;
