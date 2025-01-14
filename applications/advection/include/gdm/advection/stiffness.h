@@ -132,7 +132,9 @@ public:
                   cell->active_fe_index());
 
                 const auto &fe_interface_values =
-                  non_matching_fe_interface_values.get_inside_fe_values();
+                  (location == NonMatching::LocationToLevelSet::inside) ?
+                    non_matching_fe_interface_values.get_inside_fe_values() :
+                    non_matching_fe_interface_values.get_outside_fe_values();
 
                 if (fe_interface_values)
                   {
@@ -337,7 +339,9 @@ public:
             cell->dealii_iterator()->minimum_vertex_distance();
 
           const auto &fe_values_ptr =
-            non_matching_fe_values.get_inside_fe_values();
+            (location == NonMatching::LocationToLevelSet::inside) ?
+              non_matching_fe_values.get_inside_fe_values() :
+              non_matching_fe_values.get_outside_fe_values();
 
           const auto &surface_fe_values_ptr =
             non_matching_fe_values.get_surface_fe_values();
@@ -447,7 +451,9 @@ public:
                   cell->active_fe_index());
 
                 const auto &fe_interface_values =
-                  non_matching_fe_interface_values.get_inside_fe_values();
+                  (location == NonMatching::LocationToLevelSet::inside) ?
+                    non_matching_fe_interface_values.get_inside_fe_values() :
+                    non_matching_fe_interface_values.get_outside_fe_values();
 
                 if (fe_interface_values)
                   {
