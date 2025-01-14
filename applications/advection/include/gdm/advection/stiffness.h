@@ -191,6 +191,28 @@ public:
               const BlockVectorType &stage_bc_and_solution,
               const double           time) const
   {
+    this->compute_rhs_internal(vec_rhs,
+                               stage_bc_and_solution,
+                               time,
+                               NonMatching::LocationToLevelSet::inside);
+
+    if (composite)
+      {
+        this->compute_rhs_internal(vec_rhs,
+                                   stage_bc_and_solution,
+                                   time,
+                                   NonMatching::LocationToLevelSet::outside);
+      }
+  }
+
+  void
+  compute_rhs_internal(BlockVectorType       &vec_rhs,
+                       const BlockVectorType &stage_bc_and_solution,
+                       const double           time,
+                       const NonMatching::LocationToLevelSet location) const
+  {
+    (void)location;
+
     const auto &all_points = this->all_points_0;
 
     const auto          &mapping       = discretization.get_mapping();
