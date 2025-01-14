@@ -143,7 +143,7 @@ public:
           this->solve(mass_matrix_0, result.block(1), vec_rhs, 0);
 
           vec_rhs = result.block(3);
-          this->solve(mass_matrix_0, result.block(3), vec_rhs, 1);
+          this->solve(mass_matrix_1, result.block(3), vec_rhs, 1);
 
           return result;
         };

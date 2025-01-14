@@ -223,6 +223,9 @@ public:
         this->all_points_0 :
         this->all_points_1;
 
+    const auto block_offset =
+      (location == NonMatching::LocationToLevelSet::inside) ? 0 : 2;
+
     const auto          &mapping       = discretization.get_mapping();
     const Quadrature<1> &quadrature_1D = discretization.get_quadrature_1D();
     const Quadrature<dim - 1> &face_quadrature =
@@ -239,8 +242,8 @@ public:
 
     const double alpha = 0.0;
 
-    const auto &stage_bc = stage_bc_and_solution.block(0);
-    const auto &solution = stage_bc_and_solution.block(1);
+    const auto &stage_bc = stage_bc_and_solution.block(0 + block_offset);
+    const auto &solution = stage_bc_and_solution.block(1 + block_offset);
 
 
     const auto face_has_ghost_penalty = [&](const auto        &cell,
@@ -269,7 +272,8 @@ public:
     // evaluate derivative of bc
     exact_solution_der->set_time(time);
     for (unsigned int i = 0; i < all_points.size(); ++i)
-      vec_rhs.block(0)[i] = exact_solution_der->value(all_points[i]);
+      vec_rhs.block(0 + block_offset)[i] =
+        exact_solution_der->value(all_points[i]);
 
     // evaluate advection operator
     NonMatching::RegionUpdateFlags region_update_flags;
@@ -563,16 +567,15 @@ public:
                 constraints.distribute_local_to_global(
                   local_stabilization,
                   local_interface_dof_indices,
-                  vec_rhs.block(1));
+                  vec_rhs.block(1 + block_offset));
               }
 
           cell->get_dof_indices(dof_indices);
-          constraints.distribute_local_to_global(cell_vector,
-                                                 dof_indices,
-                                                 vec_rhs.block(1));
+          constraints.distribute_local_to_global(
+            cell_vector, dof_indices, vec_rhs.block(1 + block_offset));
         }
 
-    vec_rhs.block(1).compress(VectorOperation::add);
+    vec_rhs.block(1 + block_offset).compress(VectorOperation::add);
   }
 
 private:
