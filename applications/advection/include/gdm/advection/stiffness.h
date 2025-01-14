@@ -124,9 +124,20 @@ public:
   void
   initialize_dof_vector(BlockVectorType &vec) const
   {
-    vec.reinit(2);
-    vec.block(0).reinit(all_points_0.size());
-    discretization.initialize_dof_vector(vec.block(1));
+    if (composite)
+      {
+        vec.reinit(4);
+        vec.block(0).reinit(all_points_0.size());
+        discretization.initialize_dof_vector(vec.block(1));
+        vec.block(2).reinit(all_points_1.size());
+        discretization.initialize_dof_vector(vec.block(3));
+      }
+    else
+      {
+        vec.reinit(2);
+        vec.block(0).reinit(all_points_0.size());
+        discretization.initialize_dof_vector(vec.block(1));
+      }
   }
 
   void
@@ -497,4 +508,5 @@ private:
   mutable TrilinosWrappers::SparseMatrix    sparse_matrix;
 
   std::vector<Point<dim>> all_points_0;
+  std::vector<Point<dim>> all_points_1;
 };
