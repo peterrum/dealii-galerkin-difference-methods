@@ -99,6 +99,70 @@ public:
             time.advance_time();
           }
       }
+    else
+      {
+        const double start_t = params.start_t;
+        const double end_t   = params.end_t;
+        const double max_vel = 2.0;
+        const double delta_t = discretization.get_dx() * params.cfl / max_vel;
+
+        const TimeStepping::runge_kutta_method runge_kutta_method =
+          TimeStepping::runge_kutta_method::RK_CLASSIC_FOURTH_ORDER;
+
+        // Compute mass matrix
+        const auto &mass_matrix = mass_matrix_operator.get_sparse_matrix();
+
+        // Initialize vectors
+        BlockVectorType solution;
+        stiffness_matrix_operator.initialize_dof_vector(solution);
+        this->set_initial_condition(solution.block(1));
+
+        // Setup solver
+        this->setup_solver(mass_matrix);
+
+        // helper function to evaluate right-hand-side vector
+        const auto fu_rhs = [&](const double           time,
+                                const BlockVectorType &stage_bc_and_solution) {
+          BlockVectorType result;
+          result.reinit(stage_bc_and_solution);
+
+          // du/dt = f(t, u)
+          stiffness_matrix_operator.compute_rhs(result,
+                                                stage_bc_and_solution,
+                                                time);
+
+          const auto vec_rhs = result.block(1);
+          this->solve(mass_matrix, result.block(1), vec_rhs);
+
+          return result;
+        };
+
+        // Perform time stepping
+        DiscreteTime time(start_t, end_t, delta_t);
+
+        TimeStepping::ExplicitRungeKutta<BlockVectorType> rk;
+        rk.initialize(runge_kutta_method);
+
+        error = this->postprocess(0.0, solution.block(1));
+
+        while ((time.is_at_end() == false) && (error[2] < 1.0 /*TODO*/))
+          {
+            stiffness_matrix_operator.initialize_time_step(
+              solution, time.get_current_time()); // evaluate bc
+
+            rk.evolve_one_time_step(fu_rhs,
+                                    time.get_current_time(),
+                                    time.get_next_step_size(),
+                                    solution);
+
+            // output result
+            error = this->postprocess(time.get_current_time() +
+                                        time.get_next_step_size(),
+                                      solution.block(1));
+
+            time.advance_time();
+          }
+      }
 
     table.add_value("fe_degree", params.fe_degree);
     table.add_value("cfl", params.cfl);
