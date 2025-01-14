@@ -23,6 +23,8 @@ public:
     , params(params)
     , discretization()
     , mass_matrix_operator(discretization)
+    , mass_matrix_operator_opt(discretization,
+                               NonMatching::LocationToLevelSet::outside)
     , stiffness_matrix_operator(discretization)
   {}
 
@@ -110,15 +112,21 @@ public:
           TimeStepping::runge_kutta_method::RK_CLASSIC_FOURTH_ORDER;
 
         // Compute mass matrix
-        const auto &mass_matrix = mass_matrix_operator.get_sparse_matrix();
+        const auto &mass_matrix_0 = mass_matrix_operator.get_sparse_matrix();
+
+        mass_matrix_operator_opt.reinit(params);
+        const auto &mass_matrix_1 =
+          mass_matrix_operator_opt.get_sparse_matrix();
 
         // Initialize vectors
         BlockVectorType solution;
         stiffness_matrix_operator.initialize_dof_vector(solution);
         this->set_initial_condition(solution.block(1));
+        this->set_initial_condition(solution.block(3));
 
         // Setup solver
-        this->setup_solver(mass_matrix);
+        this->setup_solver(mass_matrix_0, 0);
+        this->setup_solver(mass_matrix_1, 1);
 
         // helper function to evaluate right-hand-side vector
         const auto fu_rhs = [&](const double           time,
@@ -131,8 +139,11 @@ public:
                                                 stage_bc_and_solution,
                                                 time);
 
-          const auto vec_rhs = result.block(1);
-          this->solve(mass_matrix, result.block(1), vec_rhs);
+          auto vec_rhs = result.block(1);
+          this->solve(mass_matrix_0, result.block(1), vec_rhs, 0);
+
+          vec_rhs = result.block(3);
+          this->solve(mass_matrix_0, result.block(3), vec_rhs, 1);
 
           return result;
         };
@@ -143,7 +154,12 @@ public:
         TimeStepping::ExplicitRungeKutta<BlockVectorType> rk;
         rk.initialize(runge_kutta_method);
 
-        error = this->postprocess(0.0, solution.block(1));
+        error = this->postprocess(0.0,
+                                  solution.block(1),
+                                  NonMatching::LocationToLevelSet::inside);
+        error = this->postprocess(0.0,
+                                  solution.block(3),
+                                  NonMatching::LocationToLevelSet::outside);
 
         while ((time.is_at_end() == false) && (error[2] < 1.0 /*TODO*/))
           {
@@ -158,7 +174,12 @@ public:
             // output result
             error = this->postprocess(time.get_current_time() +
                                         time.get_next_step_size(),
-                                      solution.block(1));
+                                      solution.block(1),
+                                      NonMatching::LocationToLevelSet::inside);
+            error = this->postprocess(time.get_current_time() +
+                                        time.get_next_step_size(),
+                                      solution.block(3),
+                                      NonMatching::LocationToLevelSet::outside);
 
             time.advance_time();
           }
@@ -246,10 +267,14 @@ private:
   }
 
   std::array<double, 6>
-  postprocess(const double time, const VectorType &solution)
+  postprocess(const double                          time,
+              const VectorType                     &solution,
+              const NonMatching::LocationToLevelSet location =
+                NonMatching::LocationToLevelSet::inside)
   {
-    static unsigned int counter = 0;
+    (void)location;
 
+    static unsigned int counter = 0;
 
     const auto        &mapping          = discretization.get_mapping();
     const auto        &system           = discretization.get_system();
@@ -451,6 +476,7 @@ private:
   Discretization<dim, Number> discretization;
 
   MassMatrixOperator<dim, Number>      mass_matrix_operator;
+  MassMatrixOperator<dim, Number>      mass_matrix_operator_opt;
   StiffnessMatrixOperator<dim, Number> stiffness_matrix_operator;
 
   std::array<TrilinosWrappers::PreconditionAMG, 2> preconditioner_amg;
