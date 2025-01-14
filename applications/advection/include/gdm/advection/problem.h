@@ -272,12 +272,14 @@ private:
               const NonMatching::LocationToLevelSet location =
                 NonMatching::LocationToLevelSet::inside)
   {
+    static std::array<unsigned int, 2> counter = {{0, 0}};
+
+    auto &my_counter =
+      counter[(location == NonMatching::LocationToLevelSet::inside) ? 0 : 1];
     const NonMatching::LocationToLevelSet inverse_location =
       (location == NonMatching::LocationToLevelSet::inside) ?
         NonMatching::LocationToLevelSet::outside :
         NonMatching::LocationToLevelSet::inside;
-
-    static unsigned int counter = 0;
 
     const auto        &mapping          = discretization.get_mapping();
     const auto        &system           = discretization.get_system();
@@ -424,7 +426,7 @@ private:
 
     if (pcout.is_active())
       printf("%5d %8.5f %14.8e %14.8e %14.8e\n",
-             counter,
+             my_counter,
              time,
              error_L2,
              error_L1,
@@ -466,10 +468,13 @@ private:
 
     data_out.build_patches();
 
-    std::string file_name = "solution_" + std::to_string(counter) + ".vtu";
+    std::string file_name =
+      std::string("solution_") +
+      ((location == NonMatching::LocationToLevelSet::inside) ? "i_" : "o_") +
+      std::to_string(my_counter) + ".vtu";
     data_out.write_vtu_in_parallel(file_name);
 
-    counter++;
+    my_counter++;
 
     return {{error_Linf,
              error_L1,
