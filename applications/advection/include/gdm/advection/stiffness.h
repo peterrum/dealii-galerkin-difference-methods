@@ -211,9 +211,15 @@ public:
                        const double           time,
                        const NonMatching::LocationToLevelSet location) const
   {
-    (void)location;
+    const NonMatching::LocationToLevelSet inverse_location =
+      (location == NonMatching::LocationToLevelSet::inside) ?
+        NonMatching::LocationToLevelSet::outside :
+        NonMatching::LocationToLevelSet::inside;
 
-    const auto &all_points = this->all_points_0;
+    const auto &all_points =
+      (location == NonMatching::LocationToLevelSet::inside) ?
+        this->all_points_0 :
+        this->all_points_1;
 
     const auto          &mapping       = discretization.get_mapping();
     const Quadrature<1> &quadrature_1D = discretization.get_quadrature_1D();
@@ -247,11 +253,11 @@ public:
         mesh_classifier.location_to_level_set(cell->neighbor(face_index));
 
       if (cell_location == NonMatching::LocationToLevelSet::intersected &&
-          neighbor_location != NonMatching::LocationToLevelSet::outside)
+          neighbor_location != inverse_location)
         return true;
 
       if (neighbor_location == NonMatching::LocationToLevelSet::intersected &&
-          cell_location != NonMatching::LocationToLevelSet::outside)
+          cell_location != inverse_location)
         return true;
 
       return false;
@@ -265,8 +271,15 @@ public:
 
     // evaluate advection operator
     NonMatching::RegionUpdateFlags region_update_flags;
-    region_update_flags.inside = update_values | update_gradients |
-                                 update_JxW_values | update_quadrature_points;
+    if (location == NonMatching::LocationToLevelSet::inside)
+      region_update_flags.inside = update_values | update_gradients |
+                                   update_JxW_values | update_quadrature_points;
+    else if (location == NonMatching::LocationToLevelSet::outside)
+      region_update_flags.outside = update_values | update_gradients |
+                                    update_JxW_values |
+                                    update_quadrature_points;
+    else
+      AssertThrow(false, ExcNotImplemented());
     region_update_flags.surface = update_values | update_gradients |
                                   update_JxW_values | update_quadrature_points |
                                   update_normal_vectors;
@@ -279,9 +292,16 @@ public:
                                                       level_set);
 
     NonMatching::RegionUpdateFlags region_update_flags_face;
-    region_update_flags_face.inside =
-      update_values | update_gradients | update_JxW_values |
-      update_quadrature_points | update_normal_vectors;
+    if (location == NonMatching::LocationToLevelSet::inside)
+      region_update_flags_face.inside =
+        update_values | update_gradients | update_JxW_values |
+        update_quadrature_points | update_normal_vectors;
+    else if (location == NonMatching::LocationToLevelSet::outside)
+      region_update_flags_face.outside =
+        update_values | update_gradients | update_JxW_values |
+        update_quadrature_points | update_normal_vectors;
+    else
+      AssertThrow(false, ExcNotImplemented());
 
     NonMatching::FEInterfaceValues<dim> non_matching_fe_interface_values(
       fe,
@@ -306,7 +326,7 @@ public:
     for (const auto &cell : system.locally_active_cell_iterators())
       if (cell->is_locally_owned() &&
           (mesh_classifier.location_to_level_set(cell->dealii_iterator()) !=
-           NonMatching::LocationToLevelSet::outside))
+           inverse_location))
         {
           non_matching_fe_values.reinit(cell->dealii_iterator(),
                                         numbers::invalid_unsigned_int,
