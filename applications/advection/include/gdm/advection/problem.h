@@ -41,7 +41,7 @@ public:
       {
         const double start_t = params.start_t;
         const double end_t   = params.end_t;
-        const double max_vel = 2.0;
+        const double max_vel = params.max_val;
         const double delta_t = discretization.get_dx() * params.cfl / max_vel;
 
         const TimeStepping::runge_kutta_method runge_kutta_method =
@@ -105,7 +105,7 @@ public:
       {
         const double start_t = params.start_t;
         const double end_t   = params.end_t;
-        const double max_vel = 2.0;
+        const double max_vel = params.max_val;
         const double delta_t = discretization.get_dx() * params.cfl / max_vel;
 
         const TimeStepping::runge_kutta_method runge_kutta_method =

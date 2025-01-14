@@ -27,6 +27,7 @@ public:
     this->exact_solution     = params.exact_solution;
     this->exact_solution_der = params.exact_solution_der;
     this->advection          = params.advection;
+    this->advection_1        = params.advection_1;
 
     this->all_points_0 =
       collect_boundary_points(NonMatching::LocationToLevelSet::inside);
@@ -232,6 +233,11 @@ public:
 
     const auto block_offset_plus =
       (location == NonMatching::LocationToLevelSet::inside) ? 2 : 0;
+
+    const auto advection =
+      (location == NonMatching::LocationToLevelSet::inside) ? this->advection :
+                                                              advection_1;
+
 
     const auto          &mapping       = discretization.get_mapping();
     const Quadrature<1> &quadrature_1D = discretization.get_quadrature_1D();
@@ -608,6 +614,7 @@ private:
   std::shared_ptr<Function<dim>> exact_solution;
   std::shared_ptr<Function<dim>> exact_solution_der;
   std::shared_ptr<Function<dim>> advection;
+  std::shared_ptr<Function<dim>> advection_1;
 
   mutable TrilinosWrappers::SparsityPattern sparsity_pattern;
   mutable TrilinosWrappers::SparseMatrix    sparse_matrix;

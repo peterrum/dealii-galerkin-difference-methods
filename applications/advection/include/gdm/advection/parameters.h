@@ -35,7 +35,9 @@ struct Parameters
   double       solver_rel_tolerance  = 1.e-14;
 
   // advection
+  double                         max_val;
   std::shared_ptr<Function<dim>> advection;
+  std::shared_ptr<Function<dim>> advection_1;
 
   // level set field
   unsigned int                   level_set_fe_degree;

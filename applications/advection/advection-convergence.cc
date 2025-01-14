@@ -166,6 +166,7 @@ test(ConvergenceTable  &table,
   advection[0] = 2.0 * std::cos(phi + phi_add);
   advection[1] = 2.0 * std::sin(phi + phi_add);
 
+  params.max_val   = 2.0;
   params.advection = std::make_shared<Functions::ConstantFunction<dim, double>>(
     advection.begin_raw(), dim);
 
