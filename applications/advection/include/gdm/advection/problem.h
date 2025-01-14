@@ -272,7 +272,10 @@ private:
               const NonMatching::LocationToLevelSet location =
                 NonMatching::LocationToLevelSet::inside)
   {
-    (void)location;
+    const NonMatching::LocationToLevelSet inverse_location =
+      (location == NonMatching::LocationToLevelSet::inside) ?
+        NonMatching::LocationToLevelSet::outside :
+        NonMatching::LocationToLevelSet::inside;
 
     static unsigned int counter = 0;
 
@@ -296,8 +299,14 @@ private:
       discretization.get_quadrature_1D();
 
     NonMatching::RegionUpdateFlags region_update_flags_error;
-    region_update_flags_error.inside =
-      update_values | update_JxW_values | update_quadrature_points;
+    if (location == NonMatching::LocationToLevelSet::inside)
+      region_update_flags_error.inside =
+        update_values | update_JxW_values | update_quadrature_points;
+    else if (location == NonMatching::LocationToLevelSet::outside)
+      region_update_flags_error.outside =
+        update_values | update_JxW_values | update_quadrature_points;
+    else
+      AssertThrow(false, ExcNotImplemented());
     region_update_flags_error.surface =
       update_values | update_JxW_values | update_quadrature_points;
 
@@ -320,7 +329,7 @@ private:
     for (const auto &cell : system.locally_active_cell_iterators())
       if (cell->is_locally_owned() &&
           (mesh_classifier.location_to_level_set(cell->dealii_iterator()) !=
-           NonMatching::LocationToLevelSet::outside))
+           inverse_location))
         {
           non_matching_fe_values_error.reinit(cell->dealii_iterator(),
                                               numbers::invalid_unsigned_int,
@@ -328,7 +337,9 @@ private:
                                               cell->active_fe_index());
 
           const std::optional<FEValues<dim>> &fe_values =
-            non_matching_fe_values_error.get_inside_fe_values();
+            (location == NonMatching::LocationToLevelSet::inside) ?
+              non_matching_fe_values_error.get_inside_fe_values() :
+              non_matching_fe_values_error.get_outside_fe_values();
 
           const std::optional<NonMatching::FEImmersedSurfaceValues<dim>>
             &fe_surface_values =
@@ -450,7 +461,7 @@ private:
         [&](const typename Triangulation<dim>::cell_iterator &cell) {
           return cell->is_active() && cell->is_locally_owned() &&
                  mesh_classifier.location_to_level_set(cell) !=
-                   NonMatching::LocationToLevelSet::outside;
+                   inverse_location;
         });
 
     data_out.build_patches();
