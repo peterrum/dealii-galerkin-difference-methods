@@ -39,6 +39,11 @@ public:
   std::vector<Point<dim>>
   collect_boundary_points(const NonMatching::LocationToLevelSet location) const
   {
+    const NonMatching::LocationToLevelSet inverse_location =
+      (location == NonMatching::LocationToLevelSet::inside) ?
+        NonMatching::LocationToLevelSet::outside :
+        NonMatching::LocationToLevelSet::inside;
+
     const Quadrature<1> &quadrature_1D = discretization.get_quadrature_1D();
     const Quadrature<dim - 1> &face_quadrature =
       discretization.get_face_quadrature();
@@ -53,8 +58,15 @@ public:
     std::vector<Point<dim>> all_points;
 
     NonMatching::RegionUpdateFlags region_update_flags;
-    region_update_flags.inside = update_values | update_gradients |
-                                 update_JxW_values | update_quadrature_points;
+    if (location == NonMatching::LocationToLevelSet::inside)
+      region_update_flags.inside = update_values | update_gradients |
+                                   update_JxW_values | update_quadrature_points;
+    else if (location == NonMatching::LocationToLevelSet::outside)
+      region_update_flags.outside = update_values | update_gradients |
+                                    update_JxW_values |
+                                    update_quadrature_points;
+    else
+      AssertThrow(false, ExcNotImplemented());
     region_update_flags.surface = update_values | update_gradients |
                                   update_JxW_values | update_quadrature_points |
                                   update_normal_vectors;
@@ -67,9 +79,16 @@ public:
                                                       level_set);
 
     NonMatching::RegionUpdateFlags region_update_flags_face;
-    region_update_flags_face.inside =
-      update_values | update_gradients | update_JxW_values |
-      update_quadrature_points | update_normal_vectors;
+    if (location == NonMatching::LocationToLevelSet::inside)
+      region_update_flags_face.inside =
+        update_values | update_gradients | update_JxW_values |
+        update_quadrature_points | update_normal_vectors;
+    else if (location == NonMatching::LocationToLevelSet::outside)
+      region_update_flags_face.outside =
+        update_values | update_gradients | update_JxW_values |
+        update_quadrature_points | update_normal_vectors;
+    else
+      AssertThrow(false, ExcNotImplemented());
 
     NonMatching::FEInterfaceValues<dim> non_matching_fe_interface_values(
       fe,
@@ -82,7 +101,7 @@ public:
     for (const auto &cell : system.locally_active_cell_iterators())
       if (cell->is_locally_owned() &&
           (mesh_classifier.location_to_level_set(cell->dealii_iterator()) !=
-           NonMatching::LocationToLevelSet::outside))
+           inverse_location))
         {
           non_matching_fe_values.reinit(cell->dealii_iterator(),
                                         numbers::invalid_unsigned_int,
