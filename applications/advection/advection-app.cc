@@ -137,7 +137,7 @@ test(ConvergenceTable &table)
       params.composite    = false;
 
       // geometry
-      params.n_subdivisions_1D = 100;
+      params.n_subdivisions_1D = 50;
       params.geometry_left     = +0.0;
       params.geometry_right    = +1.5;
 
@@ -149,7 +149,7 @@ test(ConvergenceTable &table)
 
       // time stepping
       params.start_t = 0.0;
-      params.end_t   = 0.6;
+      params.end_t   = 0.01;
       params.cfl     = 0.2;
 
       params.exact_solution =
@@ -202,4 +202,11 @@ main(int argc, char **argv)
   ConvergenceTable table;
 
   test<2>(table);
+
+
+  if (Utilities::MPI::this_mpi_process(MPI_COMM_WORLD) == 0)
+    {
+      table.write_text(std::cout);
+      std::cout << std::endl;
+    }
 }
