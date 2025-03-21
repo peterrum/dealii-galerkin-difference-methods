@@ -9,6 +9,7 @@
 #include <deal.II/base/discrete_time.h>
 #include <deal.II/base/function.h>
 #include <deal.II/base/function_signed_distance.h>
+#include <deal.II/base/parameter_handler.h>
 #include <deal.II/base/quadrature_lib.h>
 #include <deal.II/base/time_stepping.h>
 
@@ -51,9 +52,9 @@ using namespace dealii;
 
 template <int dim>
 void
-test(ConvergenceTable &table)
+test(const std::string simulation_name, ConvergenceTable &table)
 {
-  if (false)
+  if (simulation_name == "composite_domain")
     {
       const double factor          = 27.0;
       const double factor_rotation = 0.0;
@@ -72,7 +73,7 @@ test(ConvergenceTable &table)
       params.composite    = true;
 
       // geometry
-      params.n_subdivisions_1D = 200;
+      params.n_subdivisions_1D = 50;
       params.geometry_left     = -1.0;
       params.geometry_right    = +1.0;
 
@@ -127,7 +128,7 @@ test(ConvergenceTable &table)
       AdvectionProblem<dim> problem(params);
       problem.run(table);
     }
-  else
+  else if (simulation_name == "pipe")
     {
       Parameters<dim> params;
 
@@ -201,8 +202,27 @@ main(int argc, char **argv)
 
   ConvergenceTable table;
 
-  test<2>(table);
+  std::string simulation_name;
 
+  if (argc > 1)
+    {
+      if (std::string(argv[1]).find(".json") == std::string::npos)
+        {
+          simulation_name = std::string(argv[1]);
+        }
+      else
+        {
+          dealii::ParameterHandler prm;
+          prm.add_parameter("simulation name", simulation_name);
+          prm.parse_input(std::string(argv[1]), "", true);
+        }
+    }
+  else
+    {
+      AssertThrow(false, ExcNotImplemented());
+    }
+
+  test<2>(simulation_name, table);
 
   if (Utilities::MPI::this_mpi_process(MPI_COMM_WORLD) == 0)
     {
