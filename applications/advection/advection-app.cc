@@ -155,22 +155,20 @@ test(ConvergenceTable &table)
       params.exact_solution =
         std::make_shared<ScalarFunctionFromFunctionObject<dim>>(
           [](const auto t, const auto &p) {
-            const auto temp1 = std::complex<double>(p[0], p[1]);
-            const auto temp2 =
-              std::polar<double>(std::abs(temp1), std::arg(temp1) - t);
+            const auto x = std::sqrt(p[0] * p[0] + p[1] * p[1]) *
+                           std::cos(std::atan2(p[1], p[0]) - t);
 
-            return std::real(temp2);
+            return x;
           });
 
       params.exact_solution_der =
         std::make_shared<ScalarFunctionFromFunctionObject<dim>>(
-          [](const auto, const auto &) { return 0.0; });
+          [](const auto t, const auto &p) {
+            return std::sqrt(p[0] * p[0] + p[1] * p[1]) *
+                   std::sin(std::atan2(p[1], p[0]) - t);
+          });
 
       params.max_val = 1.43;
-
-      dealii::Tensor<1, dim> advection;
-      advection[0] = 3.0;
-      advection[1] = 1.0;
 
       params.advection = std::make_shared<FunctionFromFunctionObjects<dim>>(
         [](const auto &p, const unsigned int c) {
