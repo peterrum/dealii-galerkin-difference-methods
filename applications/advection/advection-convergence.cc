@@ -128,7 +128,8 @@ test(ConvergenceTable      &table,
      const double           cfl,
      const double           factor_rotation,
      const double           factor,
-     const RungeKuttaMethod rk_method = RungeKuttaMethod::RK_AUTO)
+     const RungeKuttaMethod rk_method     = RungeKuttaMethod::RK_AUTO,
+     const double           cfl_h_scaling = 1.0)
 {
   const double increment  = 5.0;
   const double rotation_0 = increment * factor;
@@ -155,10 +156,11 @@ test(ConvergenceTable      &table,
   params.ghost_parameter_A = 0.5;
 
   // time stepping
-  params.start_t   = 0.0;
-  params.end_t     = 0.1;
-  params.cfl       = cfl;
-  params.rk_method = rk_method;
+  params.start_t       = 0.0;
+  params.end_t         = 0.1;
+  params.cfl           = cfl;
+  params.rk_method     = rk_method;
+  params.cfl_h_scaling = cfl_h_scaling;
 
   params.exact_solution =
     std::make_shared<ExactSolution<dim>>(x_shift, phi, phi_add);
@@ -216,17 +218,25 @@ main(int argc, char **argv)
   if (case_name == "parallel-convergence")
     {
       const double factor = 5.0;
+      const double cfl    = 0.4;
 
       const std::vector<std::tuple<unsigned int, double, RungeKuttaMethod>>
-        cases = {{3, 0.4, RungeKuttaMethod::RK_FOURTH_ORDER},
-                 {5, 0.4, RungeKuttaMethod::RK_SIXTH_ORDER},
-                 {5, 0.1, RungeKuttaMethod::RK_FOURTH_ORDER}};
+        cases = {{3, 1.0, RungeKuttaMethod::RK_FOURTH_ORDER},
+                 {5, 1.0, RungeKuttaMethod::RK_SIXTH_ORDER},
+                 {5, 1.5, RungeKuttaMethod::RK_FOURTH_ORDER}};
 
-      for (const auto &[fe_degree, cfl, rk] : cases)
+      for (const auto &[fe_degree, cfl_h_scaling, rk] : cases)
         {
           for (unsigned int n_subdivisions_1D = 10; n_subdivisions_1D <= 100;
                n_subdivisions_1D += 10)
-            test<2>(table, fe_degree, n_subdivisions_1D, cfl, 0.0, factor, rk);
+            test<2>(table,
+                    fe_degree,
+                    n_subdivisions_1D,
+                    cfl,
+                    0.0,
+                    factor,
+                    rk,
+                    cfl_h_scaling);
 
           if (Utilities::MPI::this_mpi_process(MPI_COMM_WORLD) == 0)
             {

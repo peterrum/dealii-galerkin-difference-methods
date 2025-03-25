@@ -34,7 +34,8 @@ struct Parameters
   double                         start_t;
   double                         end_t;
   double                         cfl;
-  RungeKuttaMethod               rk_method = RungeKuttaMethod::RK_AUTO;
+  double                         cfl_h_scaling = 1.0;
+  RungeKuttaMethod               rk_method     = RungeKuttaMethod::RK_AUTO;
 
   // linear solver
   std::string  solver_name           = "ILU";
