@@ -156,17 +156,33 @@ test(const std::string simulation_name, ConvergenceTable &table)
       params.exact_solution =
         std::make_shared<ScalarFunctionFromFunctionObject<dim>>(
           [](const auto t, const auto &p) {
-            const auto x = std::sqrt(p[0] * p[0] + p[1] * p[1]) *
-                           std::cos(std::atan2(p[1], p[0]) - t);
+            const double r = std::sqrt(p[0] * p[0] + p[1] * p[1]);
+            const double d = std::atan2(p[1], p[0]);
 
-            return x;
+            const Point<dim> pp(r * std::sin(d - t), r * std::cos(d - t));
+
+            double temp = 0.0;
+
+            for (unsigned int deg = 0; deg < 360; deg += 45)
+              {
+                const double d0 = deg * 2 * numbers::PI / 360.0;
+                const double r0 = (deg % 90 == 0) ? 1.0 : 1.43;
+
+                const double x0 = r0 * std::cos(d0);
+                const double y0 = r0 * std::sin(d0);
+
+                temp += std::exp(-4 * pp.distance(Point<dim>(x0, y0)));
+              }
+
+            return temp;
           });
 
       params.exact_solution_der =
         std::make_shared<ScalarFunctionFromFunctionObject<dim>>(
           [](const auto t, const auto &p) {
-            return std::sqrt(p[0] * p[0] + p[1] * p[1]) *
-                   std::sin(std::atan2(p[1], p[0]) - t);
+            return 0.0;
+            // return std::sqrt(p[0] * p[0] + p[1] * p[1]) *
+            //        std::sin(std::atan2(p[1], p[0]) - t);
           });
 
       params.max_val = 1.43;
