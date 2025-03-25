@@ -215,8 +215,9 @@ main(int argc, char **argv)
     {
       const double factor = 5.0;
 
-      std::vector<std::tuple<unsigned int, double>> cases = {
-        {3, 0.4}, {3, 0.2}, {3, 0.1}, {5, 0.4}, {5, 0.2}, {5, 0.1}};
+      std::vector<std::tuple<unsigned int, double>> cases = {{3, 0.4},
+                                                             {5, 0.4},
+                                                             {5, 0.1}};
 
       for (const auto &[fe_degree, cfl] : cases)
         {
