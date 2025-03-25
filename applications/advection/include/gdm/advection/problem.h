@@ -229,6 +229,10 @@ private:
       preconditioner_ilu[id].initialize(sparse_matrix);
     else if (params.solver_name == "direct")
       solver_direct[id].initialize(sparse_matrix);
+    else if (params.solver_name == "none")
+      {
+        // nothing to do
+      }
     else
       AssertThrow(false, ExcNotImplemented());
   }
@@ -239,7 +243,8 @@ private:
         const VectorType                     &vec_rhs,
         const unsigned int                    id = 0)
   {
-    if (params.solver_name == "AMG" || params.solver_name == "ILU")
+    if (params.solver_name == "AMG" || params.solver_name == "ILU" ||
+        params.solver_name == "none")
       {
         ReductionControl solver_control(params.solver_max_iterations,
                                         params.solver_abs_tolerance,
@@ -251,6 +256,11 @@ private:
           solver.solve(sparse_matrix, result, vec_rhs, preconditioner_amg[id]);
         else if (params.solver_name == "ILU")
           solver.solve(sparse_matrix, result, vec_rhs, preconditioner_ilu[id]);
+        else if (params.solver_name == "none")
+          {
+            PreconditionIdentity precon;
+            solver.solve(sparse_matrix, result, vec_rhs, precon);
+          }
         else
           AssertThrow(false, ExcNotImplemented());
 
