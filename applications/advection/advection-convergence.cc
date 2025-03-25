@@ -215,23 +215,22 @@ main(int argc, char **argv)
     {
       const double factor = 5.0;
 
-      for (const unsigned int fe_degree : {3, 5})
+      std::vector<std::tuple<unsigned int, double>> cases = {
+        {3, 0.4}, {3, 0.2}, {3, 0.1}, {5, 0.4}, {5, 0.2}, {5, 0.1}};
+
+      for (const auto &[fe_degree, cfl] : cases)
         {
-          for (const double cfl : {0.4, 0.2, 0.1})
+          for (unsigned int n_subdivisions_1D = 10; n_subdivisions_1D <= 100;
+               n_subdivisions_1D += 10)
+            test<2>(table, fe_degree, n_subdivisions_1D, cfl, 0.0, factor);
+
+          if (Utilities::MPI::this_mpi_process(MPI_COMM_WORLD) == 0)
             {
-              for (unsigned int n_subdivisions_1D = 10;
-                   n_subdivisions_1D <= 100;
-                   n_subdivisions_1D += 10)
-                test<2>(table, fe_degree, n_subdivisions_1D, cfl, 0.0, factor);
-
-              if (Utilities::MPI::this_mpi_process(MPI_COMM_WORLD) == 0)
-                {
-                  table.write_text(std::cout);
-                  std::cout << std::endl;
-                }
-
-              table.clear();
+              table.write_text(std::cout);
+              std::cout << std::endl;
             }
+
+          table.clear();
         }
     }
 
