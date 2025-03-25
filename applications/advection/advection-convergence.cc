@@ -128,7 +128,7 @@ test(ConvergenceTable      &table,
      const double           cfl,
      const double           factor_rotation,
      const double           factor,
-     const RungeKuttaMethod rk_method = RungeKuttaMethod::RK_FOURTH_ORDER)
+     const RungeKuttaMethod rk_method = RungeKuttaMethod::RK_AUTO)
 {
   const double increment  = 5.0;
   const double rotation_0 = increment * factor;
@@ -219,7 +219,7 @@ main(int argc, char **argv)
 
       const std::vector<std::tuple<unsigned int, double, RungeKuttaMethod>>
         cases = {{3, 0.4, RungeKuttaMethod::RK_FOURTH_ORDER},
-                 {5, 0.4, RungeKuttaMethod::RK_FOURTH_ORDER},
+                 {5, 0.4, RungeKuttaMethod::RK_SIXTH_ORDER},
                  {5, 0.1, RungeKuttaMethod::RK_FOURTH_ORDER}};
 
       for (const auto &[fe_degree, cfl, rk] : cases)
@@ -245,7 +245,7 @@ main(int argc, char **argv)
         {
           for (unsigned int factor = 1.0; factor <= 9; ++factor)
             {
-              const double       cfl = (fe_degree == 3) ? 0.4 : 0.1;
+              const double       cfl               = 0.4;
               const unsigned int n_subdivisions_1D = 40;
 
               test<2>(table, fe_degree, n_subdivisions_1D, cfl, 0.0, factor);
@@ -269,8 +269,8 @@ main(int argc, char **argv)
           for (int factor_rotation = 0.0; factor_rotation <= 18;
                ++factor_rotation)
             {
-              const double       factor = 5;
-              const double       cfl    = (fe_degree == 3) ? 0.4 : 0.1;
+              const double       factor            = 5;
+              const double       cfl               = 0.4;
               const unsigned int n_subdivisions_1D = 40;
 
               test<2>(table,
