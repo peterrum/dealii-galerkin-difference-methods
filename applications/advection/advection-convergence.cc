@@ -9,6 +9,7 @@
 #include <deal.II/base/discrete_time.h>
 #include <deal.II/base/function.h>
 #include <deal.II/base/function_signed_distance.h>
+#include <deal.II/base/parameter_handler.h>
 #include <deal.II/base/quadrature_lib.h>
 #include <deal.II/base/time_stepping.h>
 
@@ -191,7 +192,21 @@ main(int argc, char **argv)
 {
   Utilities::MPI::MPI_InitFinalize mpi(argc, argv, 1);
 
-  const std::string case_name = "parallel-convergence";
+  std::string case_name = "parallel-convergence";
+
+  if (argc > 1)
+    {
+      if (std::string(argv[1]).find(".json") == std::string::npos)
+        {
+          case_name = std::string(argv[1]);
+        }
+      else
+        {
+          dealii::ParameterHandler prm;
+          prm.add_parameter("case name", case_name);
+          prm.parse_input(std::string(argv[1]), "", true);
+        }
+    }
 
   ConvergenceTable table;
 
@@ -202,7 +217,7 @@ main(int argc, char **argv)
 
       for (const unsigned int fe_degree : {3, 5})
         {
-          for (const double cfl : {0.4, 0.2, 0.1, 0.05, 0.025})
+          for (const double cfl : {0.4, 0.2, 0.1})
             {
               for (unsigned int n_subdivisions_1D = 10;
                    n_subdivisions_1D <= 100;
