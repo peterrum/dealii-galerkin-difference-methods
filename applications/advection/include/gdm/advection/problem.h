@@ -44,8 +44,32 @@ public:
         const double max_vel = params.max_val;
         const double delta_t = discretization.get_dx() * params.cfl / max_vel;
 
-        const TimeStepping::runge_kutta_method runge_kutta_method =
+        TimeStepping::runge_kutta_method runge_kutta_method =
           TimeStepping::runge_kutta_method::RK_CLASSIC_FOURTH_ORDER;
+
+        if (params.rk_method == RungeKuttaMethod::RK_AUTO)
+          {
+            if (params.fe_degree == 3)
+              runge_kutta_method =
+                TimeStepping::runge_kutta_method::RK_CLASSIC_FOURTH_ORDER;
+            else if (params.fe_degree == 5)
+              runge_kutta_method =
+                TimeStepping::runge_kutta_method::RK_SIXTH_ORDER;
+            else
+              AssertThrow(false, ExcNotImplemented());
+          }
+        else if (params.rk_method == RungeKuttaMethod::RK_FOURTH_ORDER)
+          {
+            runge_kutta_method =
+              TimeStepping::runge_kutta_method::RK_CLASSIC_FOURTH_ORDER;
+          }
+        else if (params.rk_method == RungeKuttaMethod::RK_SIXTH_ORDER)
+          {
+            runge_kutta_method =
+              TimeStepping::runge_kutta_method::RK_SIXTH_ORDER;
+          }
+        else
+          AssertThrow(false, ExcNotImplemented());
 
         // Compute mass matrix
         const auto &mass_matrix = mass_matrix_operator.get_sparse_matrix();

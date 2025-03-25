@@ -122,12 +122,13 @@ private:
 
 template <int dim>
 void
-test(ConvergenceTable  &table,
-     const unsigned int fe_degree,
-     const unsigned int n_subdivisions_1D,
-     const double       cfl,
-     const double       factor_rotation,
-     const double       factor)
+test(ConvergenceTable      &table,
+     const unsigned int     fe_degree,
+     const unsigned int     n_subdivisions_1D,
+     const double           cfl,
+     const double           factor_rotation,
+     const double           factor,
+     const RungeKuttaMethod rk_method = RungeKuttaMethod::RK_FOURTH_ORDER)
 {
   const double increment  = 5.0;
   const double rotation_0 = increment * factor;
@@ -154,9 +155,10 @@ test(ConvergenceTable  &table,
   params.ghost_parameter_A = 0.5;
 
   // time stepping
-  params.start_t = 0.0;
-  params.end_t   = 0.1;
-  params.cfl     = cfl;
+  params.start_t   = 0.0;
+  params.end_t     = 0.1;
+  params.cfl       = cfl;
+  params.rk_method = rk_method;
 
   params.exact_solution =
     std::make_shared<ExactSolution<dim>>(x_shift, phi, phi_add);
@@ -215,15 +217,16 @@ main(int argc, char **argv)
     {
       const double factor = 5.0;
 
-      std::vector<std::tuple<unsigned int, double>> cases = {{3, 0.4},
-                                                             {5, 0.4},
-                                                             {5, 0.1}};
+      const std::vector<std::tuple<unsigned int, double, RungeKuttaMethod>>
+        cases = {{3, 0.4, RungeKuttaMethod::RK_FOURTH_ORDER},
+                 {5, 0.4, RungeKuttaMethod::RK_FOURTH_ORDER},
+                 {5, 0.1, RungeKuttaMethod::RK_FOURTH_ORDER}};
 
-      for (const auto &[fe_degree, cfl] : cases)
+      for (const auto &[fe_degree, cfl, rk] : cases)
         {
           for (unsigned int n_subdivisions_1D = 10; n_subdivisions_1D <= 100;
                n_subdivisions_1D += 10)
-            test<2>(table, fe_degree, n_subdivisions_1D, cfl, 0.0, factor);
+            test<2>(table, fe_degree, n_subdivisions_1D, cfl, 0.0, factor, rk);
 
           if (Utilities::MPI::this_mpi_process(MPI_COMM_WORLD) == 0)
             {
