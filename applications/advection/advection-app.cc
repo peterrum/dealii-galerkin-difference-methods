@@ -149,9 +149,10 @@ test(const std::string simulation_name, ConvergenceTable &table)
       params.ghost_parameter_A = 0.5;
 
       // time stepping
-      params.start_t = 0.0;
-      params.end_t   = 0.01;
-      params.cfl     = 0.2;
+      params.start_t   = 0.0;
+      params.end_t     = numbers::PI / 4.0;
+      params.cfl       = 0.4;
+      params.rk_method = RungeKuttaMethod::RK_AUTO;
 
       params.exact_solution =
         std::make_shared<ScalarFunctionFromFunctionObject<dim>>(
@@ -171,7 +172,10 @@ test(const std::string simulation_name, ConvergenceTable &table)
                 const double x0 = r0 * std::cos(d0);
                 const double y0 = r0 * std::sin(d0);
 
-                temp += std::exp(-4 * pp.distance(Point<dim>(x0, y0)));
+                // temp += std::exp(-4 * pp.distance(Point<dim>(x0, y0)));
+                temp += std::exp(
+                  -4.0 * std::sqrt(std::pow(r * std::sin(d - t) - x0, 2.0) +
+                                   std::pow(r * std::cos(d - t) - y0, 2.0)));
               }
 
             return temp;
@@ -180,9 +184,32 @@ test(const std::string simulation_name, ConvergenceTable &table)
       params.exact_solution_der =
         std::make_shared<ScalarFunctionFromFunctionObject<dim>>(
           [](const auto t, const auto &p) {
-            return 0.0;
-            // return std::sqrt(p[0] * p[0] + p[1] * p[1]) *
-            //        std::sin(std::atan2(p[1], p[0]) - t);
+            const double r = std::sqrt(p[0] * p[0] + p[1] * p[1]);
+            const double d = std::atan2(p[1], p[0]);
+
+            const Point<dim> pp(r * std::sin(d - t), r * std::cos(d - t));
+
+            double temp = 0.0;
+
+            for (unsigned int deg = 0; deg < 360; deg += 45)
+              {
+                const double d0 = deg * 2 * numbers::PI / 360.0;
+                const double r0 = (deg % 90 == 0) ? 1.0 : 1.43;
+
+                const double x0 = r0 * std::cos(d0);
+                const double y0 = r0 * std::sin(d0);
+
+                temp +=
+                  -4 *
+                  (-r * (r * std::sin(d - t) - x0) * std::cos(d - t) +
+                   r * (r * std::cos(d - t) - y0) * std::sin(d - t)) *
+                  std::exp(-4 * sqrt(std::pow(r * std::sin(d - t) - x0, 2.0) +
+                                     std::pow(r * std::cos(d - t) - y0, 2.0))) /
+                  std::sqrt(std::pow(r * std::sin(d - t) - x0, 2.0) +
+                            std::pow(r * std::cos(d - t) - y0, 2.0));
+              }
+
+            return temp;
           });
 
       params.max_val = 1.43;
