@@ -1,3 +1,4 @@
 {
-    "simulation name" : "pipe"
+    "simulation name" : "pipe",
+    "dim" : 2
 }

@@ -50,6 +50,131 @@ using namespace dealii;
 
 
 
+void
+test_1D(const std::string simulation_name, ConvergenceTable &table)
+{
+  const unsigned int dim = 1;
+
+  if (simulation_name == "pipe-aligned")
+    {
+      Parameters<dim> params;
+
+      // gerneral settings
+      params.fe_degree    = 5;
+      params.n_components = 1;
+      params.composite    = false;
+
+      params.solver_rel_tolerance = 1e-8;
+
+      // geometry
+      params.n_subdivisions_1D = 50;
+      params.geometry_left     = -1.0;
+      params.geometry_right    = +1.0;
+
+      // mass matrix
+      params.ghost_parameter_M = 0.5;
+
+      // stiffness matrix
+      params.ghost_parameter_A = 0.5;
+
+      // time stepping
+      params.start_t   = 0.0;
+      params.end_t     = numbers::PI / 4.0;
+      params.cfl       = 0.4;
+      params.rk_method = RungeKuttaMethod::RK_AUTO;
+
+      params.exact_solution =
+        std::make_shared<ScalarFunctionFromFunctionObject<dim>>(
+          [](const auto t, const auto &p) {
+            auto pp = p;
+            pp[0] -= t;
+
+            return std::exp(-16 * std::pow(pp.distance(Point<dim>(-0.3)), 2.0));
+          });
+
+      params.exact_solution_der =
+        std::make_shared<ScalarFunctionFromFunctionObject<dim>>(
+          [](const auto t, const auto &p) { return 0.0; });
+
+      params.max_val = 1.0;
+
+      params.advection = std::make_shared<FunctionFromFunctionObjects<dim>>(
+        [](const auto &p, const unsigned int c) { return 1; }, dim);
+
+      params.level_set_fe_degree = 1;
+      params.level_set_function =
+        std::make_shared<Functions::SignedDistance::Sphere<dim>>(Point<dim>{},
+                                                                 1.2);
+
+      AdvectionProblem<dim> problem(params);
+      problem.run(table);
+    }
+  else if (simulation_name == "pipe-cut")
+    {
+      Parameters<dim> params;
+
+      // gerneral settings
+      params.fe_degree    = 5;
+      params.n_components = 1;
+      params.composite    = false;
+
+      params.solver_rel_tolerance = 1e-8;
+
+      const unsigned int n_subdivisions_1D = 50;
+      const double       alpha             = 1e-3;
+      const unsigned int n_ghost_cells     = 4;
+
+      // geometry
+      params.n_subdivisions_1D = n_subdivisions_1D + n_ghost_cells;
+      params.geometry_left  = -1.0 - (2.0 / n_subdivisions_1D) * n_ghost_cells;
+      params.geometry_right = +1.0;
+
+      // mass matrix
+      params.ghost_parameter_M = 0.5;
+
+      // stiffness matrix
+      params.ghost_parameter_A = 0.5;
+
+      // time stepping
+      params.start_t   = 0.0;
+      params.end_t     = numbers::PI / 4.0;
+      params.cfl       = 0.4;
+      params.rk_method = RungeKuttaMethod::RK_AUTO;
+
+      params.exact_solution =
+        std::make_shared<ScalarFunctionFromFunctionObject<dim>>(
+          [](const auto t, const auto &p) {
+            auto pp = p;
+            pp[0] -= t;
+
+            return std::exp(-16 * std::pow(pp.distance(Point<dim>(-0.3)), 2.0));
+          });
+
+      params.exact_solution_der =
+        std::make_shared<ScalarFunctionFromFunctionObject<dim>>(
+          [](const auto t, const auto &p) { return 0.0; });
+
+      params.max_val = 1.0;
+
+      params.advection = std::make_shared<FunctionFromFunctionObjects<dim>>(
+        [](const auto &p, const unsigned int c) { return 1; }, dim);
+
+      params.level_set_fe_degree = 1;
+
+      const Point<dim> point(-1.0 - 2.0 / n_subdivisions_1D * alpha);
+      Tensor<1, dim>   normal;
+      normal[0] = -1;
+
+      params.level_set_function =
+        std::make_shared<Functions::SignedDistance::Plane<dim>>(point, normal);
+
+      AdvectionProblem<dim> problem(params);
+      problem.run(table);
+    }
+}
+
+
+
 template <int dim>
 void
 test(const std::string simulation_name, ConvergenceTable &table)
@@ -277,18 +402,23 @@ main(int argc, char **argv)
 
   ConvergenceTable table;
 
-  std::string simulation_name;
+  unsigned int dim;
+  std::string  simulation_name;
 
   if (argc > 1)
     {
       if (std::string(argv[1]).find(".json") == std::string::npos)
         {
-          simulation_name = std::string(argv[1]);
+          AssertDimension(argc, 3);
+
+          dim             = std::atoi(argv[1]);
+          simulation_name = std::string(argv[2]);
         }
       else
         {
           dealii::ParameterHandler prm;
           prm.add_parameter("simulation name", simulation_name);
+          prm.add_parameter("dim", dim);
           prm.parse_input(std::string(argv[1]), "", true);
         }
     }
@@ -297,7 +427,16 @@ main(int argc, char **argv)
       AssertThrow(false, ExcNotImplemented());
     }
 
-  test<2>(simulation_name, table);
+  if (dim == 1)
+    {
+      test_1D(simulation_name, table);
+    }
+  else if (dim == 2)
+    {
+      test<2>(simulation_name, table);
+    }
+  else
+    AssertThrow(false, ExcNotImplemented());
 
   if (Utilities::MPI::this_mpi_process(MPI_COMM_WORLD) == 0)
     {
