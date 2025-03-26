@@ -90,8 +90,40 @@ test(const std::string simulation_name, ConvergenceTable &table)
 
       params.exact_solution =
         std::make_shared<ScalarFunctionFromFunctionObject<dim>>(
-          [](const auto &p) {
-            return std::max(0.0, 0.3 - p.distance(Point<dim>(-0.3, -0.3)));
+          [&](const auto t, const auto &p) {
+            dealii::Tensor<1, dim> advection_0;
+            advection_0[0] = 3.0;
+            advection_0[1] = 1.0;
+
+            dealii::Tensor<1, dim> advection_1;
+            advection_1[0] = 1.0;
+            advection_1[1] = 2.0;
+
+            Tensor<1, dim> tangent;
+            tangent[0] = +std::cos(phi);
+            tangent[1] = +std::sin(phi);
+
+            Vector<double>     rhs(2);
+            Vector<double>     sol(2);
+            FullMatrix<double> matrix(2, 2);
+            matrix(0, 0) = -advection_1[0];
+            matrix(1, 0) = -advection_1[1];
+            matrix(0, 1) = +tangent[0];
+            matrix(1, 1) = +tangent[1];
+            matrix.gauss_jordan();
+
+            rhs[0] = p[0] - x_shift;
+            rhs[1] = p[1] - 0.0;
+            matrix.vmult(sol, rhs);
+
+            const double alpha = std::max(-sol[0], 0.0);
+            const double t_1   = std::min(alpha, t);
+            const double t_0   = t - t_1;
+
+            const auto pp = p - t_0 * advection_0 - t_1 * advection_1;
+
+            return std::exp(-16 *
+                            std::pow(pp.distance(Point<dim>(-0.3, -0.3)), 2.0));
           });
       params.exact_solution_der =
         std::make_shared<ScalarFunctionFromFunctionObject<dim>>(
