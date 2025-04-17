@@ -1,5 +1,6 @@
 #pragma once
 
+#include <deal.II/lac/la_parallel_block_vector.h>
 #include <deal.II/lac/trilinos_sparse_matrix.h>
 #include <deal.II/lac/trilinos_sparsity_pattern.h>
 
