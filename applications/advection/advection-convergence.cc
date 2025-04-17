@@ -129,7 +129,8 @@ test(ConvergenceTable      &table,
      const double           factor_rotation,
      const double           factor,
      const RungeKuttaMethod rk_method     = RungeKuttaMethod::RK_AUTO,
-     const double           cfl_h_scaling = 1.0)
+     const double           cfl_h_scaling = 1.0,
+     const bool             no_cut        = false)
 {
   const double increment  = 5.0;
   const double rotation_0 = increment * factor;
@@ -176,7 +177,7 @@ test(ConvergenceTable      &table,
     advection.begin_raw(), dim);
 
   params.level_set_fe_degree = 1;
-  const Point<dim> point     = {x_shift, 0.0};
+  const Point<dim> point     = {x_shift + (no_cut ? 10.0 : 0.0), 0.0};
   Tensor<1, dim>   normal;
   normal[0] = +std::sin(phi);
   normal[1] = -std::cos(phi);
@@ -215,15 +216,19 @@ main(int argc, char **argv)
   ConvergenceTable table;
 
   // parallel ramp: fe degree, cfl, h
-  if (case_name == "parallel-convergence")
+  if (case_name == "parallel-convergence" ||
+      case_name == "parallel-convergence-no-cut")
     {
       const double factor = 5.0;
       const double cfl    = 0.4;
+
+      const bool no_cut = case_name == "parallel-convergence-no-cut";
 
       const std::vector<std::tuple<unsigned int, double, RungeKuttaMethod>>
         cases = {{3, 1.0, RungeKuttaMethod::RK_FOURTH_ORDER},
                  {5, 1.0, RungeKuttaMethod::RK_SIXTH_ORDER},
                  {5, 1.5, RungeKuttaMethod::RK_FOURTH_ORDER}};
+
 
       for (const auto &[fe_degree, cfl_h_scaling, rk] : cases)
         {
@@ -236,7 +241,8 @@ main(int argc, char **argv)
                     0.0,
                     factor,
                     rk,
-                    cfl_h_scaling);
+                    cfl_h_scaling,
+                    no_cut);
 
           if (Utilities::MPI::this_mpi_process(MPI_COMM_WORLD) == 0)
             {
