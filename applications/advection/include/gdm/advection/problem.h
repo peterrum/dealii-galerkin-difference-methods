@@ -42,7 +42,9 @@ public:
         const double start_t = params.start_t;
         const double end_t   = params.end_t;
         const double max_vel = params.max_val;
-        const double delta_t = std::pow(discretization.get_dx(), params.cfl_h_scaling) * params.cfl / max_vel;
+        const double delta_t =
+          std::pow(discretization.get_dx(), params.cfl_h_scaling) * params.cfl /
+          max_vel;
 
         TimeStepping::runge_kutta_method runge_kutta_method =
           TimeStepping::runge_kutta_method::RK_CLASSIC_FOURTH_ORDER;
@@ -467,7 +469,7 @@ private:
              error_Linf);
 
     // output result -> Paraview
-    GDM::DataOut<dim> data_out(system, mapping, fe_degree_output);
+    GDM::DataOut<dim> data_out(system, mapping, fe_degree_output, time);
     solution.update_ghost_values();
     data_out.add_data_vector(solution, "solution");
 
