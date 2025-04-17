@@ -17,7 +17,7 @@ namespace GDM
   public:
     DataOut(const System<dim>                &system,
             const hp::MappingCollection<dim> &mapping,
-            const unsigned int                fe_degree_output)
+            const unsigned int                fe_degree_output,const double time = -1.0)
       : system(system)
       , dof_handler_output(system.get_triangulation())
       , mapping(mapping)
@@ -28,12 +28,15 @@ namespace GDM
 
       data_out.attach_dof_handler(dof_handler_output);
 
-      if (dim > 1)
-        {
           DataOutBase::VtkFlags flags;
+
+      if (dim > 1)
           flags.write_higher_order_cells = true;
-          data_out.set_flags(flags);
-        }
+
+      if (time != -1.0)
+          flags.time = time;
+
+      data_out.set_flags(flags);
     }
 
     template <typename VectorType>

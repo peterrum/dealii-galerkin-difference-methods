@@ -2,6 +2,13 @@
 
 using namespace dealii;
 
+enum class RungeKuttaMethod
+{
+  RK_AUTO,
+  RK_FOURTH_ORDER,
+  RK_SIXTH_ORDER
+};
+
 template <unsigned int dim>
 struct Parameters
 {
@@ -27,6 +34,8 @@ struct Parameters
   double                         start_t;
   double                         end_t;
   double                         cfl;
+  double                         cfl_h_scaling = 1.0;
+  RungeKuttaMethod               rk_method     = RungeKuttaMethod::RK_AUTO;
 
   // linear solver
   std::string  solver_name           = "ILU";
