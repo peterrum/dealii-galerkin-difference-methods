@@ -425,12 +425,12 @@ fill_parameters(Parameters<dim> &params, const std::string &simulation_name, con
 
       // general settings
       params.simulation_type = "wave-rk";
-      params.fe_degree       = 1;
+      params.fe_degree       = 3;
       params.n_components    = 1;
       params.composite       = true;
 
       // geometry
-      params.n_subdivisions_1D = 128;
+      params.n_subdivisions_1D = 64;
       // params.geometry_left     = -1.21;
       // params.geometry_right    = +1.21;
       params.geometry_left     = -5;
@@ -631,6 +631,7 @@ main(int argc, char **argv)
       dealii::ParameterHandler prm;
       prm.add_parameter("simulation name", simulation_name);
       prm.add_parameter("dim", dim);
+      prm.add_parameter("domain index", domain_index);
       prm.parse_input(std::string(argv[1]), "", true);
     }
   else
