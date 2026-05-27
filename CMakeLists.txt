@@ -1,8 +1,21 @@
-CMAKE_MINIMUM_REQUIRED(VERSION 2.8.8)
+cmake_minimum_required(VERSION 3.13.4)
 
-FIND_PACKAGE(deal.II 8.0 QUIET
-  HINTS ${deal.II_DIR} ${DEAL_II_DIR} ../ ../../ $ENV{DEAL_II_DIR}
-  )
+# Force static Boost to avoid runtime conflicts with other projects
+set(Boost_USE_STATIC_LIBS ON)
+set(Boost_USE_MULTITHREADED ON)
+set(Boost_NO_SYSTEM_PATHS OFF)
+
+# Find deal.II - standard apt install locations
+find_package(deal.II 9.7.1
+  HINTS
+    /usr/lib/x86_64-linux-gnu/cmake/deal.II
+    /usr/share/deal.II
+    /usr/lib/cmake/deal.II
+    ${deal.II_DIR}
+    ${DEAL_II_DIR}
+    $ENV{DEAL_II_DIR}
+  REQUIRED
+)
 IF(NOT ${deal.II_FOUND})
   MESSAGE(FATAL_ERROR "\n"
     "*** Could not locate deal.II. ***\n\n"

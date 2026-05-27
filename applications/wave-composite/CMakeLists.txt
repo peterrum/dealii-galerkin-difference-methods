@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.13.4)
 
-set(TARGET "wave-app")
+set(TARGET "wave-composite-app")
 FILE(GLOB SOURCE_FILES "*.cc")
 
 FOREACH ( source_file ${SOURCE_FILES} )

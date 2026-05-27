@@ -1,0 +1,5 @@
+{
+    "simulation name" : "heat-rk",
+    "dim" : 1,
+    "domain index" : 0
+}
