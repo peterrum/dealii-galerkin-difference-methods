@@ -291,7 +291,8 @@ parse_parameters(int              argc,
 
   // level set field
   params.level_set_fe_degree = params.fe_degree;
-  params.level_set_function =
+  params.level_set_functions.resize(1);
+  params.level_set_functions[0] =
     std::make_shared<Functions::SignedDistance::Sphere<dim>>(Point<dim>(),
                                                              radius);
 }
@@ -321,25 +322,25 @@ main(int argc, char **argv)
   stiffness_matrix_operator.reinit(params);
 
   if (my_params.compute_kappa_M)
-    compute_condition_number(mass_matrix_operator.get_sparse_matrix(),
+    compute_condition_number(*mass_matrix_operator.get_sparse_matrix()[0],
                              my_params.rescale_matrix);
 
   if (my_params.compute_kappa_S)
-    compute_condition_number(stiffness_matrix_operator.get_sparse_matrix(),
+    compute_condition_number(*stiffness_matrix_operator.get_sparse_matrix()[0],
                              my_params.rescale_matrix);
 
   if (my_params.compute_gev)
     compute_max_generalized_eigenvalues_symmetric(
-      stiffness_matrix_operator.get_sparse_matrix(),
-      mass_matrix_operator.get_sparse_matrix());
+      *stiffness_matrix_operator.get_sparse_matrix()[0],
+      *mass_matrix_operator.get_sparse_matrix()[0]);
 
   if (my_params.write_M)
-    write_matrix_to_file(mass_matrix_operator.get_sparse_matrix(),
+    write_matrix_to_file(*mass_matrix_operator.get_sparse_matrix()[0],
                          my_params.file_prefix + "M.dat",
                          my_params.write_binary_file);
 
   if (my_params.write_S)
-    write_matrix_to_file(stiffness_matrix_operator.get_sparse_matrix(),
+    write_matrix_to_file(*stiffness_matrix_operator.get_sparse_matrix()[0],
                          my_params.file_prefix + "S.dat",
                          my_params.write_binary_file);
 }
