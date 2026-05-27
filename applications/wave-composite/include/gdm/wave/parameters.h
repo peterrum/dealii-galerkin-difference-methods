@@ -25,20 +25,20 @@ struct Parameters
   double ghost_parameter_M = -1.0;
 
   // stiffness matrix
-  double                         ghost_parameter_A = -1.0;
-  double                         nitsche_parameter = -1.0;
-  std::shared_ptr<Function<dim>> function_domain_dbc;
-  std::shared_ptr<Function<dim>> function_interface_dbc;
-  std::shared_ptr<Function<dim>> function_rhs;
+  double                                      ghost_parameter_A = -1.0;
+  double                                      nitsche_parameter = -1.0;
+  std::shared_ptr<Function<dim>>              function_domain_dbc;
+  std::shared_ptr<Function<dim>>              function_interface_dbc;
+  std::shared_ptr<Function<dim>>              function_rhs;
   std::vector<std::shared_ptr<Function<dim>>> speed;
 
   // time stepping
-  std::shared_ptr<Function<dim>> exact_solution;
+  std::shared_ptr<Function<dim>>              exact_solution;
   std::vector<std::shared_ptr<Function<dim>>> function_initial_condition;
-  double                         start_t;
-  double                         end_t;
-  double                         cfl;
-  double                         cfl_pow;
+  double                                      start_t;
+  double                                      end_t;
+  double                                      cfl;
+  double                                      cfl_pow;
 
   // linear solver
   std::string  solver_name           = "AMG";
@@ -47,7 +47,7 @@ struct Parameters
   double       solver_rel_tolerance  = 1.e-14;
 
   // level set field
-  unsigned int                   level_set_fe_degree;
+  unsigned int                                level_set_fe_degree;
   std::vector<std::shared_ptr<Function<dim>>> level_set_functions;
 
   // output
