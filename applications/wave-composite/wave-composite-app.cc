@@ -669,7 +669,7 @@ main(int argc, char **argv)
 
   unsigned int dim;
   std::string  simulation_name;
-  unsigned int domain_index;
+  unsigned int domain_index = 0;
 
   if (argc == 4)
     {
