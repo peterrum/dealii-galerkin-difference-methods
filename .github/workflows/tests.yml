@@ -1,0 +1,52 @@
+name: GitHub CI
+
+on:
+  push:
+    branches: [ master ]
+  pull_request:
+    branches: [ master ]
+  schedule:
+  - cron:  '0 0 * * *'
+    
+concurrency:
+  group: ${ {github.event_name }}-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{github.event_name == 'pull_request'}}
+    
+env:
+  COMPILE_JOBS: 2
+
+jobs:
+  build:
+    name: Build ${{ matrix.build_type }}-dealii:${{ matrix.dealii_version }}
+    runs-on: ubuntu-latest
+
+    strategy:
+      fail-fast: false
+      matrix:
+        build_type: ["Release", "Debug"]
+        dealii_version: ["master"]
+    
+    container:
+      image: dealii/dealii:${{ matrix.dealii_version }}-noble
+      options: --user root
+
+    steps:
+          
+      - uses: actions/checkout@v2
+
+      - name: Compile
+        run: |
+          mkdir build
+          cd build
+          cmake \
+            -D CMAKE_BUILD_TYPE=${{ matrix.build_type }} \
+            .. 
+          make -j${{ env.COMPILE_JOBS }}
+          
+      - name: Test
+        if: matrix.build_type == 'Release'
+        run: |
+          export OMPI_ALLOW_RUN_AS_ROOT=1
+          export OMPI_ALLOW_RUN_AS_ROOT_CONFIRM=1
+          cd build
+          ctest --output-on-failure
