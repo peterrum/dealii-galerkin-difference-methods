@@ -4,5 +4,5 @@
     "domain index": 0,
     "fe_degree": 3,
     "nb_division": 40,
-    "cfl": 0.0333
+    "cfl": 0.1/3
 }
