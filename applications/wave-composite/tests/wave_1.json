@@ -1,4 +1,8 @@
 {
     "simulation name": "wave",
-    "dim": 2
+    "dim": 2,
+    "domain index": 0,
+    "fe_degree": 1,
+    "nb_division": 16,
+    "cfl": 0.1
 }

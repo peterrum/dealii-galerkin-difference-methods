@@ -477,6 +477,28 @@ public:
               }
             time.advance_time();
           }
+        std::ofstream out("mass_matrix.txt");
+        for (unsigned int domain_idx = 0; domain_idx < mass_matrix.size();
+             ++domain_idx)
+          {
+            out << "=============================\n";
+            out << "Mass matrix for domain_i = " << domain_idx << "\n";
+            out << "=============================\n";
+
+            const auto &M = *mass_matrix[domain_idx];
+
+            for (unsigned int i = 0; i < M.m(); ++i)
+              {
+                for (unsigned int j = 0; j < M.n(); ++j)
+                  {
+                    out << M.el(i, j) << " ";
+                  }
+                out << "\n";
+              }
+
+            out << "\n";
+          }
+        out.close();
       }
     else
       {
@@ -524,20 +546,20 @@ private:
         preconditioner_amg.resize(n);
         for (unsigned int i = 0; i < n; ++i)
           preconditioner_amg[i] =
-            std::make_shared<TrilinosWrappers::PreconditionAMG>();
+            std::make_unique<TrilinosWrappers::PreconditionAMG>();
       }
     else if (params.solver_name == "ILU")
       {
         preconditioner_ilu.resize(n);
         for (unsigned int i = 0; i < n; ++i)
           preconditioner_ilu[i] =
-            std::make_shared<TrilinosWrappers::PreconditionILU>();
+            std::make_unique<TrilinosWrappers::PreconditionILU>();
       }
     else if (params.solver_name == "direct")
       {
         solver_direct.resize(n);
         for (unsigned int i = 0; i < n; ++i)
-          solver_direct[i] = std::make_shared<TrilinosWrappers::SolverDirect>();
+          solver_direct[i] = std::make_unique<TrilinosWrappers::SolverDirect>();
       }
     else
       AssertThrow(false, ExcNotImplemented());
@@ -595,9 +617,12 @@ private:
               const VectorType &solution,
               const int         domain_idx = 0)
   {
-    static std::array<unsigned int, 2> counter = {{0, 0}};
+    static std::vector<unsigned int> counter;
 
-    auto &my_counter = counter[(domain_idx == 0) ? 0 : 1];
+    if (counter.empty())
+      counter.resize(discretization.get_level_sets().size(), 0);
+
+    auto &my_counter = counter[domain_idx];
 
     const hp::MappingCollection<dim> &mapping = discretization.get_mapping();
     const Quadrature<1>              &quadrature_1D_error =
@@ -725,10 +750,12 @@ private:
 
     data_out.build_patches();
 
-    std::string file_name = std::string("solution_") +
-                            ((domain_idx == 0) ? "i_" : "o_") +
-                            std::to_string(my_counter) + ".vtu";
-    data_out.write_vtu_in_parallel(file_name);
+    if (time > params.end_t - 1e-6)
+      {
+        std::string file_name =
+          std::string("solution_") + std::to_string(domain_idx) + ".vtu";
+        data_out.write_vtu_in_parallel(file_name);
+      }
 
     my_counter++;
   }
@@ -743,12 +770,9 @@ private:
   MassMatrixOperator<dim, Number>      mass_matrix_operator;
   StiffnessMatrixOperator<dim, Number> stiffness_matrix_operator;
 
-  // std::array<TrilinosWrappers::PreconditionAMG, 2> preconditioner_amg;
-  // std::array<TrilinosWrappers::PreconditionILU, 2> preconditioner_ilu;
-  // std::array<TrilinosWrappers::SolverDirect, 2>    solver_direct;
-  std::vector<std::shared_ptr<TrilinosWrappers::PreconditionAMG>>
+  std::vector<std::unique_ptr<TrilinosWrappers::PreconditionAMG>>
     preconditioner_amg;
-  std::vector<std::shared_ptr<TrilinosWrappers::PreconditionILU>>
+  std::vector<std::unique_ptr<TrilinosWrappers::PreconditionILU>>
     preconditioner_ilu;
-  std::vector<std::shared_ptr<TrilinosWrappers::SolverDirect>> solver_direct;
+  std::vector<std::unique_ptr<TrilinosWrappers::SolverDirect>> solver_direct;
 };
