@@ -1,5 +1,8 @@
 {
     "simulation name" : "heat-composite",
     "dim" : 1,
-    "domain index" : 0
+    "domain index" : 0,
+    "fe_degree" : 3,
+    "nb_division" : 40,
+    "cfl" : 0.333
 }
