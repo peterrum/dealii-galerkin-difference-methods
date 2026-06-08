@@ -1,2 +1,4 @@
 ADD_SUBDIRECTORY(advection)
 ADD_SUBDIRECTORY(wave)
+ADD_SUBDIRECTORY(wave-composite)
+
