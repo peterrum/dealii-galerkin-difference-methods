@@ -1,0 +1,7 @@
+#!/bin/sh
+
+# format json-files
+for i in $(find . -type f \( -name "*.json" \) ); do 
+  echo $i
+  python scripts/format_json.py $i $i
+done

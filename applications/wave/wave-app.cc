@@ -230,11 +230,11 @@ fill_parameters(Parameters<dim> &params, const std::string &simulation_name)
 
       // general settings
       params.simulation_type = "wave-rk";
-      params.fe_degree       = 3;
+      params.fe_degree       = 1;
       params.n_components    = 1;
 
       // geometry
-      params.n_subdivisions_1D = 40;
+      params.n_subdivisions_1D = 64;
       params.geometry_left     = -1.21;
       params.geometry_right    = +1.21;
 
@@ -269,7 +269,7 @@ fill_parameters(Parameters<dim> &params, const std::string &simulation_name)
       params.exact_solution = params.function_interface_dbc;
       params.start_t        = 0.0;
       params.end_t          = 2.0;
-      params.cfl            = 0.3;
+      params.cfl            = 0.1;
       params.cfl_pow        = 1.0;
 
       // linear solvers
@@ -289,12 +289,12 @@ fill_parameters(Parameters<dim> &params, const std::string &simulation_name)
 
       // general settings
       params.simulation_type = "wave-rk";
-      params.fe_degree       = 3;
+      params.fe_degree       = 1;
       params.n_components    = 1;
       params.composite       = true;
 
       // geometry
-      params.n_subdivisions_1D = 40;
+      params.n_subdivisions_1D = 64;
       params.geometry_left     = -1.21;
       params.geometry_right    = +1.21;
 
@@ -331,11 +331,12 @@ fill_parameters(Parameters<dim> &params, const std::string &simulation_name)
       params.exact_solution = params.function_domain_dbc;
       params.start_t        = 0.0;
       params.end_t          = 2.0;
-      params.cfl            = 0.3;
+      params.cfl            = 0.1;
       params.cfl_pow        = 1.0;
 
       // linear solvers
       params.solver_name = "AMG";
+      // params.solver_name = "direct";
 
       // level set field
       params.level_set_fe_degree = params.fe_degree;
