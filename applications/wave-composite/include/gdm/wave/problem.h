@@ -37,7 +37,7 @@ public:
   void
   reinit(const Parameters<dim> &params)
   {
-    this->function_initial_condition    = params.function_initial_condition;
+    this->function_initial_condition = params.function_initial_condition;
   }
 
   void
@@ -57,21 +57,22 @@ public:
 
         // Initialize vectors
         VectorType vec_rhs, vec_solution;
-        discretization.initialize_dof_vector(vec_rhs,params.domain_index);
-        discretization.initialize_dof_vector(vec_solution,params.domain_index);
+        discretization.initialize_dof_vector(vec_rhs, params.domain_index);
+        discretization.initialize_dof_vector(vec_solution, params.domain_index);
 
         // Compute right-hand-side vector
-        stiffness_matrix_operator.compute_rhs(params.domain_index,
-                                              vec_rhs,
-                                              vec_solution,
-                                              false,
-                                              0.0);
+        stiffness_matrix_operator.compute_rhs(
+          params.domain_index, vec_rhs, vec_solution, false, 0.0);
 
         // setup solver
-        this->setup_solver(*stiffness_matrix[params.domain_index], params.domain_index);
+        this->setup_solver(*stiffness_matrix[params.domain_index],
+                           params.domain_index);
 
         // solve
-        this->solve(*stiffness_matrix[params.domain_index], vec_solution, vec_rhs, params.domain_index);
+        this->solve(*stiffness_matrix[params.domain_index],
+                    vec_solution,
+                    vec_rhs,
+                    params.domain_index);
 
         // postprocess
         this->postprocess(0.0, vec_solution, params.domain_index);
@@ -92,12 +93,13 @@ public:
 
         // Initialize vectors
         VectorType vec_solution;
-        discretization.initialize_dof_vector(vec_solution,params.domain_index);
+        discretization.initialize_dof_vector(vec_solution, params.domain_index);
         // this->set_initial_condition(vec_solution);
-        this->set_initial_condition(vec_solution,params.domain_index);
+        this->set_initial_condition(vec_solution, params.domain_index);
 
         // Setup solver
-        this->setup_solver(*mass_matrix[params.domain_index],params.domain_index);
+        this->setup_solver(*mass_matrix[params.domain_index],
+                           params.domain_index);
 
         const auto fu_rhs = [&](const double time, const VectorType &solution) {
           VectorType result, vec_rhs;
@@ -105,8 +107,12 @@ public:
           vec_rhs.reinit(solution);
 
           // du/dt = f(t, u)
-          stiffness_matrix_operator.compute_rhs(params.domain_index, vec_rhs, solution, true, time);
-          this->solve(*mass_matrix[params.domain_index], result, vec_rhs, params.domain_index);
+          stiffness_matrix_operator.compute_rhs(
+            params.domain_index, vec_rhs, solution, true, time);
+          this->solve(*mass_matrix[params.domain_index],
+                      result,
+                      vec_rhs,
+                      params.domain_index);
 
           return result;
         };
@@ -131,7 +137,7 @@ public:
             this->postprocess(time.get_current_time() +
                                 time.get_next_step_size(),
                               vec_solution,
-                            params.domain_index);
+                              params.domain_index);
 
             time.advance_time();
           }
@@ -154,13 +160,17 @@ public:
 
         // Initialize vectors
         BlockVectorType vec_solution(discretization.get_level_sets().size());
-        for(size_t dom_idx = 0; dom_idx < discretization.get_level_sets().size(); ++dom_idx){
-          discretization.initialize_dof_vector(vec_solution.block(dom_idx),dom_idx);
-          // this->set_initial_condition(vec_solution.block(dom_idx));
-          this->set_initial_condition(vec_solution.block(dom_idx),dom_idx);
-          // Setup solver
-          this->setup_solver(*mass_matrix[dom_idx], dom_idx);
-        }
+        for (size_t dom_idx = 0;
+             dom_idx < discretization.get_level_sets().size();
+             ++dom_idx)
+          {
+            discretization.initialize_dof_vector(vec_solution.block(dom_idx),
+                                                 dom_idx);
+            // this->set_initial_condition(vec_solution.block(dom_idx));
+            this->set_initial_condition(vec_solution.block(dom_idx), dom_idx);
+            // Setup solver
+            this->setup_solver(*mass_matrix[dom_idx], dom_idx);
+          }
 
         const auto fu_rhs = [&](const double           time,
                                 const BlockVectorType &solution) {
@@ -170,9 +180,15 @@ public:
 
           // du/dt = f(t, u)
           stiffness_matrix_operator.compute_rhs(vec_rhs, solution, true, time);
-          for(size_t dom_idx = 0; dom_idx < discretization.get_level_sets().size(); ++dom_idx){
-            this->solve(*mass_matrix[dom_idx], result.block(dom_idx), vec_rhs.block(dom_idx), dom_idx);
-          }
+          for (size_t dom_idx = 0;
+               dom_idx < discretization.get_level_sets().size();
+               ++dom_idx)
+            {
+              this->solve(*mass_matrix[dom_idx],
+                          result.block(dom_idx),
+                          vec_rhs.block(dom_idx),
+                          dom_idx);
+            }
 
           return result;
         };
@@ -183,11 +199,12 @@ public:
         TimeStepping::ExplicitRungeKutta<BlockVectorType> rk;
         rk.initialize(runge_kutta_method);
 
-        for(size_t dom_idx = 0; dom_idx < discretization.get_level_sets().size(); ++dom_idx){
-          this->postprocess(0.0,
-                          vec_solution.block(dom_idx),
-                          dom_idx);
-        }
+        for (size_t dom_idx = 0;
+             dom_idx < discretization.get_level_sets().size();
+             ++dom_idx)
+          {
+            this->postprocess(0.0, vec_solution.block(dom_idx), dom_idx);
+          }
 
         while ((time.is_at_end() == false))
           {
@@ -196,14 +213,17 @@ public:
                                     time.get_next_step_size(),
                                     vec_solution);
 
-            for(size_t dom_idx = 0; dom_idx < discretization.get_level_sets().size(); ++dom_idx){
-              discretization.get_affine_constraints().distribute(
-                vec_solution.block(dom_idx));
-              this->postprocess(time.get_current_time() +
-                                  time.get_next_step_size(),
+            for (size_t dom_idx = 0;
+                 dom_idx < discretization.get_level_sets().size();
+                 ++dom_idx)
+              {
+                discretization.get_affine_constraints().distribute(
+                  vec_solution.block(dom_idx));
+                this->postprocess(time.get_current_time() +
+                                    time.get_next_step_size(),
                                   vec_solution.block(dom_idx),
                                   dom_idx);
-            }
+              }
 
             time.advance_time();
           }
@@ -229,26 +249,27 @@ public:
 
         // Initialize vectors
         VectorType vec_solution;
-        discretization.initialize_dof_vector(vec_solution,params.domain_index);
+        discretization.initialize_dof_vector(vec_solution, params.domain_index);
         // this->set_initial_condition(vec_solution);
-        this->set_initial_condition(vec_solution,params.domain_index);
+        this->set_initial_condition(vec_solution, params.domain_index);
 
         // Setup solver
-        this->setup_solver(system_matrix,params.domain_index);
+        this->setup_solver(system_matrix, params.domain_index);
 
         const auto fu_rhs = [&](const double time, const VectorType &solution) {
           VectorType vec_rhs;
           vec_rhs.reinit(solution);
 
           // du/dt = f(t, u)
-          stiffness_matrix_operator.compute_rhs(params.domain_index, vec_rhs, solution, false, time);
+          stiffness_matrix_operator.compute_rhs(
+            params.domain_index, vec_rhs, solution, false, time);
           return vec_rhs;
         };
 
         // Perform time stepping
         DiscreteTime time(start_t, end_t, delta_t);
 
-        this->postprocess(0.0, vec_solution,params.domain_index);
+        this->postprocess(0.0, vec_solution, params.domain_index);
 
         while ((time.is_at_end() == false))
           {
@@ -258,9 +279,10 @@ public:
                 // change -> set up again matrix and solver
                 system_matrix = 0.0;
                 system_matrix.add(1.0, *mass_matrix[params.domain_index]);
-                system_matrix.add(time.get_next_step_size(), *stiffness_matrix[params.domain_index]);
+                system_matrix.add(time.get_next_step_size(),
+                                  *stiffness_matrix[params.domain_index]);
                 system_matrix.compress(VectorOperation::values::add);
-                this->setup_solver(system_matrix,params.domain_index);
+                this->setup_solver(system_matrix, params.domain_index);
               }
 
             // u := (M + dt * S)\(M u + dt * f(t, u))
@@ -268,14 +290,19 @@ public:
               fu_rhs(time.get_current_time() + time.get_next_step_size(),
                      vec_solution);
             vec_rhs *= time.get_next_step_size();
-            mass_matrix[params.domain_index]->template vmult_add<VectorType>(vec_rhs, vec_solution);
-            this->solve(system_matrix, vec_solution, vec_rhs, params.domain_index);
+            mass_matrix[params.domain_index]->template vmult_add<VectorType>(
+              vec_rhs, vec_solution);
+            this->solve(system_matrix,
+                        vec_solution,
+                        vec_rhs,
+                        params.domain_index);
 
             discretization.get_affine_constraints().distribute(vec_solution);
 
             this->postprocess(time.get_current_time() +
                                 time.get_next_step_size(),
-                              vec_solution,params.domain_index);
+                              vec_solution,
+                              params.domain_index);
 
             time.advance_time();
           }
@@ -296,13 +323,16 @@ public:
 
         // Initialize vectors
         BlockVectorType vec_solution(2);
-        discretization.initialize_dof_vector(vec_solution.block(0),params.domain_index);
-        discretization.initialize_dof_vector(vec_solution.block(1),params.domain_index);
+        discretization.initialize_dof_vector(vec_solution.block(0),
+                                             params.domain_index);
+        discretization.initialize_dof_vector(vec_solution.block(1),
+                                             params.domain_index);
         // this->set_initial_condition(vec_solution.block(0));
-        this->set_initial_condition(vec_solution.block(0),params.domain_index);
+        this->set_initial_condition(vec_solution.block(0), params.domain_index);
 
         // Setup solver
-        this->setup_solver(*mass_matrix[params.domain_index], params.domain_index);
+        this->setup_solver(*mass_matrix[params.domain_index],
+                           params.domain_index);
 
         const auto fu_rhs = [&](const double           time,
                                 const BlockVectorType &solution) {
@@ -315,11 +345,12 @@ public:
           result.block(0) = solution.block(1);
 
           // dv/dt = f(t, u)
-          stiffness_matrix_operator.compute_rhs(params.domain_index, vec_rhs,
-                                                solution.block(0),
-                                                true,
-                                                time);
-          this->solve(*mass_matrix[params.domain_index], result.block(1), vec_rhs, params.domain_index);
+          stiffness_matrix_operator.compute_rhs(
+            params.domain_index, vec_rhs, solution.block(0), true, time);
+          this->solve(*mass_matrix[params.domain_index],
+                      result.block(1),
+                      vec_rhs,
+                      params.domain_index);
 
           return result;
         };
@@ -345,7 +376,7 @@ public:
             this->postprocess(time.get_current_time() +
                                 time.get_next_step_size(),
                               vec_solution.block(0),
-                            params.domain_index);
+                              params.domain_index);
 
             time.advance_time();
           }
@@ -367,30 +398,49 @@ public:
         this->n_solvers();
 
         // Initialize vectors
-        BlockVectorType vec_solution(2 * discretization.get_level_sets().size());
-        for(size_t dom_idx = 0; dom_idx < discretization.get_level_sets().size(); ++dom_idx){
-          discretization.initialize_dof_vector(vec_solution.block(dom_idx),dom_idx);
-          discretization.initialize_dof_vector(vec_solution.block(discretization.get_level_sets().size() + dom_idx),dom_idx);
-          this->set_initial_condition(vec_solution.block(dom_idx),dom_idx);
-          this->setup_solver(*mass_matrix[dom_idx], dom_idx);
-        }
+        BlockVectorType vec_solution(2 *
+                                     discretization.get_level_sets().size());
+        for (size_t dom_idx = 0;
+             dom_idx < discretization.get_level_sets().size();
+             ++dom_idx)
+          {
+            discretization.initialize_dof_vector(vec_solution.block(dom_idx),
+                                                 dom_idx);
+            discretization.initialize_dof_vector(
+              vec_solution.block(discretization.get_level_sets().size() +
+                                 dom_idx),
+              dom_idx);
+            this->set_initial_condition(vec_solution.block(dom_idx), dom_idx);
+            this->setup_solver(*mass_matrix[dom_idx], dom_idx);
+          }
 
         const auto fu_rhs = [&](const double           time,
                                 const BlockVectorType &solution) {
           BlockVectorType result;
           result.reinit(solution);
           BlockVectorType vec_rhs(discretization.get_level_sets().size());
-          for(size_t dom_idx = 0; dom_idx < discretization.get_level_sets().size(); ++dom_idx){
-            vec_rhs.block(dom_idx).reinit(solution.block(dom_idx));
-            // du/dt = v
-            result.block(dom_idx) = solution.block(discretization.get_level_sets().size()+dom_idx);
-          }
+          for (size_t dom_idx = 0;
+               dom_idx < discretization.get_level_sets().size();
+               ++dom_idx)
+            {
+              vec_rhs.block(dom_idx).reinit(solution.block(dom_idx));
+              // du/dt = v
+              result.block(dom_idx) = solution.block(
+                discretization.get_level_sets().size() + dom_idx);
+            }
 
           // dv/dt = f(t, u)
           stiffness_matrix_operator.compute_rhs(vec_rhs, solution, true, time);
-          for(size_t dom_idx = 0; dom_idx < discretization.get_level_sets().size(); ++dom_idx){
-            this->solve(*mass_matrix[dom_idx], result.block(discretization.get_level_sets().size()+dom_idx), vec_rhs.block(dom_idx), dom_idx);
-          }
+          for (size_t dom_idx = 0;
+               dom_idx < discretization.get_level_sets().size();
+               ++dom_idx)
+            {
+              this->solve(*mass_matrix[dom_idx],
+                          result.block(discretization.get_level_sets().size() +
+                                       dom_idx),
+                          vec_rhs.block(dom_idx),
+                          dom_idx);
+            }
 
           return result;
         };
@@ -400,11 +450,12 @@ public:
 
         TimeStepping::ExplicitRungeKutta<BlockVectorType> rk;
         rk.initialize(runge_kutta_method);
-        for(size_t dom_idx = 0; dom_idx < discretization.get_level_sets().size(); ++dom_idx){
-          this->postprocess(0.0,
-                          vec_solution.block(dom_idx),
-                          dom_idx);
-        }                 
+        for (size_t dom_idx = 0;
+             dom_idx < discretization.get_level_sets().size();
+             ++dom_idx)
+          {
+            this->postprocess(0.0, vec_solution.block(dom_idx), dom_idx);
+          }
 
         while ((time.is_at_end() == false))
           {
@@ -412,22 +463,24 @@ public:
                                     time.get_current_time(),
                                     time.get_next_step_size(),
                                     vec_solution);
-            for(size_t dom_idx = 0; dom_idx < discretization.get_level_sets().size(); ++dom_idx){
-              discretization.get_affine_constraints().distribute(
-              vec_solution.block(dom_idx));
+            for (size_t dom_idx = 0;
+                 dom_idx < discretization.get_level_sets().size();
+                 ++dom_idx)
+              {
+                discretization.get_affine_constraints().distribute(
+                  vec_solution.block(dom_idx));
 
-              this->postprocess(time.get_current_time() +
-                                time.get_next_step_size(),
-                              vec_solution.block(dom_idx),
-                              dom_idx);
-            }
+                this->postprocess(time.get_current_time() +
+                                    time.get_next_step_size(),
+                                  vec_solution.block(dom_idx),
+                                  dom_idx);
+              }
             time.advance_time();
           }
         std::ofstream out("mass_matrix.txt");
-        for (unsigned int domain_idx = 0;
-            domain_idx < mass_matrix.size();
-            ++domain_idx)
-        {
+        for (unsigned int domain_idx = 0; domain_idx < mass_matrix.size();
+             ++domain_idx)
+          {
             out << "=============================\n";
             out << "Mass matrix for domain_i = " << domain_idx << "\n";
             out << "=============================\n";
@@ -435,16 +488,16 @@ public:
             const auto &M = *mass_matrix[domain_idx];
 
             for (unsigned int i = 0; i < M.m(); ++i)
-            {
+              {
                 for (unsigned int j = 0; j < M.n(); ++j)
-                {
-                    out << M.el(i,j) << " ";
-                }
+                  {
+                    out << M.el(i, j) << " ";
+                  }
                 out << "\n";
-            }
+              }
 
             out << "\n";
-        }
+          }
         out.close();
       }
     else
@@ -483,30 +536,33 @@ private:
                                   vector);
   }
 
-  void n_solvers()
+  void
+  n_solvers()
   {
-      const unsigned int n = discretization.get_level_sets().size();
-      
-      if (params.solver_name == "AMG")
+    const unsigned int n = discretization.get_level_sets().size();
+
+    if (params.solver_name == "AMG")
       {
-          preconditioner_amg.resize(n);
-          for (unsigned int i = 0; i < n; ++i)
-              preconditioner_amg[i] = std::make_unique<TrilinosWrappers::PreconditionAMG>();
+        preconditioner_amg.resize(n);
+        for (unsigned int i = 0; i < n; ++i)
+          preconditioner_amg[i] =
+            std::make_unique<TrilinosWrappers::PreconditionAMG>();
       }
-      else if (params.solver_name == "ILU")
+    else if (params.solver_name == "ILU")
       {
-          preconditioner_ilu.resize(n);
-          for (unsigned int i = 0; i < n; ++i)
-              preconditioner_ilu[i] = std::make_unique<TrilinosWrappers::PreconditionILU>();
+        preconditioner_ilu.resize(n);
+        for (unsigned int i = 0; i < n; ++i)
+          preconditioner_ilu[i] =
+            std::make_unique<TrilinosWrappers::PreconditionILU>();
       }
-      else if (params.solver_name == "direct")
+    else if (params.solver_name == "direct")
       {
-          solver_direct.resize(n);
-          for (unsigned int i = 0; i < n; ++i)
-              solver_direct[i] = std::make_unique<TrilinosWrappers::SolverDirect>();
+        solver_direct.resize(n);
+        for (unsigned int i = 0; i < n; ++i)
+          solver_direct[i] = std::make_unique<TrilinosWrappers::SolverDirect>();
       }
-      else
-          AssertThrow(false, ExcNotImplemented());
+    else
+      AssertThrow(false, ExcNotImplemented());
   }
 
   void
@@ -557,26 +613,26 @@ private:
   }
 
   void
-  postprocess(const double                          time,
-              const VectorType                     &solution,
-              const int                           domain_idx=0)
+  postprocess(const double      time,
+              const VectorType &solution,
+              const int         domain_idx = 0)
   {
     static std::vector<unsigned int> counter;
 
     if (counter.empty())
       counter.resize(discretization.get_level_sets().size(), 0);
 
-auto &my_counter = counter[domain_idx];
+    auto &my_counter = counter[domain_idx];
 
     const hp::MappingCollection<dim> &mapping = discretization.get_mapping();
     const Quadrature<1>              &quadrature_1D_error =
       discretization.get_quadrature_1D();
     const GDM::System<dim> &system = discretization.get_system();
-    const std::vector<std::shared_ptr<NonMatching::MeshClassifier<dim>>> &mesh_classifiers =
-      discretization.get_mesh_classifiers();
-    const hp::FECollection<dim> &fe        = discretization.get_fe();
-    const std::vector<VectorType>              &level_sets = discretization.get_level_sets();
-    const DoFHandler<dim>       &level_set_dof_handler =
+    const std::vector<std::shared_ptr<NonMatching::MeshClassifier<dim>>>
+      &mesh_classifiers               = discretization.get_mesh_classifiers();
+    const hp::FECollection<dim>   &fe = discretization.get_fe();
+    const std::vector<VectorType> &level_sets = discretization.get_level_sets();
+    const DoFHandler<dim>         &level_set_dof_handler =
       discretization.get_level_set_dof_handler();
 
     // compute error
@@ -584,7 +640,7 @@ auto &my_counter = counter[domain_idx];
 
     NonMatching::RegionUpdateFlags region_update_flags_error;
     region_update_flags_error.inside =
-        update_values | update_JxW_values | update_quadrature_points;
+      update_values | update_JxW_values | update_quadrature_points;
 
     NonMatching::FEValues<dim> non_matching_fe_values_error(
       fe,
@@ -601,7 +657,8 @@ auto &my_counter = counter[domain_idx];
     solution.update_ghost_values();
     for (const auto &cell : system.locally_active_cell_iterators())
       if (cell->is_locally_owned() &&
-          (mesh_classifiers[domain_idx]->location_to_level_set(cell->dealii_iterator()) !=
+          (mesh_classifiers[domain_idx]->location_to_level_set(
+             cell->dealii_iterator()) !=
            NonMatching::LocationToLevelSet::outside))
         {
           non_matching_fe_values_error.reinit(cell->dealii_iterator(),
@@ -613,7 +670,8 @@ auto &my_counter = counter[domain_idx];
             fe[0].dofs_per_cell);
           cell->get_dof_indices(local_dof_indices);
 
-          if (const std::optional<FEValues<dim>> &fe_values = non_matching_fe_values_error.get_inside_fe_values() )
+          if (const std::optional<FEValues<dim>> &fe_values =
+                non_matching_fe_values_error.get_inside_fe_values())
             {
               std::vector<double> solution_values(
                 fe_values->n_quadrature_points);
@@ -674,7 +732,7 @@ auto &my_counter = counter[domain_idx];
     //   }
 
     VectorType analytical_solution;
-    discretization.initialize_dof_vector(analytical_solution,domain_idx);
+    discretization.initialize_dof_vector(analytical_solution, domain_idx);
     GDM::VectorTools::interpolate(mapping,
                                   system,
                                   *params.exact_solution,
@@ -692,12 +750,12 @@ auto &my_counter = counter[domain_idx];
 
     data_out.build_patches();
 
-    if(time>params.end_t-1e-6){
-      std::string file_name =
-        std::string("solution_") +
-        std::to_string(domain_idx) + ".vtu";
-      data_out.write_vtu_in_parallel(file_name);
-    }
+    if (time > params.end_t - 1e-6)
+      {
+        std::string file_name =
+          std::string("solution_") + std::to_string(domain_idx) + ".vtu";
+        data_out.write_vtu_in_parallel(file_name);
+      }
 
     my_counter++;
   }
@@ -710,10 +768,11 @@ auto &my_counter = counter[domain_idx];
   Discretization<dim, Number> discretization;
 
   MassMatrixOperator<dim, Number>      mass_matrix_operator;
-  StiffnessMatrixOperator<dim, Number> stiffness_matrix_operator; 
-  
-  std::vector<std::unique_ptr<TrilinosWrappers::PreconditionAMG>> preconditioner_amg;
-  std::vector<std::unique_ptr<TrilinosWrappers::PreconditionILU>> preconditioner_ilu;
-  std::vector<std::unique_ptr<TrilinosWrappers::SolverDirect>> solver_direct;
+  StiffnessMatrixOperator<dim, Number> stiffness_matrix_operator;
 
+  std::vector<std::unique_ptr<TrilinosWrappers::PreconditionAMG>>
+    preconditioner_amg;
+  std::vector<std::unique_ptr<TrilinosWrappers::PreconditionILU>>
+    preconditioner_ilu;
+  std::vector<std::unique_ptr<TrilinosWrappers::SolverDirect>> solver_direct;
 };

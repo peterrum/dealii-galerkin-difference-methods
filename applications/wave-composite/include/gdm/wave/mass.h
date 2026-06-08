@@ -13,7 +13,7 @@ class MassMatrixOperator
 public:
   using VectorType = LinearAlgebra::distributed::Vector<Number>;
 
-  MassMatrixOperator(const Discretization<dim, Number>    &discretization)
+  MassMatrixOperator(const Discretization<dim, Number> &discretization)
     : discretization(discretization)
     , ghost_parameter_M(-1.0)
   {}
@@ -27,25 +27,28 @@ public:
   const std::vector<std::shared_ptr<TrilinosWrappers::SparseMatrix>> &
   get_sparse_matrix() const
   {
-      block_sparse_matrix.clear();
-      block_sparse_matrix.resize(discretization.get_level_sets().size());
-      for (size_t i = 0; i < discretization.get_level_sets().size(); ++i)
+    block_sparse_matrix.clear();
+    block_sparse_matrix.resize(discretization.get_level_sets().size());
+    for (size_t i = 0; i < discretization.get_level_sets().size(); ++i)
       {
-          block_sparse_matrix[i] = std::make_shared<TrilinosWrappers::SparseMatrix>();
-          compute_sparse_matrix(i, *block_sparse_matrix[i]);
+        block_sparse_matrix[i] =
+          std::make_shared<TrilinosWrappers::SparseMatrix>();
+        compute_sparse_matrix(i, *block_sparse_matrix[i]);
       }
-      return block_sparse_matrix;
+    return block_sparse_matrix;
   }
 
 private:
-  const Discretization<dim, Number>    &discretization;
+  const Discretization<dim, Number> &discretization;
 
   double ghost_parameter_M;
 
-  mutable std::vector<std::shared_ptr<TrilinosWrappers::SparseMatrix>> block_sparse_matrix;
+  mutable std::vector<std::shared_ptr<TrilinosWrappers::SparseMatrix>>
+    block_sparse_matrix;
 
   void
-  compute_sparse_matrix(size_t domain_idx, TrilinosWrappers::SparseMatrix &mat) const
+  compute_sparse_matrix(size_t                          domain_idx,
+                        TrilinosWrappers::SparseMatrix &mat) const
   {
     AssertThrow(ghost_parameter_M != -1.0, ExcNotImplemented());
 
@@ -57,11 +60,11 @@ private:
     const GDM::System<dim>          &system = discretization.get_system();
     const AffineConstraints<Number> &constraints =
       discretization.get_affine_constraints();
-    const std::vector<std::shared_ptr<NonMatching::MeshClassifier<dim>>> &mesh_classifiers =
-      discretization.get_mesh_classifiers();
-    const hp::FECollection<dim> &fe        = discretization.get_fe();
-    const std::vector<VectorType>              &level_sets = discretization.get_level_sets();
-    const DoFHandler<dim>       &level_set_dof_handler =
+    const std::vector<std::shared_ptr<NonMatching::MeshClassifier<dim>>>
+      &mesh_classifiers               = discretization.get_mesh_classifiers();
+    const hp::FECollection<dim>   &fe = discretization.get_fe();
+    const std::vector<VectorType> &level_sets = discretization.get_level_sets();
+    const DoFHandler<dim>         &level_set_dof_handler =
       discretization.get_level_set_dof_handler();
 
     // 1) create sparsity pattern
@@ -88,7 +91,8 @@ private:
         mesh_classifiers[domain_idx]->location_to_level_set(cell);
 
       const NonMatching::LocationToLevelSet neighbor_location =
-        mesh_classifiers[domain_idx]->location_to_level_set(cell->neighbor(face_index));
+        mesh_classifiers[domain_idx]->location_to_level_set(
+          cell->neighbor(face_index));
 
       if (cell_location == NonMatching::LocationToLevelSet::intersected &&
           neighbor_location != NonMatching::LocationToLevelSet::outside)
@@ -103,7 +107,7 @@ private:
 
     NonMatching::RegionUpdateFlags region_update_flags;
     region_update_flags.inside = update_values | update_gradients |
-                                   update_JxW_values | update_quadrature_points;
+                                 update_JxW_values | update_quadrature_points;
     region_update_flags.surface = update_values | update_gradients |
                                   update_JxW_values | update_quadrature_points |
                                   update_normal_vectors;
@@ -112,14 +116,15 @@ private:
     hp::QCollection<dim>  quadrature_collection(quadrature_1D);
     hp::QCollection<1>    quadrature_1D_collection(quadrature_1D);
 
-    NonMatching::FEValues<dim> non_matching_fe_values(mapping,
-                                                      fe_collection,
-                                                      quadrature_collection,
-                                                      quadrature_1D_collection,
-                                                      region_update_flags,
-                                                      *mesh_classifiers[domain_idx],
-                                                      level_set_dof_handler,
-                                                      level_sets[domain_idx]);
+    NonMatching::FEValues<dim> non_matching_fe_values(
+      mapping,
+      fe_collection,
+      quadrature_collection,
+      quadrature_1D_collection,
+      region_update_flags,
+      *mesh_classifiers[domain_idx],
+      level_set_dof_handler,
+      level_sets[domain_idx]);
 
     FEInterfaceValues<dim> fe_interface_values(
       mapping,
@@ -130,7 +135,8 @@ private:
     std::vector<types::global_dof_index> dof_indices;
     for (const auto &cell : system.locally_active_cell_iterators())
       if (cell->is_locally_owned() &&
-          (mesh_classifiers[domain_idx]->location_to_level_set(cell->dealii_iterator()) !=
+          (mesh_classifiers[domain_idx]->location_to_level_set(
+             cell->dealii_iterator()) !=
            NonMatching::LocationToLevelSet::outside))
         {
           non_matching_fe_values.reinit(cell->dealii_iterator(),
@@ -213,8 +219,7 @@ private:
                 for (const auto i : dof_indices)
                   local_interface_dof_indices.emplace_back(i);
 
-                mat.add(local_interface_dof_indices,
-                                  local_stabilization);
+                mat.add(local_interface_dof_indices, local_stabilization);
               }
 
           // get indices
@@ -222,9 +227,7 @@ private:
           cell->get_dof_indices(dof_indices);
 
           // assemble
-          constraints.distribute_local_to_global(cell_matrix,
-                                                 dof_indices,
-                                                 mat);
+          constraints.distribute_local_to_global(cell_matrix, dof_indices, mat);
         }
 
     mat.compress(VectorOperation::values::add);

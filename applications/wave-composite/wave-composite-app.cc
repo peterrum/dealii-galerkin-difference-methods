@@ -8,7 +8,12 @@ using namespace dealii;
 
 template <unsigned int dim>
 void
-fill_parameters(Parameters<dim> &params, const std::string &simulation_name, const unsigned int &domain_index, const unsigned int &fe_degree, const unsigned int &nb_division, const double &cfl)
+fill_parameters(Parameters<dim>    &params,
+                const std::string  &simulation_name,
+                const unsigned int &domain_index,
+                const unsigned int &fe_degree,
+                const unsigned int &nb_division,
+                const double       &cfl)
 {
   params.domain_index      = domain_index;
   params.fe_degree         = fe_degree;
@@ -24,12 +29,12 @@ fill_parameters(Parameters<dim> &params, const std::string &simulation_name, con
       // general settings
       params.simulation_type = "poisson";
       // params.fe_degree       = 1;
-      params.n_components    = 1;
+      params.n_components = 1;
 
       // geometry
       // params.n_subdivisions_1D = 16;
-      params.geometry_left     = -1.21;
-      params.geometry_right    = +1.21;
+      params.geometry_left  = -1.21;
+      params.geometry_right = +1.21;
 
       // mass matrix
       params.ghost_parameter_M = -1.0;
@@ -42,8 +47,10 @@ fill_parameters(Parameters<dim> &params, const std::string &simulation_name, con
       params.function_rhs =
         std::make_shared<Functions::ConstantFunction<dim>>(4.0);
 
-      params.speed.push_back(std::make_shared<Functions::ConstantFunction<dim>>(1.0));
-      params.speed.push_back(std::make_shared<Functions::ConstantFunction<dim>>(1.0));
+      params.speed.push_back(
+        std::make_shared<Functions::ConstantFunction<dim>>(1.0));
+      params.speed.push_back(
+        std::make_shared<Functions::ConstantFunction<dim>>(1.0));
 
       // time stepping
       params.exact_solution =
@@ -51,8 +58,8 @@ fill_parameters(Parameters<dim> &params, const std::string &simulation_name, con
           [](const auto &p) { return 1. - 2. / dim * (p.norm_square() - 1.); });
 
       params.function_domain_dbc = params.exact_solution;
-      params.start_t = 0.0;
-      params.end_t   = 0.1;
+      params.start_t             = 0.0;
+      params.end_t               = 0.1;
       // params.cfl     = 0.3;
       params.cfl_pow = 1.0;
 
@@ -83,12 +90,12 @@ fill_parameters(Parameters<dim> &params, const std::string &simulation_name, con
                                  std::string("heat-impl") :
                                  simulation_name; // "heat-rk" or "heat-impl"
       // params.fe_degree       = 3;
-      params.n_components    = 1;
+      params.n_components = 1;
 
       // geometry
       // params.n_subdivisions_1D = 16;
-      params.geometry_left     = -1.21;
-      params.geometry_right    = +1.21;
+      params.geometry_left  = -1.21;
+      params.geometry_right = +1.21;
 
       // mass matrix
       params.ghost_parameter_M = 0.75;
@@ -126,52 +133,55 @@ fill_parameters(Parameters<dim> &params, const std::string &simulation_name, con
             return 0.0;
           });
 
-      params.speed.push_back(std::make_shared<Functions::ConstantFunction<dim>>(1.0));
-      params.speed.push_back(std::make_shared<Functions::ConstantFunction<dim>>(1.0));
-      
-      // time stepping
-      params.exact_solution = params.function_interface_dbc;
-      params.function_domain_dbc = params.function_interface_dbc;
-      const auto make_function_initial_condition = 
-          [](const unsigned int domain_idx) -> std::shared_ptr<Function<dim>>
-      {
-          return std::make_shared<ScalarFunctionFromFunctionObject<dim>>(
-              [domain_idx](const auto &p) -> double {
-                  switch (domain_idx)
-                  {
-                      case 0:
-                          if (dim == 1)
-                          {
-                            return std::pow(p[0], 9.0);
-                          }
-                        else if (dim == 2)
-                          {
-                            return std::pow(p[0], 9.0) * std::pow(p[1], 8.0);
-                          }
-                        else
-                          AssertThrow(false, ExcNotImplemented());
-                      case 1:
-                          if (dim == 1)
-                          {
-                            return std::pow(p[0], 9.0);
-                          }
-                        else if (dim == 2)
-                          {
-                            return std::pow(p[0], 9.0) * std::pow(p[1], 8.0);
-                          }
-                        else
-                          AssertThrow(false, ExcNotImplemented());
-                      default:
-                          AssertThrow(false, ExcNotImplemented());
-                          return 0.0;
-                  }
-              });
-      };
-      params.function_initial_condition.push_back(make_function_initial_condition(0));
-      params.function_initial_condition.push_back(make_function_initial_condition(1));
+      params.speed.push_back(
+        std::make_shared<Functions::ConstantFunction<dim>>(1.0));
+      params.speed.push_back(
+        std::make_shared<Functions::ConstantFunction<dim>>(1.0));
 
-      params.start_t        = 0.0;
-      params.end_t          = 0.1;
+      // time stepping
+      params.exact_solution      = params.function_interface_dbc;
+      params.function_domain_dbc = params.function_interface_dbc;
+      const auto make_function_initial_condition =
+        [](const unsigned int domain_idx) -> std::shared_ptr<Function<dim>> {
+        return std::make_shared<ScalarFunctionFromFunctionObject<dim>>(
+          [domain_idx](const auto &p) -> double {
+            switch (domain_idx)
+              {
+                case 0:
+                  if (dim == 1)
+                    {
+                      return std::pow(p[0], 9.0);
+                    }
+                  else if (dim == 2)
+                    {
+                      return std::pow(p[0], 9.0) * std::pow(p[1], 8.0);
+                    }
+                  else
+                    AssertThrow(false, ExcNotImplemented());
+                case 1:
+                  if (dim == 1)
+                    {
+                      return std::pow(p[0], 9.0);
+                    }
+                  else if (dim == 2)
+                    {
+                      return std::pow(p[0], 9.0) * std::pow(p[1], 8.0);
+                    }
+                  else
+                    AssertThrow(false, ExcNotImplemented());
+                default:
+                  AssertThrow(false, ExcNotImplemented());
+                  return 0.0;
+              }
+          });
+      };
+      params.function_initial_condition.push_back(
+        make_function_initial_condition(0));
+      params.function_initial_condition.push_back(
+        make_function_initial_condition(1));
+
+      params.start_t = 0.0;
+      params.end_t   = 0.1;
 
       if (params.simulation_type == "heat-rk")
         {
@@ -206,13 +216,13 @@ fill_parameters(Parameters<dim> &params, const std::string &simulation_name, con
       // general settings
       params.simulation_type = "heat-rk";
       // params.fe_degree       = 3;
-      params.n_components    = 1;
-      params.composite       = true;
+      params.n_components = 1;
+      params.composite    = true;
 
       // geometry
       // params.n_subdivisions_1D = 16;
-      params.geometry_left     = -1.21;
-      params.geometry_right    = +1.21;
+      params.geometry_left  = -1.21;
+      params.geometry_right = +1.21;
 
       // mass matrix
       params.ghost_parameter_M = 0.75;
@@ -250,51 +260,54 @@ fill_parameters(Parameters<dim> &params, const std::string &simulation_name, con
             return 0.0;
           });
 
-      params.speed.push_back(std::make_shared<Functions::ConstantFunction<dim>>(1.0));
-      params.speed.push_back(std::make_shared<Functions::ConstantFunction<dim>>(1.0));
-      
+      params.speed.push_back(
+        std::make_shared<Functions::ConstantFunction<dim>>(1.0));
+      params.speed.push_back(
+        std::make_shared<Functions::ConstantFunction<dim>>(1.0));
+
       // time stepping
       params.exact_solution = params.function_domain_dbc;
-      const auto make_function_initial_condition = 
-          [](const unsigned int domain_idx) -> std::shared_ptr<Function<dim>>
-      {
-          return std::make_shared<ScalarFunctionFromFunctionObject<dim>>(
-              [domain_idx](const auto &p) -> double {
-                  switch (domain_idx)
-                  {
-                      case 0:
-                          if (dim == 1)
-                          {
-                            return std::pow(p[0], 9.0);
-                          }
-                        else if (dim == 2)
-                          {
-                            return std::pow(p[0], 9.0) * std::pow(p[1], 8.0);
-                          }
-                        else
-                          AssertThrow(false, ExcNotImplemented());
-                      case 1:
-                          if (dim == 1)
-                          {
-                            return std::pow(p[0], 9.0);
-                          }
-                        else if (dim == 2)
-                          {
-                            return std::pow(p[0], 9.0) * std::pow(p[1], 8.0);
-                          }
-                        else
-                          AssertThrow(false, ExcNotImplemented());
-                      default:
-                          AssertThrow(false, ExcNotImplemented());
-                          return 0.0;
-                  }
-              });
+      const auto make_function_initial_condition =
+        [](const unsigned int domain_idx) -> std::shared_ptr<Function<dim>> {
+        return std::make_shared<ScalarFunctionFromFunctionObject<dim>>(
+          [domain_idx](const auto &p) -> double {
+            switch (domain_idx)
+              {
+                case 0:
+                  if (dim == 1)
+                    {
+                      return std::pow(p[0], 9.0);
+                    }
+                  else if (dim == 2)
+                    {
+                      return std::pow(p[0], 9.0) * std::pow(p[1], 8.0);
+                    }
+                  else
+                    AssertThrow(false, ExcNotImplemented());
+                case 1:
+                  if (dim == 1)
+                    {
+                      return std::pow(p[0], 9.0);
+                    }
+                  else if (dim == 2)
+                    {
+                      return std::pow(p[0], 9.0) * std::pow(p[1], 8.0);
+                    }
+                  else
+                    AssertThrow(false, ExcNotImplemented());
+                default:
+                  AssertThrow(false, ExcNotImplemented());
+                  return 0.0;
+              }
+          });
       };
-      params.function_initial_condition.push_back(make_function_initial_condition(0));
-      params.function_initial_condition.push_back(make_function_initial_condition(1));
+      params.function_initial_condition.push_back(
+        make_function_initial_condition(0));
+      params.function_initial_condition.push_back(
+        make_function_initial_condition(1));
 
-      params.start_t        = 0.0;
-      params.end_t          = 0.1;
+      params.start_t = 0.0;
+      params.end_t   = 0.1;
 
       // params.cfl     = 0.1 / params.fe_degree / params.fe_degree;
       params.cfl_pow = 2.0;
@@ -322,12 +335,12 @@ fill_parameters(Parameters<dim> &params, const std::string &simulation_name, con
       // general settings
       params.simulation_type = "wave-rk";
       // params.fe_degree       = 3;
-      params.n_components    = 1;
+      params.n_components = 1;
 
       // geometry
       // params.n_subdivisions_1D = 16;
-      params.geometry_left     = -1.21;
-      params.geometry_right    = +1.21;
+      params.geometry_left  = -1.21;
+      params.geometry_right = +1.21;
 
       // mass matrix
       params.ghost_parameter_M = 0.25 * std::sqrt(3.0);
@@ -350,95 +363,131 @@ fill_parameters(Parameters<dim> &params, const std::string &simulation_name, con
                 // const auto wave_number = 3.0 * numbers::PI;
                 // return boost::math::cyl_bessel_j(0, wave_number * r) *
                 //        std::cos(wave_number * t);
-                if(p[0]+p[1]<-1)
-                {
-                    return ((std::cos(1.0)*std::cos(std::sqrt(10))+(std::sin(1.0)*std::sin(std::sqrt(10)))/(std::sqrt(10)))*std::cos(p[0]+p[1])+(-std::sin(1.0)*std::cos(std::sqrt(10))+(std::cos(1.0)*std::sin(std::sqrt(10)))/(std::sqrt(10)))*std::sin(p[0]+p[1]))*std::cos(std::sqrt(2)*t);
-                }
+                if (p[0] + p[1] < -1)
+                  {
+                    return ((std::cos(1.0) * std::cos(std::sqrt(10)) +
+                             (std::sin(1.0) * std::sin(std::sqrt(10))) /
+                               (std::sqrt(10))) *
+                              std::cos(p[0] + p[1]) +
+                            (-std::sin(1.0) * std::cos(std::sqrt(10)) +
+                             (std::cos(1.0) * std::sin(std::sqrt(10))) /
+                               (std::sqrt(10))) *
+                              std::sin(p[0] + p[1])) *
+                           std::cos(std::sqrt(2) * t);
+                  }
                 else if ((p[0] + p[1] >= -1) && (p[0] + p[1] <= 1))
-                {
-                    return (std::cos(std::sqrt(10)*(p[0]+p[1])))*std::cos(std::sqrt(2)*t); 
-                }
+                  {
+                    return (std::cos(std::sqrt(10) * (p[0] + p[1]))) *
+                           std::cos(std::sqrt(2) * t);
+                  }
                 else
-                {
-                    return ((std::cos(1.0)*std::cos(std::sqrt(10))+(std::sin(1.0)*std::sin(std::sqrt(10)))/(std::sqrt(10)))*std::cos(p[0]+p[1])+(std::sin(1.0)*std::cos(std::sqrt(10))-(std::cos(1.0)*std::sin(std::sqrt(10)))/(std::sqrt(10)))*std::sin(p[0]+p[1]))*std::cos(std::sqrt(2)*t); 
-                }
+                  {
+                    return ((std::cos(1.0) * std::cos(std::sqrt(10)) +
+                             (std::sin(1.0) * std::sin(std::sqrt(10))) /
+                               (std::sqrt(10))) *
+                              std::cos(p[0] + p[1]) +
+                            (std::sin(1.0) * std::cos(std::sqrt(10)) -
+                             (std::cos(1.0) * std::sin(std::sqrt(10))) /
+                               (std::sqrt(10))) *
+                              std::sin(p[0] + p[1])) *
+                           std::cos(std::sqrt(2) * t);
+                  }
               }
             else
               AssertThrow(false, ExcNotImplemented());
           });
       params.function_rhs = {};
 
-      params.speed.push_back(std::make_shared<Functions::ConstantFunction<dim>>(1.0));
-      params.speed.push_back(std::make_shared<Functions::ConstantFunction<dim>>(0.1));
-      params.speed.push_back(std::make_shared<Functions::ConstantFunction<dim>>(1.0));
-      
+      params.speed.push_back(
+        std::make_shared<Functions::ConstantFunction<dim>>(1.0));
+      params.speed.push_back(
+        std::make_shared<Functions::ConstantFunction<dim>>(0.1));
+      params.speed.push_back(
+        std::make_shared<Functions::ConstantFunction<dim>>(1.0));
+
       // time stepping
-      params.exact_solution = params.function_interface_dbc;
+      params.exact_solution      = params.function_interface_dbc;
       params.function_domain_dbc = params.function_interface_dbc;
 
-      const auto make_function_initial_condition = 
-          [](const unsigned int domain_idx) -> std::shared_ptr<Function<dim>>
-      {
-          return std::make_shared<ScalarFunctionFromFunctionObject<dim>>(
-              [domain_idx](const auto &p) -> double {
-                  const auto r = p.norm();
-                  switch (domain_idx)
-                  {
-                      case 0:
-                          if (dim == 1)
-                          {
-                            const auto wave_number = 1.5 * numbers::PI;
-                            return std::cos(wave_number * r);
-                          }
-                        else if (dim == 2)
-                          {
-                            // const auto wave_number = 3.0 * numbers::PI;
-                            // return boost::math::cyl_bessel_j(0, wave_number * r);
-                            return (std::cos(1.0)*std::cos(std::sqrt(10))+(std::sin(1.0)*std::sin(std::sqrt(10)))/(std::sqrt(10)))*std::cos(p[0]+p[1])+(-std::sin(1.0)*std::cos(std::sqrt(10))+(std::cos(1.0)*std::sin(std::sqrt(10)))/(std::sqrt(10)))*std::sin(p[0]+p[1]);
-                          }
-                        else
-                          AssertThrow(false, ExcNotImplemented());
-                      case 1:
-                          if (dim == 1)
-                          {
-                            const auto wave_number = 1.5 * numbers::PI;
-                            return std::cos(wave_number * r);
-                          }
-                          else if (dim == 2)
-                            {
-                              // const auto wave_number = 3.0 * numbers::PI;
-                              // return boost::math::cyl_bessel_j(0, wave_number * r);
-                              return std::cos(std::sqrt(10)*(p[0]+p[1]));
-                            }
-                          else
-                            AssertThrow(false, ExcNotImplemented());
-                        case 2:
-                          if (dim == 1)
-                          {
-                            const auto wave_number = 1.5 * numbers::PI;
-                            return std::cos(wave_number * r);
-                          }
-                          else if (dim == 2)
-                            {
-                              // const auto wave_number = 3.0 * numbers::PI;
-                              // return boost::math::cyl_bessel_j(0, wave_number * r);
-                              return (std::cos(1.0)*std::cos(std::sqrt(10))+(std::sin(1.0)*std::sin(std::sqrt(10)))/(std::sqrt(10)))*std::cos(p[0]+p[1])+(std::sin(1.0)*std::cos(std::sqrt(10))-(std::cos(1.0)*std::sin(std::sqrt(10)))/(std::sqrt(10)))*std::sin(p[0]+p[1]);
-                            }
-                          else
-                            AssertThrow(false, ExcNotImplemented());
-                      default:
-                          AssertThrow(false, ExcNotImplemented());
-                          return 0.0;
-                  }
-              });
+      const auto make_function_initial_condition =
+        [](const unsigned int domain_idx) -> std::shared_ptr<Function<dim>> {
+        return std::make_shared<ScalarFunctionFromFunctionObject<dim>>(
+          [domain_idx](const auto &p) -> double {
+            const auto r = p.norm();
+            switch (domain_idx)
+              {
+                case 0:
+                  if (dim == 1)
+                    {
+                      const auto wave_number = 1.5 * numbers::PI;
+                      return std::cos(wave_number * r);
+                    }
+                  else if (dim == 2)
+                    {
+                      // const auto wave_number = 3.0 * numbers::PI;
+                      // return boost::math::cyl_bessel_j(0, wave_number * r);
+                      return (std::cos(1.0) * std::cos(std::sqrt(10)) +
+                              (std::sin(1.0) * std::sin(std::sqrt(10))) /
+                                (std::sqrt(10))) *
+                               std::cos(p[0] + p[1]) +
+                             (-std::sin(1.0) * std::cos(std::sqrt(10)) +
+                              (std::cos(1.0) * std::sin(std::sqrt(10))) /
+                                (std::sqrt(10))) *
+                               std::sin(p[0] + p[1]);
+                    }
+                  else
+                    AssertThrow(false, ExcNotImplemented());
+                case 1:
+                  if (dim == 1)
+                    {
+                      const auto wave_number = 1.5 * numbers::PI;
+                      return std::cos(wave_number * r);
+                    }
+                  else if (dim == 2)
+                    {
+                      // const auto wave_number = 3.0 * numbers::PI;
+                      // return boost::math::cyl_bessel_j(0, wave_number * r);
+                      return std::cos(std::sqrt(10) * (p[0] + p[1]));
+                    }
+                  else
+                    AssertThrow(false, ExcNotImplemented());
+                case 2:
+                  if (dim == 1)
+                    {
+                      const auto wave_number = 1.5 * numbers::PI;
+                      return std::cos(wave_number * r);
+                    }
+                  else if (dim == 2)
+                    {
+                      // const auto wave_number = 3.0 * numbers::PI;
+                      // return boost::math::cyl_bessel_j(0, wave_number * r);
+                      return (std::cos(1.0) * std::cos(std::sqrt(10)) +
+                              (std::sin(1.0) * std::sin(std::sqrt(10))) /
+                                (std::sqrt(10))) *
+                               std::cos(p[0] + p[1]) +
+                             (std::sin(1.0) * std::cos(std::sqrt(10)) -
+                              (std::cos(1.0) * std::sin(std::sqrt(10))) /
+                                (std::sqrt(10))) *
+                               std::sin(p[0] + p[1]);
+                    }
+                  else
+                    AssertThrow(false, ExcNotImplemented());
+                default:
+                  AssertThrow(false, ExcNotImplemented());
+                  return 0.0;
+              }
+          });
       };
-      params.function_initial_condition.push_back(make_function_initial_condition(0));
-      params.function_initial_condition.push_back(make_function_initial_condition(1));
-      params.function_initial_condition.push_back(make_function_initial_condition(2));
-      params.start_t        = 0.0;
-      params.end_t          = 2.0;
+      params.function_initial_condition.push_back(
+        make_function_initial_condition(0));
+      params.function_initial_condition.push_back(
+        make_function_initial_condition(1));
+      params.function_initial_condition.push_back(
+        make_function_initial_condition(2));
+      params.start_t = 0.0;
+      params.end_t   = 2.0;
       // params.cfl            = 0.1;
-      params.cfl_pow        = 1.0;
+      params.cfl_pow = 1.0;
 
       // linear solvers
       params.solver_name = "AMG";
@@ -446,21 +495,23 @@ fill_parameters(Parameters<dim> &params, const std::string &simulation_name, con
 
       // level set field
       params.level_set_fe_degree = params.fe_degree;
-      const auto make_level_set = 
-          [](const unsigned int domain_idx) -> std::shared_ptr<Function<dim>>
-      {
-          return std::make_shared<ScalarFunctionFromFunctionObject<dim>>(
-              [domain_idx](const auto &p) -> double {
-                  switch (domain_idx)
-                  {
-                      case 0: return p[0]+p[1]+1;       
-                      case 1: return std::max(-p[0]-p[1]-1, p[0]+p[1]-1); 
-                      case 2: return -p[0]-p[1]+1;
-                      default:
-                          AssertThrow(false, ExcNotImplemented());
-                          return 0.0;
-                  }
-              });
+      const auto make_level_set =
+        [](const unsigned int domain_idx) -> std::shared_ptr<Function<dim>> {
+        return std::make_shared<ScalarFunctionFromFunctionObject<dim>>(
+          [domain_idx](const auto &p) -> double {
+            switch (domain_idx)
+              {
+                case 0:
+                  return p[0] + p[1] + 1;
+                case 1:
+                  return std::max(-p[0] - p[1] - 1, p[0] + p[1] - 1);
+                case 2:
+                  return -p[0] - p[1] + 1;
+                default:
+                  AssertThrow(false, ExcNotImplemented());
+                  return 0.0;
+              }
+          });
       };
 
       // params.level_set_functions.push_back(std::make_shared<Functions::SignedDistance::Sphere<dim>>());
@@ -478,13 +529,13 @@ fill_parameters(Parameters<dim> &params, const std::string &simulation_name, con
       // general settings
       params.simulation_type = "wave-rk";
       // params.fe_degree       = 3;
-      params.n_components    = 1;
-      params.composite       = true;
+      params.n_components = 1;
+      params.composite    = true;
 
       // geometry
       // params.n_subdivisions_1D = 16;
-      params.geometry_left     = -1.21;
-      params.geometry_right    = +1.21;
+      params.geometry_left  = -1.21;
+      params.geometry_right = +1.21;
       // params.geometry_left     = -5;
       // params.geometry_right    = +5;
 
@@ -511,15 +562,18 @@ fill_parameters(Parameters<dim> &params, const std::string &simulation_name, con
                        std::cos(wave_number * t);
                 // if(p[0]+p[1]<-1)
                 // {
-                //     return ((std::cos(1.0)*std::cos(std::sqrt(10))+(std::sin(1.0)*std::sin(std::sqrt(10)))/(std::sqrt(10)))*std::cos(p[0]+p[1])+(-std::sin(1.0)*std::cos(std::sqrt(10))+(std::cos(1.0)*std::sin(std::sqrt(10)))/(std::sqrt(10)))*std::sin(p[0]+p[1]))*std::cos(std::sqrt(2)*t);
+                //     return
+                //     ((std::cos(1.0)*std::cos(std::sqrt(10))+(std::sin(1.0)*std::sin(std::sqrt(10)))/(std::sqrt(10)))*std::cos(p[0]+p[1])+(-std::sin(1.0)*std::cos(std::sqrt(10))+(std::cos(1.0)*std::sin(std::sqrt(10)))/(std::sqrt(10)))*std::sin(p[0]+p[1]))*std::cos(std::sqrt(2)*t);
                 // }
                 // else if ((p[0] + p[1] >= -1) && (p[0] + p[1] <= 1))
                 // {
-                //     return (std::cos(std::sqrt(10)*(p[0]+p[1])))*std::cos(std::sqrt(2)*t); 
+                //     return
+                //     (std::cos(std::sqrt(10)*(p[0]+p[1])))*std::cos(std::sqrt(2)*t);
                 // }
                 // else
                 // {
-                //     return ((std::cos(1.0)*std::cos(std::sqrt(10))+(std::sin(1.0)*std::sin(std::sqrt(10)))/(std::sqrt(10)))*std::cos(p[0]+p[1])+(std::sin(1.0)*std::cos(std::sqrt(10))-(std::cos(1.0)*std::sin(std::sqrt(10)))/(std::sqrt(10)))*std::sin(p[0]+p[1]))*std::cos(std::sqrt(2)*t); 
+                //     return
+                //     ((std::cos(1.0)*std::cos(std::sqrt(10))+(std::sin(1.0)*std::sin(std::sqrt(10)))/(std::sqrt(10)))*std::cos(p[0]+p[1])+(std::sin(1.0)*std::cos(std::sqrt(10))-(std::cos(1.0)*std::sin(std::sqrt(10)))/(std::sqrt(10)))*std::sin(p[0]+p[1]))*std::cos(std::sqrt(2)*t);
                 // }
               }
             else
@@ -527,78 +581,83 @@ fill_parameters(Parameters<dim> &params, const std::string &simulation_name, con
           });
       params.function_rhs = {};
 
-      params.speed.push_back(std::make_shared<Functions::ConstantFunction<dim>>(1.0));
+      params.speed.push_back(
+        std::make_shared<Functions::ConstantFunction<dim>>(1.0));
       // params.speed.push_back(std::make_shared<Functions::ConstantFunction<dim>>(0.1));
-      params.speed.push_back(std::make_shared<Functions::ConstantFunction<dim>>(1.0));
-      
+      params.speed.push_back(
+        std::make_shared<Functions::ConstantFunction<dim>>(1.0));
+
       // time stepping
       params.exact_solution = params.function_domain_dbc;
 
-      const auto make_function_initial_condition = 
-          [](const unsigned int domain_idx) -> std::shared_ptr<Function<dim>>
-      {
-          return std::make_shared<ScalarFunctionFromFunctionObject<dim>>(
-              [domain_idx](const auto &p) -> double {
-                  const auto r = p.norm();
-                  switch (domain_idx)
-                  {
-                      case 0:
-                          if (dim == 1)
-                          {
-                            const auto wave_number = 1.5 * numbers::PI;
-                            return std::cos(wave_number * r);
-                          }
-                        else if (dim == 2)
-                          {
-                            const auto wave_number = 3.0 * numbers::PI;
-                            return boost::math::cyl_bessel_j(0, wave_number * r);
-                            // return (std::cos(1.0)*std::cos(std::sqrt(10))+(std::sin(1.0)*std::sin(std::sqrt(10)))/(std::sqrt(10)))*std::cos(p[0]+p[1])+(-std::sin(1.0)*std::cos(std::sqrt(10))+(std::cos(1.0)*std::sin(std::sqrt(10)))/(std::sqrt(10)))*std::sin(p[0]+p[1]);
-                          }
-                        else
-                          AssertThrow(false, ExcNotImplemented());
-                      case 1:
-                          if (dim == 1)
-                          {
-                            const auto wave_number = 1.5 * numbers::PI;
-                            return std::cos(wave_number * r);
-                          }
-                          else if (dim == 2)
-                            {
-                              const auto wave_number = 3.0 * numbers::PI;
-                              return boost::math::cyl_bessel_j(0, wave_number * r);
-                              // return std::cos(std::sqrt(10)*(p[0]+p[1]));
-                            }
-                          else
-                            AssertThrow(false, ExcNotImplemented());
-                        // case 2:
-                        //   if (dim == 1)
-                        //   {
-                        //     const auto wave_number = 1.5 * numbers::PI;
-                        //     return std::cos(wave_number * r);
-                        //   }
-                        //   else if (dim == 2)
-                        //     {
-                        //       // const auto wave_number = 3.0 * numbers::PI;
-                        //       // return boost::math::cyl_bessel_j(0, wave_number * r);
-                        //       return (std::cos(1.0)*std::cos(std::sqrt(10))+(std::sin(1.0)*std::sin(std::sqrt(10)))/(std::sqrt(10)))*std::cos(p[0]+p[1])+(std::sin(1.0)*std::cos(std::sqrt(10))-(std::cos(1.0)*std::sin(std::sqrt(10)))/(std::sqrt(10)))*std::sin(p[0]+p[1]);
-                        //     }
-                        //   else
-                        //     AssertThrow(false, ExcNotImplemented());
-                      default:
-                          AssertThrow(false, ExcNotImplemented());
-                          return 0.0;
-                  }
-              });
+      const auto make_function_initial_condition =
+        [](const unsigned int domain_idx) -> std::shared_ptr<Function<dim>> {
+        return std::make_shared<ScalarFunctionFromFunctionObject<dim>>(
+          [domain_idx](const auto &p) -> double {
+            const auto r = p.norm();
+            switch (domain_idx)
+              {
+                case 0:
+                  if (dim == 1)
+                    {
+                      const auto wave_number = 1.5 * numbers::PI;
+                      return std::cos(wave_number * r);
+                    }
+                  else if (dim == 2)
+                    {
+                      const auto wave_number = 3.0 * numbers::PI;
+                      return boost::math::cyl_bessel_j(0, wave_number * r);
+                      // return
+                      // (std::cos(1.0)*std::cos(std::sqrt(10))+(std::sin(1.0)*std::sin(std::sqrt(10)))/(std::sqrt(10)))*std::cos(p[0]+p[1])+(-std::sin(1.0)*std::cos(std::sqrt(10))+(std::cos(1.0)*std::sin(std::sqrt(10)))/(std::sqrt(10)))*std::sin(p[0]+p[1]);
+                    }
+                  else
+                    AssertThrow(false, ExcNotImplemented());
+                case 1:
+                  if (dim == 1)
+                    {
+                      const auto wave_number = 1.5 * numbers::PI;
+                      return std::cos(wave_number * r);
+                    }
+                  else if (dim == 2)
+                    {
+                      const auto wave_number = 3.0 * numbers::PI;
+                      return boost::math::cyl_bessel_j(0, wave_number * r);
+                      // return std::cos(std::sqrt(10)*(p[0]+p[1]));
+                    }
+                  else
+                    AssertThrow(false, ExcNotImplemented());
+                  // case 2:
+                  //   if (dim == 1)
+                  //   {
+                  //     const auto wave_number = 1.5 * numbers::PI;
+                  //     return std::cos(wave_number * r);
+                  //   }
+                  //   else if (dim == 2)
+                  //     {
+                  //       // const auto wave_number = 3.0 * numbers::PI;
+                  //       // return boost::math::cyl_bessel_j(0, wave_number *
+                  //       r); return
+                  //       (std::cos(1.0)*std::cos(std::sqrt(10))+(std::sin(1.0)*std::sin(std::sqrt(10)))/(std::sqrt(10)))*std::cos(p[0]+p[1])+(std::sin(1.0)*std::cos(std::sqrt(10))-(std::cos(1.0)*std::sin(std::sqrt(10)))/(std::sqrt(10)))*std::sin(p[0]+p[1]);
+                  //     }
+                  //   else
+                  //     AssertThrow(false, ExcNotImplemented());
+                default:
+                  AssertThrow(false, ExcNotImplemented());
+                  return 0.0;
+              }
+          });
       };
-      params.function_initial_condition.push_back(make_function_initial_condition(0));
-      params.function_initial_condition.push_back(make_function_initial_condition(1));
+      params.function_initial_condition.push_back(
+        make_function_initial_condition(0));
+      params.function_initial_condition.push_back(
+        make_function_initial_condition(1));
       // params.function_initial_condition.push_back(make_function_initial_condition(2));
 
-      params.start_t        = 0.0;
-      params.end_t          = 2.0;
+      params.start_t = 0.0;
+      params.end_t   = 2.0;
       // params.end_t          = (2 * numbers::PI )/ std::sqrt(2.0);
       // params.cfl            = 0.1;
-      params.cfl_pow        = 1.0;
+      params.cfl_pow = 1.0;
 
       // linear solvers
       params.solver_name = "AMG";
@@ -606,24 +665,27 @@ fill_parameters(Parameters<dim> &params, const std::string &simulation_name, con
       // level set field
       params.level_set_fe_degree = params.fe_degree;
 
-      const auto make_level_set = 
-          [](const unsigned int domain_idx) -> std::shared_ptr<Function<dim>>
-      {
-          return std::make_shared<ScalarFunctionFromFunctionObject<dim>>(
-              [domain_idx](const auto &p) -> double {
-                  switch (domain_idx)
-                  {
-                      case 0: return p[0]+p[1]+1;       
-                      case 1: return std::max(-p[0]-p[1]-1, p[0]+p[1]-1); 
-                      case 2: return -p[0]-p[1]+1;
-                      default:
-                          AssertThrow(false, ExcNotImplemented());
-                          return 0.0;
-                  }
-              });
+      const auto make_level_set =
+        [](const unsigned int domain_idx) -> std::shared_ptr<Function<dim>> {
+        return std::make_shared<ScalarFunctionFromFunctionObject<dim>>(
+          [domain_idx](const auto &p) -> double {
+            switch (domain_idx)
+              {
+                case 0:
+                  return p[0] + p[1] + 1;
+                case 1:
+                  return std::max(-p[0] - p[1] - 1, p[0] + p[1] - 1);
+                case 2:
+                  return -p[0] - p[1] + 1;
+                default:
+                  AssertThrow(false, ExcNotImplemented());
+                  return 0.0;
+              }
+          });
       };
 
-      params.level_set_functions.push_back(std::make_shared<Functions::SignedDistance::Sphere<dim>>());
+      params.level_set_functions.push_back(
+        std::make_shared<Functions::SignedDistance::Sphere<dim>>());
       // params.level_set_functions.push_back(make_level_set(0));
       // params.level_set_functions.push_back(make_level_set(1));
       // params.level_set_functions.push_back(make_level_set(2));
@@ -674,12 +736,12 @@ main(int argc, char **argv)
   // unsigned int fe_degree;
   // unsigned int nb_division;
   // double cfl;
-  unsigned int dim = 1;
+  unsigned int dim             = 1;
   std::string  simulation_name = "";
-  unsigned int domain_index = 0;
-  unsigned int fe_degree = 1;
-  unsigned int nb_division = 1;
-  double cfl = 0.1;
+  unsigned int domain_index    = 0;
+  unsigned int fe_degree       = 1;
+  unsigned int nb_division     = 1;
+  double       cfl             = 0.1;
 
   if (argc == 7)
     {
@@ -709,13 +771,15 @@ main(int argc, char **argv)
   if (dim == 1)
     {
       Parameters<1> params;
-      fill_parameters(params, simulation_name, domain_index, fe_degree, nb_division, cfl);
+      fill_parameters(
+        params, simulation_name, domain_index, fe_degree, nb_division, cfl);
       WaveProblem<1>(params).run();
     }
   else if (dim == 2)
     {
       Parameters<2> params;
-      fill_parameters(params, simulation_name, domain_index, fe_degree, nb_division, cfl);
+      fill_parameters(
+        params, simulation_name, domain_index, fe_degree, nb_division, cfl);
       WaveProblem<2>(params).run();
     }
   else
