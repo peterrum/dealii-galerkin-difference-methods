@@ -185,7 +185,7 @@ fill_parameters(Parameters<dim>    &params,
 
       if (params.simulation_type == "heat-rk")
         {
-          // params.cfl     = 0.1 / params.fe_degree / params.fe_degree;
+          params.cfl     = params.cfl / params.fe_degree / params.fe_degree;
           params.cfl_pow = 2.0;
         }
       else if (params.simulation_type == "heat-impl")
@@ -309,7 +309,7 @@ fill_parameters(Parameters<dim>    &params,
       params.start_t = 0.0;
       params.end_t   = 0.1;
 
-      // params.cfl     = 0.1 / params.fe_degree / params.fe_degree;
+      params.cfl     = params.cfl / params.fe_degree / params.fe_degree;
       params.cfl_pow = 2.0;
 
       // linear solvers
@@ -360,38 +360,38 @@ fill_parameters(Parameters<dim>    &params,
               }
             else if (dim == 2)
               {
-                // const auto wave_number = 3.0 * numbers::PI;
-                // return boost::math::cyl_bessel_j(0, wave_number * r) *
-                //        std::cos(wave_number * t);
-                if (p[0] + p[1] < -1)
-                  {
-                    return ((std::cos(1.0) * std::cos(std::sqrt(10)) +
-                             (std::sin(1.0) * std::sin(std::sqrt(10))) /
-                               (std::sqrt(10))) *
-                              std::cos(p[0] + p[1]) +
-                            (-std::sin(1.0) * std::cos(std::sqrt(10)) +
-                             (std::cos(1.0) * std::sin(std::sqrt(10))) /
-                               (std::sqrt(10))) *
-                              std::sin(p[0] + p[1])) *
-                           std::cos(std::sqrt(2) * t);
-                  }
-                else if ((p[0] + p[1] >= -1) && (p[0] + p[1] <= 1))
-                  {
-                    return (std::cos(std::sqrt(10) * (p[0] + p[1]))) *
-                           std::cos(std::sqrt(2) * t);
-                  }
-                else
-                  {
-                    return ((std::cos(1.0) * std::cos(std::sqrt(10)) +
-                             (std::sin(1.0) * std::sin(std::sqrt(10))) /
-                               (std::sqrt(10))) *
-                              std::cos(p[0] + p[1]) +
-                            (std::sin(1.0) * std::cos(std::sqrt(10)) -
-                             (std::cos(1.0) * std::sin(std::sqrt(10))) /
-                               (std::sqrt(10))) *
-                              std::sin(p[0] + p[1])) *
-                           std::cos(std::sqrt(2) * t);
-                  }
+                const auto wave_number = 3.0 * numbers::PI;
+                return boost::math::cyl_bessel_j(0, wave_number * r) *
+                       std::cos(wave_number * t);
+                // if (p[0] + p[1] < -1)
+                //   {
+                //     return ((std::cos(1.0) * std::cos(std::sqrt(10)) +
+                //              (std::sin(1.0) * std::sin(std::sqrt(10))) /
+                //                (std::sqrt(10))) *
+                //               std::cos(p[0] + p[1]) +
+                //             (-std::sin(1.0) * std::cos(std::sqrt(10)) +
+                //              (std::cos(1.0) * std::sin(std::sqrt(10))) /
+                //                (std::sqrt(10))) *
+                //               std::sin(p[0] + p[1])) *
+                //            std::cos(std::sqrt(2) * t);
+                //   }
+                // else if ((p[0] + p[1] >= -1) && (p[0] + p[1] <= 1))
+                //   {
+                //     return (std::cos(std::sqrt(10) * (p[0] + p[1]))) *
+                //            std::cos(std::sqrt(2) * t);
+                //   }
+                // else
+                //   {
+                //     return ((std::cos(1.0) * std::cos(std::sqrt(10)) +
+                //              (std::sin(1.0) * std::sin(std::sqrt(10))) /
+                //                (std::sqrt(10))) *
+                //               std::cos(p[0] + p[1]) +
+                //             (std::sin(1.0) * std::cos(std::sqrt(10)) -
+                //              (std::cos(1.0) * std::sin(std::sqrt(10))) /
+                //                (std::sqrt(10))) *
+                //               std::sin(p[0] + p[1])) *
+                //            std::cos(std::sqrt(2) * t);
+                //   }
               }
             else
               AssertThrow(false, ExcNotImplemented());
@@ -400,8 +400,8 @@ fill_parameters(Parameters<dim>    &params,
 
       params.speed.push_back(
         std::make_shared<Functions::ConstantFunction<dim>>(1.0));
-      params.speed.push_back(
-        std::make_shared<Functions::ConstantFunction<dim>>(0.1));
+      // params.speed.push_back(
+      //   std::make_shared<Functions::ConstantFunction<dim>>(0.1));
       params.speed.push_back(
         std::make_shared<Functions::ConstantFunction<dim>>(1.0));
 
@@ -424,16 +424,16 @@ fill_parameters(Parameters<dim>    &params,
                     }
                   else if (dim == 2)
                     {
-                      // const auto wave_number = 3.0 * numbers::PI;
-                      // return boost::math::cyl_bessel_j(0, wave_number * r);
-                      return (std::cos(1.0) * std::cos(std::sqrt(10)) +
-                              (std::sin(1.0) * std::sin(std::sqrt(10))) /
-                                (std::sqrt(10))) *
-                               std::cos(p[0] + p[1]) +
-                             (-std::sin(1.0) * std::cos(std::sqrt(10)) +
-                              (std::cos(1.0) * std::sin(std::sqrt(10))) /
-                                (std::sqrt(10))) *
-                               std::sin(p[0] + p[1]);
+                      const auto wave_number = 3.0 * numbers::PI;
+                      return boost::math::cyl_bessel_j(0, wave_number * r);
+                      // return (std::cos(1.0) * std::cos(std::sqrt(10)) +
+                      //         (std::sin(1.0) * std::sin(std::sqrt(10))) /
+                      //           (std::sqrt(10))) *
+                      //          std::cos(p[0] + p[1]) +
+                      //        (-std::sin(1.0) * std::cos(std::sqrt(10)) +
+                      //         (std::cos(1.0) * std::sin(std::sqrt(10))) /
+                      //           (std::sqrt(10))) *
+                      //          std::sin(p[0] + p[1]);
                     }
                   else
                     AssertThrow(false, ExcNotImplemented());
@@ -445,33 +445,33 @@ fill_parameters(Parameters<dim>    &params,
                     }
                   else if (dim == 2)
                     {
-                      // const auto wave_number = 3.0 * numbers::PI;
-                      // return boost::math::cyl_bessel_j(0, wave_number * r);
-                      return std::cos(std::sqrt(10) * (p[0] + p[1]));
+                      const auto wave_number = 3.0 * numbers::PI;
+                      return boost::math::cyl_bessel_j(0, wave_number * r);
+                      // return std::cos(std::sqrt(10) * (p[0] + p[1]));
                     }
                   else
                     AssertThrow(false, ExcNotImplemented());
-                case 2:
-                  if (dim == 1)
-                    {
-                      const auto wave_number = 1.5 * numbers::PI;
-                      return std::cos(wave_number * r);
-                    }
-                  else if (dim == 2)
-                    {
-                      // const auto wave_number = 3.0 * numbers::PI;
-                      // return boost::math::cyl_bessel_j(0, wave_number * r);
-                      return (std::cos(1.0) * std::cos(std::sqrt(10)) +
-                              (std::sin(1.0) * std::sin(std::sqrt(10))) /
-                                (std::sqrt(10))) *
-                               std::cos(p[0] + p[1]) +
-                             (std::sin(1.0) * std::cos(std::sqrt(10)) -
-                              (std::cos(1.0) * std::sin(std::sqrt(10))) /
-                                (std::sqrt(10))) *
-                               std::sin(p[0] + p[1]);
-                    }
-                  else
-                    AssertThrow(false, ExcNotImplemented());
+                // case 2:
+                //   if (dim == 1)
+                //     {
+                //       const auto wave_number = 1.5 * numbers::PI;
+                //       return std::cos(wave_number * r);
+                //     }
+                //   else if (dim == 2)
+                //     {
+                //       // const auto wave_number = 3.0 * numbers::PI;
+                //       // return boost::math::cyl_bessel_j(0, wave_number *
+                //       r); return (std::cos(1.0) * std::cos(std::sqrt(10)) +
+                //               (std::sin(1.0) * std::sin(std::sqrt(10))) /
+                //                 (std::sqrt(10))) *
+                //                std::cos(p[0] + p[1]) +
+                //              (std::sin(1.0) * std::cos(std::sqrt(10)) -
+                //               (std::cos(1.0) * std::sin(std::sqrt(10))) /
+                //                 (std::sqrt(10))) *
+                //                std::sin(p[0] + p[1]);
+                //     }
+                // else
+                //   AssertThrow(false, ExcNotImplemented());
                 default:
                   AssertThrow(false, ExcNotImplemented());
                   return 0.0;
@@ -482,8 +482,8 @@ fill_parameters(Parameters<dim>    &params,
         make_function_initial_condition(0));
       params.function_initial_condition.push_back(
         make_function_initial_condition(1));
-      params.function_initial_condition.push_back(
-        make_function_initial_condition(2));
+      // params.function_initial_condition.push_back(
+      //   make_function_initial_condition(2));
       params.start_t = 0.0;
       params.end_t   = 2.0;
       // params.cfl            = 0.1;
@@ -514,10 +514,11 @@ fill_parameters(Parameters<dim>    &params,
           });
       };
 
-      // params.level_set_functions.push_back(std::make_shared<Functions::SignedDistance::Sphere<dim>>());
-      params.level_set_functions.push_back(make_level_set(0));
-      params.level_set_functions.push_back(make_level_set(1));
-      params.level_set_functions.push_back(make_level_set(2));
+      params.level_set_functions.push_back(
+        std::make_shared<Functions::SignedDistance::Sphere<dim>>());
+      // params.level_set_functions.push_back(make_level_set(0));
+      // params.level_set_functions.push_back(make_level_set(1));
+      // params.level_set_functions.push_back(make_level_set(2));
 
       // output
       params.output_fe_degree = params.fe_degree;
