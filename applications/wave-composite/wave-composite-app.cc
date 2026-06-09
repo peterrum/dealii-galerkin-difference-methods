@@ -185,7 +185,7 @@ fill_parameters(Parameters<dim>    &params,
 
       if (params.simulation_type == "heat-rk")
         {
-          // params.cfl     = 0.1 / params.fe_degree / params.fe_degree;
+          params.cfl     = params.cfl / params.fe_degree / params.fe_degree;
           params.cfl_pow = 2.0;
         }
       else if (params.simulation_type == "heat-impl")
@@ -309,7 +309,7 @@ fill_parameters(Parameters<dim>    &params,
       params.start_t = 0.0;
       params.end_t   = 0.1;
 
-      // params.cfl     = 0.1 / params.fe_degree / params.fe_degree;
+      params.cfl     = params.cfl / params.fe_degree / params.fe_degree;
       params.cfl_pow = 2.0;
 
       // linear solvers
