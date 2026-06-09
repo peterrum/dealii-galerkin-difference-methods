@@ -460,8 +460,8 @@ fill_parameters(Parameters<dim>    &params,
                 //   else if (dim == 2)
                 //     {
                 //       // const auto wave_number = 3.0 * numbers::PI;
-                //       // return boost::math::cyl_bessel_j(0, wave_number * r);
-                //       return (std::cos(1.0) * std::cos(std::sqrt(10)) +
+                //       // return boost::math::cyl_bessel_j(0, wave_number *
+                //       r); return (std::cos(1.0) * std::cos(std::sqrt(10)) +
                 //               (std::sin(1.0) * std::sin(std::sqrt(10))) /
                 //                 (std::sqrt(10))) *
                 //                std::cos(p[0] + p[1]) +
@@ -470,8 +470,8 @@ fill_parameters(Parameters<dim>    &params,
                 //                 (std::sqrt(10))) *
                 //                std::sin(p[0] + p[1]);
                 //     }
-                  // else
-                  //   AssertThrow(false, ExcNotImplemented());
+                // else
+                //   AssertThrow(false, ExcNotImplemented());
                 default:
                   AssertThrow(false, ExcNotImplemented());
                   return 0.0;
@@ -514,7 +514,8 @@ fill_parameters(Parameters<dim>    &params,
           });
       };
 
-      params.level_set_functions.push_back(std::make_shared<Functions::SignedDistance::Sphere<dim>>());
+      params.level_set_functions.push_back(
+        std::make_shared<Functions::SignedDistance::Sphere<dim>>());
       // params.level_set_functions.push_back(make_level_set(0));
       // params.level_set_functions.push_back(make_level_set(1));
       // params.level_set_functions.push_back(make_level_set(2));
@@ -581,9 +582,11 @@ fill_parameters(Parameters<dim>    &params,
           });
       params.function_rhs = {};
 
-      params.speed.push_back(std::make_shared<Functions::ConstantFunction<dim>>(1.0));
+      params.speed.push_back(
+        std::make_shared<Functions::ConstantFunction<dim>>(1.0));
       // params.speed.push_back(std::make_shared<Functions::ConstantFunction<dim>>(0.1));
-      params.speed.push_back(std::make_shared<Functions::ConstantFunction<dim>>(1.0));
+      params.speed.push_back(
+        std::make_shared<Functions::ConstantFunction<dim>>(1.0));
 
       // time stepping
       params.exact_solution = params.function_domain_dbc;
