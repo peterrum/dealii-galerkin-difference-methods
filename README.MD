@@ -29,6 +29,12 @@ Run wave application:
 ./applications/wave/wave-app 1 wave
 ```
 
+Run wave-composite application:
+
+```
+./applications/wave-composite/wave-composite-app 1 wave-composite 0 1 8 0.1
+```
+
 Run wave application with MPI:
 
 

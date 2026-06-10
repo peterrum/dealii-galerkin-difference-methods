@@ -207,13 +207,24 @@ namespace GDM
                                 system.n_subdivisions);
 
         std::array<unsigned int, dim> offset_reference;
-        for (unsigned int d = 0; d < dim; ++d)
-          offset_reference[d] =
-            (indices[d] < system.fe_degree / 2) ?
-              0 :
-              (std::min(system.n_subdivisions[d],
-                        indices[d] + system.fe_degree / 2 + 1) -
-               system.fe_degree);
+        for (unsigned int d = 0; d < dim; ++d){
+          if(system.fe_degree % 2 == 0){
+            offset_reference[d] =
+              (indices[d] < system.fe_degree / 2) ?
+                0 :
+                (std::min(system.n_subdivisions[d],
+                          indices[d] + system.fe_degree / 2) -
+                system.fe_degree);
+          }
+          else{
+            offset_reference[d] =
+              (indices[d] < system.fe_degree / 2) ?
+                0 :
+                (std::min(system.n_subdivisions[d],
+                          indices[d] + system.fe_degree / 2 + 1) -
+                system.fe_degree);
+          }
+        }
 
         std::array<unsigned int, dim> n_dofs;
         for (unsigned int d = 0; d < dim; ++d)
