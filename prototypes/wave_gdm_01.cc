@@ -88,6 +88,44 @@ test()
           data_out.add_data_vector(dof_handler_solution,
                                    analytical_solution,
                                    "solution_ana");
+
+          analytical_solution = 0.0;
+
+          FEValues<dim> fe_values(
+            mapping,
+            fe,
+            dof_handler_solution.get_fe().get_unit_support_points(),
+            update_values);
+
+          for (const auto &cell : tria.active_cell_iterators())
+            if ((cell->active_cell_index() >= n_ghost_cells) &&
+                (cell->active_cell_index() < n_subdivisions_1D + n_ghost_cells))
+              {
+                fe_values.reinit(cell);
+
+                std::vector<types::global_dof_index> dof_indices(
+                  fe_values.dofs_per_cell);
+
+                for (unsigned int i = 0; i < fe_values.dofs_per_cell; ++i)
+                  dof_indices[i] =
+                    cell->active_cell_index() - n_ghost_cells + i;
+
+                std::vector<double> quadrature_values(
+                  fe_values.n_quadrature_points);
+                fe_values.get_function_values(solution,
+                                              dof_indices,
+                                              quadrature_values);
+
+                cell->as_dof_handler_iterator(dof_handler_solution)
+                  ->get_dof_indices(dof_indices);
+
+                for (unsigned int i = 0; i < dof_indices.size(); ++i)
+                  analytical_solution[dof_indices[i]] = quadrature_values[i];
+              }
+
+          data_out.add_data_vector(dof_handler_solution,
+                                   analytical_solution,
+                                   "solution");
         }
 
       const std::string file_name = "results.vtu";
