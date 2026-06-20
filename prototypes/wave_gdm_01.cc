@@ -396,7 +396,8 @@ test(const unsigned int n_subdivisions_1D,
     GDM::generate_fe_collection<dim>(GDM::generate_polynomials_1D(fe_degree),
                                      1);
 
-  const auto &fe = hp_fe[n_ghost_cells];
+  const auto        &fe              = hp_fe[n_ghost_cells];
+  const unsigned int n_dofs_per_cell = fe.n_dofs_per_cell();
 
   const auto exact_solution =
     std::make_shared<ScalarFunctionFromFunctionObject<dim>>(
@@ -430,9 +431,9 @@ test(const unsigned int n_subdivisions_1D,
       if ((cell->active_cell_index() >= n_ghost_cells) &&
           (cell->active_cell_index() < n_subdivisions_1D + n_ghost_cells))
         {
-          dof_indices.resize(fe.n_dofs_per_cell());
+          dof_indices.resize(n_dofs_per_cell);
 
-          for (unsigned int i = 0; i < fe.n_dofs_per_cell(); ++i)
+          for (unsigned int i = 0; i < n_dofs_per_cell; ++i)
             dof_indices[i] = cell->active_cell_index() - n_ghost_cells + i;
 
           constraints.add_entries_local_to_global(dof_indices,
@@ -459,10 +460,9 @@ test(const unsigned int n_subdivisions_1D,
       {
         fe_values.reinit(cell);
 
-        FullMatrix<double> mass_cell_matrix(fe.n_dofs_per_cell(),
-                                            fe.n_dofs_per_cell());
-        FullMatrix<double> stiffness_cell_matrix(fe.n_dofs_per_cell(),
-                                                 fe.n_dofs_per_cell());
+        FullMatrix<double> mass_cell_matrix(n_dofs_per_cell, n_dofs_per_cell);
+        FullMatrix<double> stiffness_cell_matrix(n_dofs_per_cell,
+                                                 n_dofs_per_cell);
 
         for (const unsigned int q_index : fe_values.quadrature_point_indices())
           for (const unsigned int i : fe_values.dof_indices())
@@ -479,9 +479,9 @@ test(const unsigned int n_subdivisions_1D,
                                              fe_values.JxW(q_index);
 
         // get indices
-        dof_indices.resize(fe.n_dofs_per_cell());
+        dof_indices.resize(n_dofs_per_cell);
 
-        for (unsigned int i = 0; i < fe.n_dofs_per_cell(); ++i)
+        for (unsigned int i = 0; i < n_dofs_per_cell; ++i)
           dof_indices[i] = cell->active_cell_index() - n_ghost_cells + i;
 
         constraints.distribute_local_to_global(mass_cell_matrix,
@@ -564,7 +564,8 @@ test(const unsigned int n_subdivisions_1D,
             FEValues<dim> fe_values(
               mapping,
               fe,
-              dof_handler_solution.get_fe().get_unit_support_points(),
+              Quadrature<dim>(
+                dof_handler_solution.get_fe().get_unit_support_points()),
               update_values);
 
             for (const auto &cell : tria.active_cell_iterators())

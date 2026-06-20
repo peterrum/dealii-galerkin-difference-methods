@@ -384,10 +384,7 @@ test(const unsigned int n_subdivisions_1D,
   constraints.close();
 
   Triangulation<dim> tria;
-  GridGenerator::subdivided_hyper_cube(tria,
-                                       n_subdivisions_1D + 2 * n_ghost_cells,
-                                       -1.0 - dx * n_ghost_cells,
-                                       +1.0 + dx * n_ghost_cells);
+  GridGenerator::subdivided_hyper_cube(tria, n_subdivisions_1D, -1.0, +1.0);
 
   DoFHandler<dim> dof_handler(tria);
   dof_handler.distribute_dofs(FE_Q<dim>(1));
@@ -396,7 +393,8 @@ test(const unsigned int n_subdivisions_1D,
     GDM::generate_fe_collection<dim>(GDM::generate_polynomials_1D(fe_degree),
                                      1);
 
-  const auto &fe = hp_fe[n_ghost_cells];
+  const auto        &fe              = hp_fe;
+  const unsigned int n_dofs_per_cell = fe.max_dofs_per_cell();
 
   const auto exact_solution =
     std::make_shared<ScalarFunctionFromFunctionObject<dim>>(
@@ -430,9 +428,9 @@ test(const unsigned int n_subdivisions_1D,
       if ((cell->active_cell_index() >= n_ghost_cells) &&
           (cell->active_cell_index() < n_subdivisions_1D + n_ghost_cells))
         {
-          dof_indices.resize(fe.n_dofs_per_cell());
+          dof_indices.resize(n_dofs_per_cell);
 
-          for (unsigned int i = 0; i < fe.n_dofs_per_cell(); ++i)
+          for (unsigned int i = 0; i < n_dofs_per_cell; ++i)
             dof_indices[i] = cell->active_cell_index() - n_ghost_cells + i;
 
           constraints.add_entries_local_to_global(dof_indices,
@@ -445,24 +443,34 @@ test(const unsigned int n_subdivisions_1D,
     stiffness_matrix.reinit(sparsity_pattern);
   }
 
+  const auto get_active_fe_index = [&](const auto &cell) {
+    const unsigned int index = cell->active_cell_index();
+    return (index < (fe_degree / 2) ?
+              index :
+              (index < (n_subdivisions_1D - fe_degree / 2) ?
+                 (fe_degree / 2) :
+                 (fe_degree + index - n_subdivisions_1D)));
+  };
+
   // compute mass and stiffness matrix
-  FEValues<dim> fe_values(mapping,
-                          fe,
-                          quadrature,
-                          update_JxW_values | update_values | update_gradients);
+  hp::FEValues<dim> hp_fe_values(hp::MappingCollection<dim>(mapping),
+                                 fe,
+                                 hp::QCollection<dim>(quadrature),
+                                 update_JxW_values | update_values |
+                                   update_gradients);
 
 
   std::vector<types::global_dof_index> dof_indices;
   for (const auto &cell : tria.active_cell_iterators())
-    if ((cell->active_cell_index() >= n_ghost_cells) &&
-        (cell->active_cell_index() < n_subdivisions_1D + n_ghost_cells))
+    if (true)
       {
-        fe_values.reinit(cell);
+        hp_fe_values.reinit(cell, get_active_fe_index(cell));
 
-        FullMatrix<double> mass_cell_matrix(fe.n_dofs_per_cell(),
-                                            fe.n_dofs_per_cell());
-        FullMatrix<double> stiffness_cell_matrix(fe.n_dofs_per_cell(),
-                                                 fe.n_dofs_per_cell());
+        const auto &fe_values = hp_fe_values.get_present_fe_values();
+
+        FullMatrix<double> mass_cell_matrix(n_dofs_per_cell, n_dofs_per_cell);
+        FullMatrix<double> stiffness_cell_matrix(n_dofs_per_cell,
+                                                 n_dofs_per_cell);
 
         for (const unsigned int q_index : fe_values.quadrature_point_indices())
           for (const unsigned int i : fe_values.dof_indices())
@@ -479,9 +487,9 @@ test(const unsigned int n_subdivisions_1D,
                                              fe_values.JxW(q_index);
 
         // get indices
-        dof_indices.resize(fe.n_dofs_per_cell());
+        dof_indices.resize(n_dofs_per_cell);
 
-        for (unsigned int i = 0; i < fe.n_dofs_per_cell(); ++i)
+        for (unsigned int i = 0; i < n_dofs_per_cell; ++i)
           dof_indices[i] = cell->active_cell_index() - n_ghost_cells + i;
 
         constraints.distribute_local_to_global(mass_cell_matrix,
@@ -534,13 +542,6 @@ test(const unsigned int n_subdivisions_1D,
         data_out.attach_triangulation(tria);
         data_out.add_data_vector(dof_handler, solution, "solution_lin");
 
-        data_out.set_cell_selection(
-          [&](const typename Triangulation<dim>::cell_iterator &cell) {
-            return (cell->active_cell_index() >= n_ghost_cells) &&
-                   (cell->active_cell_index() <
-                    n_subdivisions_1D + n_ghost_cells);
-          });
-
         DoFHandler<dim> dof_handler_solution;
         if (exact_solution)
           {
@@ -561,18 +562,19 @@ test(const unsigned int n_subdivisions_1D,
 
             analytical_solution = 0.0;
 
-            FEValues<dim> fe_values(
-              mapping,
+            hp::FEValues<dim> hp_fe_values(
+              hp::MappingCollection<dim>(mapping),
               fe,
-              dof_handler_solution.get_fe().get_unit_support_points(),
+              hp::QCollection<dim>(Quadrature<dim>(
+                dof_handler_solution.get_fe().get_unit_support_points())),
               update_values);
 
             for (const auto &cell : tria.active_cell_iterators())
-              if ((cell->active_cell_index() >= n_ghost_cells) &&
-                  (cell->active_cell_index() <
-                   n_subdivisions_1D + n_ghost_cells))
+              if (true)
                 {
-                  fe_values.reinit(cell);
+                  hp_fe_values.reinit(cell, get_active_fe_index(cell));
+
+                  const auto &fe_values = hp_fe_values.get_present_fe_values();
 
                   std::vector<types::global_dof_index> dof_indices(
                     fe_values.dofs_per_cell);
@@ -617,19 +619,20 @@ test(const unsigned int n_subdivisions_1D,
       {
         exact_solution->set_time(time);
 
-        FEValues<dim> fe_values(mapping,
-                                fe,
-                                QGauss<dim>(fe_degree + 3),
-                                update_values | update_JxW_values |
-                                  update_quadrature_points);
+        hp::FEValues<dim> hp_fe_values(
+          hp::MappingCollection<dim>(mapping),
+          fe,
+          hp::QCollection<dim>(QGauss<dim>(fe_degree + 3)),
+          update_values | update_JxW_values | update_quadrature_points);
 
         error = 0.0;
 
         for (const auto &cell : tria.active_cell_iterators())
-          if ((cell->active_cell_index() >= n_ghost_cells) &&
-              (cell->active_cell_index() < n_subdivisions_1D + n_ghost_cells))
+          if (true)
             {
-              fe_values.reinit(cell);
+              hp_fe_values.reinit(cell, get_active_fe_index(cell));
+
+              const auto &fe_values = hp_fe_values.get_present_fe_values();
 
               std::vector<types::global_dof_index> dof_indices(
                 fe_values.dofs_per_cell);
