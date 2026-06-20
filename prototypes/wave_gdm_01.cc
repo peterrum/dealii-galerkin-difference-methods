@@ -30,7 +30,7 @@ test()
   using BlockVectorType = LinearAlgebra::distributed::BlockVector<double>;
 
   const unsigned int fe_degree         = 3;
-  const unsigned int n_subdivisions_1D = 20;
+  const unsigned int n_subdivisions_1D = 40;
   const unsigned int n_ghost_cells     = fe_degree / 2;
   const double       dx                = 2.0 / n_subdivisions_1D;
   const double       cfl               = 0.3;
@@ -164,6 +164,8 @@ test()
 
   // Define rhs of ODE
   const auto fu_rhs = [&](const double time, const BlockVectorType &solution) {
+    (void)time;
+
     BlockVectorType result;
     result.reinit(solution);
     VectorType vec_rhs;
@@ -180,6 +182,7 @@ test()
   };
 
   unsigned int counter = 0;
+  double       error   = 0.0;
 
   const auto postprocess = [&](const double time, const VectorType &solution) {
     if (true)
@@ -269,6 +272,49 @@ test()
         data_out.write_vtu_in_parallel(file_name,
                                        dof_handler.get_mpi_communicator());
       }
+
+
+    if (exact_solution)
+      {
+        exact_solution->set_time(time);
+
+        FEValues<dim> fe_values(mapping,
+                                fe,
+                                quadrature,
+                                update_values | update_JxW_values |
+                                  update_quadrature_points);
+
+        error = 0.0;
+
+        for (const auto &cell : tria.active_cell_iterators())
+          if ((cell->active_cell_index() >= n_ghost_cells) &&
+              (cell->active_cell_index() < n_subdivisions_1D + n_ghost_cells))
+            {
+              fe_values.reinit(cell);
+
+              std::vector<types::global_dof_index> dof_indices(
+                fe_values.dofs_per_cell);
+
+              for (unsigned int i = 0; i < fe_values.dofs_per_cell; ++i)
+                dof_indices[i] = cell->active_cell_index() - n_ghost_cells + i;
+
+              std::vector<double> quadrature_values(
+                fe_values.n_quadrature_points);
+              fe_values.get_function_values(solution,
+                                            dof_indices,
+                                            quadrature_values);
+
+              for (const unsigned int q_index :
+                   fe_values.quadrature_point_indices())
+                error += std::pow(quadrature_values[q_index] -
+                                    exact_solution->value(
+                                      fe_values.quadrature_point(q_index)),
+                                  2.0) *
+                         fe_values.JxW(q_index);
+            }
+
+        error = std::sqrt(error);
+      }
   };
 
   // Perform time stepping
@@ -291,6 +337,8 @@ test()
 
       time.advance_time();
     }
+
+  std::cout << error << std::endl;
 }
 
 int
