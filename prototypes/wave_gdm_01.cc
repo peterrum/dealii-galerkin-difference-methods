@@ -135,7 +135,7 @@ test()
         for (const unsigned int q_index : fe_values.quadrature_point_indices())
           for (const unsigned int i : fe_values.dof_indices())
             for (const unsigned int j : fe_values.dof_indices())
-              stiffness_cell_matrix(i, j) += fe_values.shape_grad(i, q_index) *
+              stiffness_cell_matrix(i, j) -= fe_values.shape_grad(i, q_index) *
                                              fe_values.shape_grad(j, q_index) *
                                              fe_values.JxW(q_index);
 
@@ -211,6 +211,12 @@ test()
       data_out.attach_triangulation(tria);
       data_out.add_data_vector(dof_handler, solution.block(0), "solution_lin");
 
+      data_out.set_cell_selection(
+        [&](const typename Triangulation<dim>::cell_iterator &cell) {
+          return (cell->active_cell_index() >= n_ghost_cells) &&
+                 (cell->active_cell_index() <
+                  n_subdivisions_1D + n_ghost_cells);
+        });
 
       DoFHandler<dim> dof_handler_solution;
       if (exact_solution)
