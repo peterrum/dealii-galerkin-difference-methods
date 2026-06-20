@@ -1,4 +1,6 @@
+#include <deal.II/base/discrete_time.h>
 #include <deal.II/base/mpi.h>
+#include <deal.II/base/time_stepping.h>
 
 #include <deal.II/dofs/dof_handler.h>
 
@@ -31,6 +33,8 @@ test()
   const unsigned int n_subdivisions_1D = 20;
   const unsigned int n_ghost_cells     = fe_degree / 2;
   const double       dx                = 2.0 / n_subdivisions_1D;
+  const double       cfl               = 0.3;
+  const double       delta_t           = dx * cfl;
 
   MappingQ1<dim> mapping;
   QGauss<dim>    quadrature(fe_degree + 1);
@@ -73,7 +77,8 @@ test()
   VectorTools::interpolate(dof_handler, *exact_solution, solution.block(0));
 
   TrilinosWrappers::SparsityPattern sparsity_pattern;
-  TrilinosWrappers::SparseMatrix    sparse_matrix;
+  TrilinosWrappers::SparseMatrix    mass_matrix;
+  TrilinosWrappers::SparseMatrix    stiffness_matrix;
 
   // allocate memory for mass matrix
   {
@@ -95,7 +100,8 @@ test()
 
     sparsity_pattern.compress();
 
-    sparse_matrix.reinit(sparsity_pattern);
+    mass_matrix.reinit(sparsity_pattern);
+    stiffness_matrix.reinit(sparsity_pattern);
   }
 
   // compute mass matrix
@@ -104,7 +110,7 @@ test()
   FEValues<dim> fe_values(mapping,
                           fe,
                           quadrature,
-                          update_JxW_values | update_values);
+                          update_JxW_values | update_values | update_gradients);
 
 
   std::vector<types::global_dof_index> dof_indices;
@@ -114,15 +120,24 @@ test()
       {
         fe_values.reinit(cell);
 
-        FullMatrix<double> cell_matrix(fe.n_dofs_per_cell(),
-                                       fe.n_dofs_per_cell());
+        FullMatrix<double> mass_cell_matrix(fe.n_dofs_per_cell(),
+                                            fe.n_dofs_per_cell());
+        FullMatrix<double> stiffness_cell_matrix(fe.n_dofs_per_cell(),
+                                                 fe.n_dofs_per_cell());
 
         for (const unsigned int q_index : fe_values.quadrature_point_indices())
           for (const unsigned int i : fe_values.dof_indices())
             for (const unsigned int j : fe_values.dof_indices())
-              cell_matrix(i, j) += fe_values.shape_value(i, q_index) *
-                                   fe_values.shape_value(j, q_index) *
-                                   fe_values.JxW(q_index);
+              mass_cell_matrix(i, j) += fe_values.shape_value(i, q_index) *
+                                        fe_values.shape_value(j, q_index) *
+                                        fe_values.JxW(q_index);
+
+        for (const unsigned int q_index : fe_values.quadrature_point_indices())
+          for (const unsigned int i : fe_values.dof_indices())
+            for (const unsigned int j : fe_values.dof_indices())
+              stiffness_cell_matrix(i, j) += fe_values.shape_grad(i, q_index) *
+                                             fe_values.shape_grad(j, q_index) *
+                                             fe_values.JxW(q_index);
 
         // get indices
         dof_indices.resize(fe.n_dofs_per_cell());
@@ -130,16 +145,61 @@ test()
         for (unsigned int i = 0; i < fe.n_dofs_per_cell(); ++i)
           dof_indices[i] = cell->active_cell_index() - n_ghost_cells + i;
 
-        constraints.distribute_local_to_global(cell_matrix,
+        constraints.distribute_local_to_global(mass_cell_matrix,
                                                dof_indices,
-                                               sparse_matrix);
+                                               mass_matrix);
+        constraints.distribute_local_to_global(stiffness_cell_matrix,
+                                               dof_indices,
+                                               stiffness_matrix);
       }
 
-  sparse_matrix.compress(VectorOperation::values::add);
+  mass_matrix.compress(VectorOperation::values::add);
+  stiffness_matrix.compress(VectorOperation::values::add);
 
   // create direct solver
-  TrilinosWrappers::SolverDirect solver_direct;
-  solver_direct.initialize(sparse_matrix);
+  TrilinosWrappers::SolverDirect mass_matrix_solver;
+  mass_matrix_solver.initialize(mass_matrix);
+
+
+
+  // Define rhs of ODE
+  const auto fu_rhs = [&](const double time, const BlockVectorType &solution) {
+    BlockVectorType result;
+    result.reinit(solution);
+    VectorType vec_rhs;
+    vec_rhs.reinit(solution.block(0));
+
+    // du/dt = v
+    result.block(0) = solution.block(1);
+
+    // dv/dt = f(t, u)
+    stiffness_matrix.vmult(vec_rhs, solution.block(0));
+    mass_matrix_solver.solve(result.block(1), vec_rhs);
+
+    return result;
+  };
+
+  // Perform time stepping
+  DiscreteTime time(0, 1, delta_t);
+
+  TimeStepping::ExplicitRungeKutta<BlockVectorType> rk;
+  rk.initialize(TimeStepping::runge_kutta_method::RK_CLASSIC_FOURTH_ORDER);
+
+  // this->postprocess(start_t, vec_solution.block(0));
+
+  while ((time.is_at_end() == false))
+    {
+      rk.evolve_one_time_step(fu_rhs,
+                              time.get_current_time(),
+                              time.get_next_step_size(),
+                              solution);
+
+      // this->postprocess(time.get_current_time() +
+      //                     time.get_next_step_size(),
+      //                   vec_solution.block(0));
+
+      time.advance_time();
+    }
 
   if (true)
     {
@@ -191,7 +251,7 @@ test()
 
                 std::vector<double> quadrature_values(
                   fe_values.n_quadrature_points);
-                fe_values.get_function_values(solution,
+                fe_values.get_function_values(solution.block(0),
                                               dof_indices,
                                               quadrature_values);
 
