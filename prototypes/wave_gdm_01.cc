@@ -7,6 +7,10 @@
 #include <deal.II/grid/grid_generator.h>
 #include <deal.II/grid/tria.h>
 
+#include <deal.II/lac/trilinos_solver.h>
+#include <deal.II/lac/trilinos_sparse_matrix.h>
+#include <deal.II/lac/trilinos_sparsity_pattern.h>
+
 #include <deal.II/numerics/data_out.h>
 #include <deal.II/numerics/vector_tools.h>
 
@@ -27,6 +31,10 @@ test()
   const double       dx                = 2.0 / n_subdivisions_1D;
 
   MappingQ1<dim> mapping;
+  QGauss<dim>    quadrature(fe_degree + 1);
+
+  AffineConstraints<double> constraints;
+  constraints.close();
 
   Triangulation<dim> tria;
   GridGenerator::subdivided_hyper_cube(tria,
@@ -61,6 +69,74 @@ test()
   solution.reinit(dof_handler.n_dofs());
   VectorTools::interpolate(dof_handler, *exact_solution, solution);
 
+  TrilinosWrappers::SparsityPattern sparsity_pattern;
+  TrilinosWrappers::SparseMatrix    sparse_matrix;
+
+  // allocate memory for mass matrix
+  {
+    sparsity_pattern.reinit(dof_handler.n_dofs(), dof_handler.n_dofs());
+
+    std::vector<types::global_dof_index> dof_indices;
+    for (const auto &cell : tria.active_cell_iterators())
+      if ((cell->active_cell_index() >= n_ghost_cells) &&
+          (cell->active_cell_index() < n_subdivisions_1D + n_ghost_cells))
+        {
+          dof_indices.resize(fe.n_dofs_per_cell());
+
+          for (unsigned int i = 0; i < fe.n_dofs_per_cell(); ++i)
+            dof_indices[i] = cell->active_cell_index() - n_ghost_cells + i;
+
+          constraints.add_entries_local_to_global(dof_indices,
+                                                  sparsity_pattern);
+        }
+
+    sparsity_pattern.compress();
+
+    sparse_matrix.reinit(sparsity_pattern);
+  }
+
+  // compute mass matrix
+
+
+  FEValues<dim> fe_values(mapping,
+                          fe,
+                          quadrature,
+                          update_JxW_values | update_values);
+
+
+  std::vector<types::global_dof_index> dof_indices;
+  for (const auto &cell : tria.active_cell_iterators())
+    if ((cell->active_cell_index() >= n_ghost_cells) &&
+        (cell->active_cell_index() < n_subdivisions_1D + n_ghost_cells))
+      {
+        fe_values.reinit(cell);
+
+        FullMatrix<double> cell_matrix(fe.n_dofs_per_cell(),
+                                       fe.n_dofs_per_cell());
+
+        for (const unsigned int q_index : fe_values.quadrature_point_indices())
+          for (const unsigned int i : fe_values.dof_indices())
+            for (const unsigned int j : fe_values.dof_indices())
+              cell_matrix(i, j) += fe_values.shape_value(i, q_index) *
+                                   fe_values.shape_value(j, q_index) *
+                                   fe_values.JxW(q_index);
+
+        // get indices
+        dof_indices.resize(fe.n_dofs_per_cell());
+
+        for (unsigned int i = 0; i < fe.n_dofs_per_cell(); ++i)
+          dof_indices[i] = cell->active_cell_index() - n_ghost_cells + i;
+
+        constraints.distribute_local_to_global(cell_matrix,
+                                               dof_indices,
+                                               sparse_matrix);
+      }
+
+  sparse_matrix.compress(VectorOperation::values::add);
+
+  // create direct solver
+  TrilinosWrappers::SolverDirect solver_direct;
+  solver_direct.initialize(sparse_matrix);
 
   if (true)
     {
