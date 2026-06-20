@@ -280,6 +280,129 @@ namespace dealii::TimeStepping
 
             break;
           }
+        case (RK_FIFTH_ORDER):
+          {
+            /**
+             * Rabiei, F. and Ismail, F., 2012. Fifth-order improved
+             * Runge-Kutta method with reduced number of function evaluations.
+             * Australian Journal of Basic and Applied Sciences, 6(3),
+             * pp.97-105.
+             *
+             * Hossain, M.B., Hossain, M.J., Miah, M.M. and Alam, M.S., 2017.
+             * A comparative study on fourth order and butcher’s fifth order
+             * runge-kutta methods with third order initial value problem (IVP).
+             * Appl. Comput. Math, 6(6), p.243.
+             */
+            this->n_stages = 6;
+            this->b.reserve(this->n_stages);
+            this->c.reserve(this->n_stages);
+            std::vector<double> tmp;
+            this->a.push_back(tmp);
+            tmp.assign(5, 0.0);
+            tmp[0] = 1.0 / 4.0;
+            this->a.push_back(tmp);
+            tmp.assign(5, 0.0);
+            tmp[0] = 1.0 / 8.0;
+            tmp[1] = 1.0 / 8.0;
+            this->a.push_back(tmp);
+            tmp.assign(5, 0.0);
+            tmp[0] = 0.0;
+            tmp[1] = -1.0 / 2.0;
+            tmp[2] = 1.0;
+            this->a.push_back(tmp);
+            tmp.assign(5, 0.0);
+            tmp[0] = 3.0 / 16.0;
+            tmp[1] = 0.0;
+            tmp[2] = 0.0;
+            tmp[3] = 9.0 / 16.0;
+            this->a.push_back(tmp);
+            tmp.assign(5, 0.0);
+            tmp[0] = -3.0 / 7.0;
+            tmp[1] = 2.0 / 7.0;
+            tmp[2] = 12.0 / 7.0;
+            tmp[3] = -12.0 / 7.0;
+            tmp[4] = 8.0 / 7.0;
+            this->a.push_back(tmp);
+
+            this->b.push_back(7.0 / 90.0);
+            this->b.push_back(0.0);
+            this->b.push_back(32.0 / 90.0);
+            this->b.push_back(12.0 / 90.0);
+            this->b.push_back(32.0 / 90.0);
+            this->b.push_back(7.0 / 90.0);
+
+            this->c.push_back(0.0);
+            this->c.push_back(1.0 / 4.0);
+            this->c.push_back(1.0 / 4.0);
+            this->c.push_back(1.0 / 2.0);
+            this->c.push_back(3.0 / 4.0);
+            this->c.push_back(1.0);
+
+            break;
+          }
+        case (RK_SIXTH_ORDER):
+          {
+            /**
+             * Butcher, J.C., 1964. On Runge-Kutta processes of high order.
+             * Journal of the Australian Mathematical Society, 4(2), pp.179-194.
+             */
+            this->n_stages = 7;
+            this->b.reserve(this->n_stages);
+            this->c.reserve(this->n_stages);
+            std::vector<double> tmp;
+            this->a.push_back(tmp);
+            tmp.assign(6, 0.0);
+            tmp[0] = 1.0 / 3.0;
+            this->a.push_back(tmp);
+            tmp.assign(6, 0.0);
+            tmp[0] = 0.0;
+            tmp[1] = 2.0 / 3.0;
+            this->a.push_back(tmp);
+            tmp.assign(6, 0.0);
+            tmp[0] = 1.0 / 12.0;
+            tmp[1] = 1.0 / 3.0;
+            tmp[2] = -1.0 / 12.0;
+            this->a.push_back(tmp);
+            tmp.assign(6, 0.0);
+            tmp[0] = -1.0 / 16.0;
+            tmp[1] = 9.0 / 8.0;
+            tmp[2] = -3.0 / 16.0;
+            tmp[3] = -3.0 / 8.0;
+            this->a.push_back(tmp);
+            tmp.assign(6, 0.0);
+            tmp[0] = 0.0;
+            tmp[1] = 9.0 / 8.0;
+            tmp[2] = -3.0 / 8.0;
+            tmp[3] = -3.0 / 4.0;
+            tmp[4] = 1.0 / 2.0;
+            this->a.push_back(tmp);
+            tmp.assign(6, 0.0);
+            tmp[0] = 9.0 / 44.0;
+            tmp[1] = -9.0 / 11.0;
+            tmp[2] = 63.0 / 44.0;
+            tmp[3] = 18.0 / 11.0;
+            tmp[4] = 0.0;
+            tmp[5] = -16.0 / 11.0;
+            this->a.push_back(tmp);
+
+            this->b.push_back(11.0 / 120.0);
+            this->b.push_back(0.0);
+            this->b.push_back(27.0 / 40.0);
+            this->b.push_back(27.0 / 40.0);
+            this->b.push_back(-4.0 / 15.0);
+            this->b.push_back(-4.0 / 15.0);
+            this->b.push_back(11.0 / 120.0);
+
+            this->c.push_back(0.0);
+            this->c.push_back(1.0 / 3.0);
+            this->c.push_back(2.0 / 3.0);
+            this->c.push_back(1.0 / 3.0);
+            this->c.push_back(1.0 / 2.0);
+            this->c.push_back(1.0 / 2.0);
+            this->c.push_back(1.0);
+
+            break;
+          }
         default:
           {
             AssertThrow(
@@ -369,16 +492,16 @@ test(const unsigned int n_subdivisions_1D,
   using VectorType      = LinearAlgebra::distributed::Vector<double>;
   using BlockVectorType = LinearAlgebra::distributed::BlockVector<double>;
 
-  const unsigned int n_ghost_cells = fe_degree / 2;
-  const double       dx            = 2.0 / n_subdivisions_1D;
-  const double       cfl           = 0.2;
-  const double       delta_t       = dx * cfl;
+  const double dx      = 2.0 / n_subdivisions_1D;
+  const double cfl     = 0.2;
+  const double delta_t = dx * cfl;
 
   const TimeStepping::runge_kutta_method runge_kutta_method =
     get_runge_kutta_method(fe_degree + 1);
 
-  MappingQ1<dim> mapping;
-  QGauss<dim>    quadrature(fe_degree + 1);
+  hp::MappingCollection<dim> mapping;
+  mapping.push_back(MappingQ1<dim>());
+  QGauss<dim> quadrature(fe_degree + 1);
 
   AffineConstraints<double> constraints;
   constraints.close();
@@ -410,6 +533,15 @@ test(const unsigned int n_subdivisions_1D,
           AssertThrow(false, ExcNotImplemented());
       });
 
+  const auto get_active_fe_index = [&](const auto &cell) {
+    const unsigned int index = cell->active_cell_index();
+    return (index < (fe_degree / 2) ?
+              index :
+              (index < (n_subdivisions_1D - fe_degree / 2) ?
+                 (fe_degree / 2) :
+                 (fe_degree + index - n_subdivisions_1D)));
+  };
+
   BlockVectorType solution(2);
   solution.block(0).reinit(dof_handler.n_dofs());
   solution.block(1).reinit(dof_handler.n_dofs());
@@ -425,13 +557,14 @@ test(const unsigned int n_subdivisions_1D,
 
     std::vector<types::global_dof_index> dof_indices;
     for (const auto &cell : tria.active_cell_iterators())
-      if ((cell->active_cell_index() >= n_ghost_cells) &&
-          (cell->active_cell_index() < n_subdivisions_1D + n_ghost_cells))
+      if (true)
         {
           dof_indices.resize(n_dofs_per_cell);
 
+          const unsigned int active_fe_index = get_active_fe_index(cell);
+
           for (unsigned int i = 0; i < n_dofs_per_cell; ++i)
-            dof_indices[i] = cell->active_cell_index() - n_ghost_cells + i;
+            dof_indices[i] = cell->active_cell_index() - active_fe_index + i;
 
           constraints.add_entries_local_to_global(dof_indices,
                                                   sparsity_pattern);
@@ -443,17 +576,8 @@ test(const unsigned int n_subdivisions_1D,
     stiffness_matrix.reinit(sparsity_pattern);
   }
 
-  const auto get_active_fe_index = [&](const auto &cell) {
-    const unsigned int index = cell->active_cell_index();
-    return (index < (fe_degree / 2) ?
-              index :
-              (index < (n_subdivisions_1D - fe_degree / 2) ?
-                 (fe_degree / 2) :
-                 (fe_degree + index - n_subdivisions_1D)));
-  };
-
   // compute mass and stiffness matrix
-  hp::FEValues<dim> hp_fe_values(hp::MappingCollection<dim>(mapping),
+  hp::FEValues<dim> hp_fe_values(mapping,
                                  fe,
                                  hp::QCollection<dim>(quadrature),
                                  update_JxW_values | update_values |
@@ -464,7 +588,11 @@ test(const unsigned int n_subdivisions_1D,
   for (const auto &cell : tria.active_cell_iterators())
     if (true)
       {
-        hp_fe_values.reinit(cell, get_active_fe_index(cell));
+        const unsigned int active_fe_index = get_active_fe_index(cell);
+        hp_fe_values.reinit(cell,
+                            numbers::invalid_unsigned_int,
+                            numbers::invalid_unsigned_int,
+                            active_fe_index);
 
         const auto &fe_values = hp_fe_values.get_present_fe_values();
 
@@ -490,7 +618,7 @@ test(const unsigned int n_subdivisions_1D,
         dof_indices.resize(n_dofs_per_cell);
 
         for (unsigned int i = 0; i < n_dofs_per_cell; ++i)
-          dof_indices[i] = cell->active_cell_index() - n_ghost_cells + i;
+          dof_indices[i] = cell->active_cell_index() - active_fe_index + i;
 
         constraints.distribute_local_to_global(mass_cell_matrix,
                                                dof_indices,
@@ -563,7 +691,7 @@ test(const unsigned int n_subdivisions_1D,
             analytical_solution = 0.0;
 
             hp::FEValues<dim> hp_fe_values(
-              hp::MappingCollection<dim>(mapping),
+              mapping,
               fe,
               hp::QCollection<dim>(Quadrature<dim>(
                 dof_handler_solution.get_fe().get_unit_support_points())),
@@ -572,7 +700,12 @@ test(const unsigned int n_subdivisions_1D,
             for (const auto &cell : tria.active_cell_iterators())
               if (true)
                 {
-                  hp_fe_values.reinit(cell, get_active_fe_index(cell));
+                  const unsigned int active_fe_index =
+                    get_active_fe_index(cell);
+                  hp_fe_values.reinit(cell,
+                                      numbers::invalid_unsigned_int,
+                                      numbers::invalid_unsigned_int,
+                                      active_fe_index);
 
                   const auto &fe_values = hp_fe_values.get_present_fe_values();
 
@@ -581,7 +714,7 @@ test(const unsigned int n_subdivisions_1D,
 
                   for (unsigned int i = 0; i < fe_values.dofs_per_cell; ++i)
                     dof_indices[i] =
-                      cell->active_cell_index() - n_ghost_cells + i;
+                      cell->active_cell_index() - active_fe_index + i;
 
                   std::vector<double> quadrature_values(
                     fe_values.n_quadrature_points);
@@ -620,7 +753,7 @@ test(const unsigned int n_subdivisions_1D,
         exact_solution->set_time(time);
 
         hp::FEValues<dim> hp_fe_values(
-          hp::MappingCollection<dim>(mapping),
+          mapping,
           fe,
           hp::QCollection<dim>(QGauss<dim>(fe_degree + 3)),
           update_values | update_JxW_values | update_quadrature_points);
@@ -630,7 +763,11 @@ test(const unsigned int n_subdivisions_1D,
         for (const auto &cell : tria.active_cell_iterators())
           if (true)
             {
-              hp_fe_values.reinit(cell, get_active_fe_index(cell));
+              const unsigned int active_fe_index = get_active_fe_index(cell);
+              hp_fe_values.reinit(cell,
+                                  numbers::invalid_unsigned_int,
+                                  numbers::invalid_unsigned_int,
+                                  active_fe_index);
 
               const auto &fe_values = hp_fe_values.get_present_fe_values();
 
@@ -638,7 +775,8 @@ test(const unsigned int n_subdivisions_1D,
                 fe_values.dofs_per_cell);
 
               for (unsigned int i = 0; i < fe_values.dofs_per_cell; ++i)
-                dof_indices[i] = cell->active_cell_index() - n_ghost_cells + i;
+                dof_indices[i] =
+                  cell->active_cell_index() - active_fe_index + i;
 
               std::vector<double> quadrature_values(
                 fe_values.n_quadrature_points);
