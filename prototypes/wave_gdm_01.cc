@@ -1,3 +1,4 @@
+#include <deal.II/base/convergence_table.h>
 #include <deal.II/base/discrete_time.h>
 #include <deal.II/base/mpi.h>
 #include <deal.II/base/time_stepping.h>
@@ -22,19 +23,43 @@
 
 using namespace dealii;
 
+TimeStepping::runge_kutta_method
+get_runge_kutta_method(const unsigned int n_stages)
+{
+  if (n_stages == 1)
+    return TimeStepping::runge_kutta_method::FORWARD_EULER;
+  else if (n_stages == 2)
+    return TimeStepping::runge_kutta_method::HEUN_EULER;
+  else if (n_stages == 3)
+    return TimeStepping::runge_kutta_method::RK_THIRD_ORDER;
+  else if (n_stages == 4)
+    return TimeStepping::runge_kutta_method::RK_CLASSIC_FOURTH_ORDER;
+  else if (n_stages == 5)
+    return TimeStepping::runge_kutta_method::RK_FIFTH_ORDER;
+  else if (n_stages == 6)
+    return TimeStepping::runge_kutta_method::RK_SIXTH_ORDER;
+
+  AssertThrow(false, ExcNotImplemented());
+
+  return {};
+}
+
 template <int dim>
 void
-test()
+test(const unsigned int n_subdivisions_1D,
+     const unsigned int fe_degree,
+     ConvergenceTable  &table)
 {
   using VectorType      = LinearAlgebra::distributed::Vector<double>;
   using BlockVectorType = LinearAlgebra::distributed::BlockVector<double>;
 
-  const unsigned int fe_degree         = 3;
-  const unsigned int n_subdivisions_1D = 40;
-  const unsigned int n_ghost_cells     = fe_degree / 2;
-  const double       dx                = 2.0 / n_subdivisions_1D;
-  const double       cfl               = 0.3;
-  const double       delta_t           = dx * cfl;
+  const unsigned int n_ghost_cells = fe_degree / 2;
+  const double       dx            = 2.0 / n_subdivisions_1D;
+  const double       cfl           = 0.2;
+  const double       delta_t       = dx * cfl;
+
+  const TimeStepping::runge_kutta_method runge_kutta_method =
+    get_runge_kutta_method(fe_degree + 1);
 
   MappingQ1<dim> mapping;
   QGauss<dim>    quadrature(fe_degree + 1);
@@ -104,9 +129,7 @@ test()
     stiffness_matrix.reinit(sparsity_pattern);
   }
 
-  // compute mass matrix
-
-
+  // compute mass and stiffness matrix
   FEValues<dim> fe_values(mapping,
                           fe,
                           quadrature,
@@ -280,7 +303,7 @@ test()
 
         FEValues<dim> fe_values(mapping,
                                 fe,
-                                quadrature,
+                                QGauss<dim>(fe_degree + 3),
                                 update_values | update_JxW_values |
                                   update_quadrature_points);
 
@@ -321,7 +344,7 @@ test()
   DiscreteTime time(0, 1, delta_t);
 
   TimeStepping::ExplicitRungeKutta<BlockVectorType> rk;
-  rk.initialize(TimeStepping::runge_kutta_method::RK_CLASSIC_FOURTH_ORDER);
+  rk.initialize(runge_kutta_method);
 
   postprocess(0.0, solution.block(0));
 
@@ -338,7 +361,13 @@ test()
       time.advance_time();
     }
 
-  std::cout << error << std::endl;
+  table.add_value("n_cells", n_subdivisions_1D);
+  table.add_value("degree", fe_degree);
+
+  table.add_value("error", error);
+  table.set_scientific("error", true);
+  table.evaluate_convergence_rates(
+    "error", "n_cells", ConvergenceTable::RateMode::reduction_rate_log2, dim);
 }
 
 int
@@ -346,7 +375,21 @@ main(int argc, char **argv)
 {
   Utilities::MPI::MPI_InitFinalize mpi(argc, argv, 1);
 
-  const int dim = 1;
+  const int          dim                    = 1;
+  const unsigned int fe_degree              = 5;
+  const unsigned int n_subdivisions_1D_min  = 10;
+  const unsigned int n_subdivisions_1D_max  = 40;
+  const unsigned int n_subdivisions_1D_step = 10;
 
-  test<dim>();
+  ConvergenceTable table;
+
+  for (unsigned int n_subdivisions_1D = n_subdivisions_1D_min;
+       n_subdivisions_1D <=
+       std::max(n_subdivisions_1D_min, n_subdivisions_1D_max);
+       n_subdivisions_1D += n_subdivisions_1D_step)
+    {
+      test<dim>(n_subdivisions_1D, fe_degree, table);
+    }
+
+  table.write_text(std::cout);
 }
