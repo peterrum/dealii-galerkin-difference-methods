@@ -7,6 +7,7 @@
 #include <deal.II/grid/grid_generator.h>
 #include <deal.II/grid/tria.h>
 
+#include <deal.II/lac/la_parallel_block_vector.h>
 #include <deal.II/lac/trilinos_solver.h>
 #include <deal.II/lac/trilinos_sparse_matrix.h>
 #include <deal.II/lac/trilinos_sparsity_pattern.h>
@@ -23,7 +24,8 @@ template <int dim>
 void
 test()
 {
-  using VectorType = LinearAlgebra::distributed::Vector<double>;
+  using VectorType      = LinearAlgebra::distributed::Vector<double>;
+  using BlockVectorType = LinearAlgebra::distributed::BlockVector<double>;
 
   const unsigned int fe_degree         = 3;
   const unsigned int n_subdivisions_1D = 20;
@@ -65,9 +67,10 @@ test()
           AssertThrow(false, ExcNotImplemented());
       });
 
-  VectorType solution;
-  solution.reinit(dof_handler.n_dofs());
-  VectorTools::interpolate(dof_handler, *exact_solution, solution);
+  BlockVectorType solution(2);
+  solution.block(0).reinit(dof_handler.n_dofs());
+  solution.block(1).reinit(dof_handler.n_dofs());
+  VectorTools::interpolate(dof_handler, *exact_solution, solution.block(0));
 
   TrilinosWrappers::SparsityPattern sparsity_pattern;
   TrilinosWrappers::SparseMatrix    sparse_matrix;
@@ -146,7 +149,7 @@ test()
       DataOut<dim> data_out;
       data_out.set_flags(flags);
       data_out.attach_triangulation(tria);
-      data_out.add_data_vector(dof_handler, solution, "solution_lin");
+      data_out.add_data_vector(dof_handler, solution.block(0), "solution_lin");
 
 
       DoFHandler<dim> dof_handler_solution;
