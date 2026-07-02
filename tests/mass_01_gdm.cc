@@ -131,7 +131,10 @@ test()
   SolverCG<VectorType> solver(solver_control);
   solver.solve(sparse_matrix, solution_projected, rhs, preconditioner);
 
-  GDM::VectorTools::interpolate(mapping, system, function, solution_interpolated);
+  GDM::VectorTools::interpolate(mapping,
+                                system,
+                                function,
+                                solution_interpolated);
 
   // computer error
   Vector<Number> cell_wise_error;
@@ -159,7 +162,8 @@ test()
                                       cell_wise_error,
                                       VectorTools::NormType::L2_norm);
 
-  std::cout << "error: " << error_projected << " " << error_interpolated << std::endl;
+  std::cout << "error: " << error_projected << " " << error_interpolated
+            << std::endl;
 
   GDM::DataOut<dim> data_out(system, mapping, fe_degree);
   data_out.add_data_vector(solution_projected, "solution_projected");
