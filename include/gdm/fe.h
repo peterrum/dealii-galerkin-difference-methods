@@ -55,10 +55,61 @@ namespace GDM
   std::vector<std::vector<Polynomials::Polynomial<double>>>
   generate_polynomials_1D(const unsigned int fe_degree)
   {
-    std::vector<std::vector<Polynomials::Polynomial<double>>> all_polynomial;
+std::vector<std::vector<Polynomials::Polynomial<double>>> all_polynomial;
 
-    // clang-format off
-    std::vector<std::vector<std::vector<std::vector<double>>>> all_coefficients =
+if (fe_degree == 2)
+  {
+    // p = 2 DGGD basis on the dual grid.
+    //
+    // These coefficient tables are written in the deal.II reference
+    // coordinate xi in [0,1].
+    //
+    // Each polynomial is entered in descending powers:
+    // a2, a1, a0.
+    //
+    // The code below reverses them before constructing Polynomial<double>.
+
+    std::vector<std::vector<std::vector<double>>> all_coefficients_p2 =
+      {
+        // Case 0: left boundary half-cell I_0^Omega
+        {
+          { 1.0 / 8.0,  -3.0 / 4.0,  1.0 },
+          {-1.0 / 4.0,   1.0,        0.0 },
+          { 1.0 / 8.0,  -1.0 / 4.0,  0.0 }
+        },
+
+        // Case 1: interior dual cell I_k
+        {
+          { 1.0 / 2.0,  -1.0,        3.0 / 8.0 },
+          {-1.0,         1.0,        3.0 / 4.0 },
+          { 1.0 / 2.0,   0.0,       -1.0 / 8.0 }
+        },
+
+        // Case 2: right boundary half-cell I_n^Omega
+        {
+          { 1.0 / 8.0,   0.0,       -1.0 / 8.0 },
+          {-1.0 / 4.0,  -1.0 / 2.0,  3.0 / 4.0 },
+          { 1.0 / 8.0,   1.0 / 2.0,  3.0 / 8.0 }
+        }
+      };
+
+    for (auto coefficients : all_coefficients_p2)
+      {
+        for (unsigned int i = 0; i < coefficients.size(); ++i)
+          std::reverse(coefficients[i].begin(), coefficients[i].end());
+
+        std::vector<Polynomials::Polynomial<double>> polynomials;
+        for (unsigned int i = 0; i < coefficients.size(); ++i)
+          polynomials.emplace_back(coefficients[i]);
+
+        all_polynomial.push_back(polynomials);
+      }
+
+    return all_polynomial;
+  }
+
+// clang-format off
+std::vector<std::vector<std::vector<std::vector<double>>>> all_coefficients =
       {{
         // fe_degree == 1
         {{
