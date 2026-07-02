@@ -72,7 +72,8 @@ test()
 
   // create vectors
   VectorType rhs(n_dofs);
-  VectorType solution(n_dofs);
+  VectorType solution_projected(n_dofs);
+  VectorType solution_interpolated(n_dofs);
 
   // compute matrix and right-hand side vector
   hp::FEValues<dim> fe_values_collection(mapping,
@@ -128,23 +129,45 @@ test()
   // solve problem
   ReductionControl     solver_control(100, 1.e-10, 1.e-8);
   SolverCG<VectorType> solver(solver_control);
-  solver.solve(sparse_matrix, solution, rhs, preconditioner);
+  solver.solve(sparse_matrix, solution_projected, rhs, preconditioner);
+
+  GDM::VectorTools::interpolate(mapping, system, function, solution_interpolated);
 
   // computer error
   Vector<Number> cell_wise_error;
   GDM::VectorTools::integrate_difference(mapping,
                                          system,
-                                         solution,
+                                         solution_projected,
                                          function,
                                          cell_wise_error,
                                          quadrature,
                                          VectorTools::NormType::L2_norm);
-  const auto error =
+  const auto error_projected =
     VectorTools::compute_global_error(system.get_triangulation(),
                                       cell_wise_error,
                                       VectorTools::NormType::L2_norm);
 
-  std::cout << "error: " << error << std::endl;
+  GDM::VectorTools::integrate_difference(mapping,
+                                         system,
+                                         solution_interpolated,
+                                         function,
+                                         cell_wise_error,
+                                         quadrature,
+                                         VectorTools::NormType::L2_norm);
+  const auto error_interpolated =
+    VectorTools::compute_global_error(system.get_triangulation(),
+                                      cell_wise_error,
+                                      VectorTools::NormType::L2_norm);
+
+  std::cout << "error: " << error_projected << " " << error_interpolated << std::endl;
+
+  GDM::DataOut<dim> data_out(system, mapping, fe_degree);
+  data_out.add_data_vector(solution_projected, "solution_projected");
+  data_out.add_data_vector(solution_interpolated, "solution_interpolated");
+  data_out.build_patches();
+
+  std::ofstream file("solution.vtu");
+  data_out.write_vtu(file);
 }
 
 
