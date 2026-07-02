@@ -291,9 +291,11 @@ namespace GDM
             }
         }
 
-      std::sort(points_all.begin(),
-                points_all.end(),
-                [](const auto &a, const auto &b) { return a.first < b.first; });
+      std::stable_sort(points_all.begin(),
+                       points_all.end(),
+                       [](const auto &a, const auto &b) {
+                         return a.first < b.first;
+                       });
       points_all.erase(std::unique(points_all.begin(),
                                    points_all.end(),
                                    [](const auto &a, const auto &b) {
@@ -319,7 +321,7 @@ namespace GDM
                                return a_[d] < b_[d];
                            }
 
-                         return true;
+                         return a.first < b.first;
                        });
 
       std::vector<dealii::types::global_dof_index> result(
