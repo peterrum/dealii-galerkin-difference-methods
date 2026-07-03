@@ -34,8 +34,10 @@ test(const unsigned int n_subdivisions_1D,
 
   const bool do_l2_projection = true;
   const bool do_interpolation = true;
+  const bool do_paraview_lin  = true;
   const bool do_paraview      = true;
   const bool do_compute_error = true;
+  const bool even_polynomial  = fe_degree % 2 == 0;
 
   using VectorType = LinearAlgebra::distributed::Vector<double>;
 
@@ -46,11 +48,24 @@ test(const unsigned int n_subdivisions_1D,
   AffineConstraints<double> constraints;
   constraints.close();
 
-  Triangulation<dim> tria;
-  GridGenerator::subdivided_hyper_cube(tria, n_subdivisions_1D, 0.0, +1.0);
+  Triangulation<dim> vertex_tria;
+  GridGenerator::subdivided_hyper_cube(vertex_tria,
+                                       n_subdivisions_1D,
+                                       0.0,
+                                       +1.0);
 
-  DoFHandler<dim> dof_handler(tria);
-  dof_handler.distribute_dofs(FE_Q<dim>(1));
+  Triangulation<dim> dual_tria;
+
+  if (even_polynomial)
+    {
+      AssertThrow(false, ExcMessage("TODO!"));
+    }
+
+  // select triangulation for cell loops
+  const auto &comp_tria = even_polynomial ? dual_tria : vertex_tria;
+
+  DoFHandler<dim> vertex_dof_handler(vertex_tria);
+  vertex_dof_handler.distribute_dofs(FE_Q<dim>(1));
 
   const auto hp_fe =
     GDM::generate_fe_collection<dim>(GDM::generate_polynomials_1D(fe_degree),
@@ -64,6 +79,8 @@ test(const unsigned int n_subdivisions_1D,
       [](const auto &p) { return p[0] * p[0]; });
 
   const auto get_active_fe_index = [&](const auto &cell) {
+    AssertThrow(!even_polynomial, ExcMessage("TODO!"));
+
     const unsigned int index = cell->active_cell_index();
     return (index < (fe_degree / 2) ?
               index :
@@ -72,9 +89,23 @@ test(const unsigned int n_subdivisions_1D,
                  (fe_degree + index - n_subdivisions_1D)));
   };
 
+  const auto get_dof_indices = [&](const auto &cell) {
+    AssertThrow(!even_polynomial, ExcMessage("TODO!"));
+
+    const auto active_fe_index = get_active_fe_index(cell);
+    const auto n_dofs_per_cell = hp_fe[active_fe_index].n_dofs_per_cell();
+
+    std::vector<types::global_dof_index> dof_indices(n_dofs_per_cell);
+
+    for (unsigned int i = 0; i < n_dofs_per_cell; ++i)
+      dof_indices[i] = cell->active_cell_index() - active_fe_index + i;
+
+    return dof_indices;
+  };
+
   VectorType solution_projected, solution_interpolated;
-  solution_projected.reinit(dof_handler.n_dofs());
-  solution_interpolated.reinit(dof_handler.n_dofs());
+  solution_projected.reinit(vertex_dof_handler.n_dofs());
+  solution_interpolated.reinit(vertex_dof_handler.n_dofs());
 
   // **************************************************************************
   // perform l2 projection
@@ -89,17 +120,12 @@ test(const unsigned int n_subdivisions_1D,
       rhs.reinit(solution_projected);
 
       {
-        sparsity_pattern.reinit(dof_handler.n_dofs(), dof_handler.n_dofs());
+        sparsity_pattern.reinit(vertex_dof_handler.n_dofs(),
+                                vertex_dof_handler.n_dofs());
 
-        std::vector<types::global_dof_index> dof_indices;
-        for (const auto &cell : tria.active_cell_iterators())
+        for (const auto &cell : comp_tria.active_cell_iterators())
           {
-            dof_indices.resize(n_dofs_per_cell);
-
-            const unsigned int active_fe_index = get_active_fe_index(cell);
-
-            for (unsigned int i = 0; i < n_dofs_per_cell; ++i)
-              dof_indices[i] = cell->active_cell_index() - active_fe_index + i;
+            const auto dof_indices = get_dof_indices(cell);
 
             constraints.add_entries_local_to_global(dof_indices,
                                                     sparsity_pattern);
@@ -116,9 +142,7 @@ test(const unsigned int n_subdivisions_1D,
                                      update_JxW_values | update_values |
                                        update_quadrature_points);
 
-
-      std::vector<types::global_dof_index> dof_indices;
-      for (const auto &cell : tria.active_cell_iterators())
+      for (const auto &cell : comp_tria.active_cell_iterators())
         {
           const unsigned int active_fe_index = get_active_fe_index(cell);
           hp_fe_values.reinit(cell,
@@ -146,10 +170,7 @@ test(const unsigned int n_subdivisions_1D,
                 exact_solution->value(fe_values.quadrature_point(q_index)) *
                 fe_values.shape_value(i, q_index) * fe_values.JxW(q_index);
 
-          dof_indices.resize(n_dofs_per_cell);
-
-          for (unsigned int i = 0; i < n_dofs_per_cell; ++i)
-            dof_indices[i] = cell->active_cell_index() - active_fe_index + i;
+          const auto dof_indices = get_dof_indices(cell);
 
           constraints.distribute_local_to_global(
             mass_cell_matrix, cell_vector, dof_indices, mass_matrix, rhs);
@@ -171,7 +192,7 @@ test(const unsigned int n_subdivisions_1D,
 
   if (do_interpolation)
     {
-      VectorTools::interpolate(dof_handler,
+      VectorTools::interpolate(vertex_dof_handler,
                                *exact_solution,
                                solution_interpolated);
     }
@@ -182,6 +203,43 @@ test(const unsigned int n_subdivisions_1D,
   // postprocess: write paraview results
   // **************************************************************************
 
+  if (do_paraview_lin)
+    {
+      DataOutBase::VtkFlags flags;
+      flags.write_higher_order_cells = true;
+
+      DataOut<dim> data_out;
+      data_out.set_flags(flags);
+      data_out.attach_triangulation(vertex_tria);
+      data_out.add_data_vector(vertex_dof_handler,
+                               solution_interpolated,
+                               "solution_interpolated_lin");
+      data_out.add_data_vector(vertex_dof_handler,
+                               solution_projected,
+                               "solution_projected_lin");
+
+      DoFHandler<dim> dof_handler_solution;
+
+      if (exact_solution)
+        {
+          dof_handler_solution.reinit(vertex_tria);
+          dof_handler_solution.distribute_dofs(FE_Q<dim>(1));
+          VectorType analytical_solution;
+
+          analytical_solution.reinit(dof_handler_solution.n_dofs());
+          VectorTools::interpolate(mapping,
+                                   dof_handler_solution,
+                                   *exact_solution,
+                                   analytical_solution);
+          data_out.add_data_vector(dof_handler_solution,
+                                   analytical_solution,
+                                   "solution_analytical");
+        }
+
+      data_out.write_vtu_in_parallel("results_lin.vtu",
+                                     vertex_dof_handler.get_mpi_communicator());
+    }
+
   if (do_paraview)
     {
       DataOutBase::VtkFlags flags;
@@ -189,17 +247,10 @@ test(const unsigned int n_subdivisions_1D,
 
       DataOut<dim> data_out;
       data_out.set_flags(flags);
-      data_out.attach_triangulation(tria);
-      data_out.add_data_vector(dof_handler,
-                               solution_interpolated,
-                               "solution_interpolated_lin");
-      data_out.add_data_vector(dof_handler,
-                               solution_projected,
-                               "solution_projected_lin");
 
       DoFHandler<dim> dof_handler_solution;
 
-      dof_handler_solution.reinit(tria);
+      dof_handler_solution.reinit(vertex_tria);
       dof_handler_solution.distribute_dofs(FE_Q<dim>(fe_degree));
 
       VectorType analytical_solution, solution_interpolated_fe,
@@ -207,7 +258,6 @@ test(const unsigned int n_subdivisions_1D,
 
       solution_interpolated_fe.reinit(dof_handler_solution.n_dofs());
       solution_projected_fe.reinit(dof_handler_solution.n_dofs());
-
 
       if (exact_solution)
         {
@@ -221,7 +271,6 @@ test(const unsigned int n_subdivisions_1D,
                                    "solution_analytical");
         }
 
-
       hp::FEValues<dim> hp_fe_values(
         mapping,
         fe,
@@ -229,7 +278,7 @@ test(const unsigned int n_subdivisions_1D,
           dof_handler_solution.get_fe().get_unit_support_points())),
         update_values);
 
-      for (const auto &cell : tria.active_cell_iterators())
+      for (const auto &cell : comp_tria.active_cell_iterators())
         {
           const unsigned int active_fe_index = get_active_fe_index(cell);
           hp_fe_values.reinit(cell,
@@ -239,11 +288,7 @@ test(const unsigned int n_subdivisions_1D,
 
           const auto &fe_values = hp_fe_values.get_present_fe_values();
 
-          std::vector<types::global_dof_index> dof_indices(
-            fe_values.dofs_per_cell);
-
-          for (unsigned int i = 0; i < fe_values.dofs_per_cell; ++i)
-            dof_indices[i] = cell->active_cell_index() - active_fe_index + i;
+          const auto dof_indices = get_dof_indices(cell);
 
           std::vector<types::global_dof_index> dof_indices_fe(
             dof_handler_solution.get_fe().n_dofs_per_cell());
@@ -278,13 +323,11 @@ test(const unsigned int n_subdivisions_1D,
                                solution_projected_fe,
                                "solution_projected");
 
-      const std::string file_name = "results.vtu";
-
       // write data
       data_out.build_patches(
         mapping, fe_degree, DataOut<dim>::CurvedCellRegion::curved_inner_cells);
-      data_out.write_vtu_in_parallel(file_name,
-                                     dof_handler.get_mpi_communicator());
+      data_out.write_vtu_in_parallel("results.vtu",
+                                     vertex_dof_handler.get_mpi_communicator());
     }
 
 
@@ -305,7 +348,7 @@ test(const unsigned int n_subdivisions_1D,
 
       error_i = 0.0;
 
-      for (const auto &cell : tria.active_cell_iterators())
+      for (const auto &cell : comp_tria.active_cell_iterators())
         {
           const unsigned int active_fe_index = get_active_fe_index(cell);
           hp_fe_values.reinit(cell,
@@ -315,11 +358,7 @@ test(const unsigned int n_subdivisions_1D,
 
           const auto &fe_values = hp_fe_values.get_present_fe_values();
 
-          std::vector<types::global_dof_index> dof_indices(
-            fe_values.dofs_per_cell);
-
-          for (unsigned int i = 0; i < fe_values.dofs_per_cell; ++i)
-            dof_indices[i] = cell->active_cell_index() - active_fe_index + i;
+          const auto dof_indices = get_dof_indices(cell);
 
           std::vector<double> quadrature_values(fe_values.n_quadrature_points);
 
