@@ -72,8 +72,28 @@ test(const unsigned int n_subdivisions_1D,
   // **************************************************************************
   TrilinosWrappers::SparsityPattern sparsity_pattern;
   TrilinosWrappers::SparseMatrix    mass_matrix;
-  sparsity_pattern.reinit(dof_handler.n_dofs(), dof_handler.n_dofs());
-  sparsity_pattern.compress();
+
+  {
+    sparsity_pattern.reinit(dof_handler.n_dofs(), dof_handler.n_dofs());
+
+    std::vector<types::global_dof_index> dof_indices;
+    for (const auto &cell : tria.active_cell_iterators())
+      if (true)
+        {
+          dof_indices.resize(n_dofs_per_cell);
+
+          const unsigned int active_fe_index = get_active_fe_index(cell);
+
+          for (unsigned int i = 0; i < n_dofs_per_cell; ++i)
+            dof_indices[i] = cell->active_cell_index() - active_fe_index + i;
+
+          constraints.add_entries_local_to_global(dof_indices,
+                                                  sparsity_pattern);
+        }
+
+    sparsity_pattern.compress();
+  }
+
   mass_matrix.reinit(sparsity_pattern);
 
   hp::FEValues<dim> hp_fe_values(mapping,
@@ -132,7 +152,8 @@ test(const unsigned int n_subdivisions_1D,
   // **************************************************************************
   // postprocess
   // **************************************************************************
-  double error = 0.0;
+  double error_i = 0.0;
+  double error_p = 0.0;
 
   {
     if (true)
@@ -145,7 +166,10 @@ test(const unsigned int n_subdivisions_1D,
         data_out.attach_triangulation(tria);
         data_out.add_data_vector(dof_handler,
                                  solution_interpolated,
-                                 "solution_lin");
+                                 "solution_interpolated_lin");
+        data_out.add_data_vector(dof_handler,
+                                 solution_projected,
+                                 "solution_projected_lin");
 
         DoFHandler<dim> dof_handler_solution;
         if (exact_solution)
@@ -153,17 +177,21 @@ test(const unsigned int n_subdivisions_1D,
             dof_handler_solution.reinit(tria);
             dof_handler_solution.distribute_dofs(FE_Q<dim>(fe_degree));
 
-            LinearAlgebra::distributed::Vector<double> analytical_solution(
-              dof_handler_solution.n_dofs());
+            LinearAlgebra::distributed::Vector<double> analytical_solution,
+              solution_interpolated_fe, solution_projected_fe;
+
+            analytical_solution.reinit(dof_handler_solution.n_dofs());
+            solution_interpolated_fe.reinit(dof_handler_solution.n_dofs());
+            solution_projected_fe.reinit(dof_handler_solution.n_dofs());
+
             VectorTools::interpolate(mapping,
                                      dof_handler_solution,
                                      *exact_solution,
                                      analytical_solution);
             data_out.add_data_vector(dof_handler_solution,
                                      analytical_solution,
-                                     "solution_ana");
+                                     "solution_analytical");
 
-            analytical_solution = 0.0;
 
             hp::FEValues<dim> hp_fe_values(
               mapping,
@@ -191,22 +219,41 @@ test(const unsigned int n_subdivisions_1D,
                     dof_indices[i] =
                       cell->active_cell_index() - active_fe_index + i;
 
+                  std::vector<types::global_dof_index> dof_indices_fe(
+                    dof_handler_solution.get_fe().n_dofs_per_cell());
+
+                  cell->as_dof_handler_iterator(dof_handler_solution)
+                    ->get_dof_indices(dof_indices_fe);
+
                   std::vector<double> quadrature_values(
                     fe_values.n_quadrature_points);
+
+                  // interpolated solution
                   fe_values.get_function_values(solution_interpolated,
                                                 dof_indices,
                                                 quadrature_values);
 
-                  cell->as_dof_handler_iterator(dof_handler_solution)
-                    ->get_dof_indices(dof_indices);
+                  for (unsigned int i = 0; i < dof_indices_fe.size(); ++i)
+                    solution_interpolated_fe[dof_indices_fe[i]] =
+                      quadrature_values[i];
 
-                  for (unsigned int i = 0; i < dof_indices.size(); ++i)
-                    analytical_solution[dof_indices[i]] = quadrature_values[i];
+
+                  // projected solution
+                  fe_values.get_function_values(solution_projected,
+                                                dof_indices,
+                                                quadrature_values);
+
+                  for (unsigned int i = 0; i < dof_indices_fe.size(); ++i)
+                    solution_projected_fe[dof_indices_fe[i]] =
+                      quadrature_values[i];
                 }
 
             data_out.add_data_vector(dof_handler_solution,
-                                     analytical_solution,
+                                     solution_interpolated_fe,
                                      "solution_interpolated");
+            data_out.add_data_vector(dof_handler_solution,
+                                     solution_projected_fe,
+                                     "solution_projected");
           }
 
         const std::string file_name = "results.vtu";
@@ -229,7 +276,7 @@ test(const unsigned int n_subdivisions_1D,
           hp::QCollection<dim>(QGauss<dim>(fe_degree + 3)),
           update_values | update_JxW_values | update_quadrature_points);
 
-        error = 0.0;
+        error_i = 0.0;
 
         for (const auto &cell : tria.active_cell_iterators())
           if (true)
@@ -251,30 +298,51 @@ test(const unsigned int n_subdivisions_1D,
 
               std::vector<double> quadrature_values(
                 fe_values.n_quadrature_points);
+
+              // interpolated solution
               fe_values.get_function_values(solution_interpolated,
                                             dof_indices,
                                             quadrature_values);
 
               for (const unsigned int q_index :
                    fe_values.quadrature_point_indices())
-                error += std::pow(quadrature_values[q_index] -
-                                    exact_solution->value(
-                                      fe_values.quadrature_point(q_index)),
-                                  2.0) *
-                         fe_values.JxW(q_index);
+                error_i += std::pow(quadrature_values[q_index] -
+                                      exact_solution->value(
+                                        fe_values.quadrature_point(q_index)),
+                                    2.0) *
+                           fe_values.JxW(q_index);
+
+              // projected solution
+              fe_values.get_function_values(solution_projected,
+                                            dof_indices,
+                                            quadrature_values);
+
+              for (const unsigned int q_index :
+                   fe_values.quadrature_point_indices())
+                error_p += std::pow(quadrature_values[q_index] -
+                                      exact_solution->value(
+                                        fe_values.quadrature_point(q_index)),
+                                    2.0) *
+                           fe_values.JxW(q_index);
             }
 
-        error = std::sqrt(error);
+        error_i = std::sqrt(error_i);
+        error_p = std::sqrt(error_p);
       }
   }
 
   table.add_value("n_cells", n_subdivisions_1D);
   table.add_value("degree", fe_degree);
 
-  table.add_value("error", error);
-  table.set_scientific("error", true);
+  table.add_value("error_i", error_i);
+  table.set_scientific("error_i", true);
   table.evaluate_convergence_rates(
-    "error", "n_cells", ConvergenceTable::RateMode::reduction_rate_log2, dim);
+    "error_i", "n_cells", ConvergenceTable::RateMode::reduction_rate_log2, dim);
+
+  table.add_value("error_p", error_p);
+  table.set_scientific("error_p", true);
+  table.evaluate_convergence_rates(
+    "error_p", "n_cells", ConvergenceTable::RateMode::reduction_rate_log2, dim);
 }
 
 int
