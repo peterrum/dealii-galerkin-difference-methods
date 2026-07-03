@@ -23,8 +23,9 @@ namespace GDM
       , mapping(mapping)
       , fe_degree_output(fe_degree_output)
     {
-      FE_DGQ<dim> fe_output(fe_degree_output);
-      dof_handler_output.distribute_dofs(fe_output);
+      dof_handler_output.distribute_dofs(
+        FESystem<dim>(FE_DGQ<dim>(fe_degree_output),
+                      system.get_fe().n_components()));
 
       data_out.attach_dof_handler(dof_handler_output);
 
@@ -85,8 +86,12 @@ namespace GDM
             for (const unsigned int q_index :
                  fe_values.quadrature_point_indices())
               for (const unsigned int i : fe_values.dof_indices())
-                cell_vector_output(q_index) +=
-                  fe_values.shape_value(i, q_index) * cell_vector_input[i];
+                if (fe_values.get_fe().system_to_component_index(i).first ==
+                    dof_handler_output.get_fe()
+                      .system_to_component_index(q_index)
+                      .first)
+                  cell_vector_output(q_index) +=
+                    fe_values.shape_value(i, q_index) * cell_vector_input[i];
 
             // write
             cell->dealii_iterator()
