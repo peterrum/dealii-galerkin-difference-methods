@@ -21,8 +21,6 @@
 
 #include <gdm/fe.h>
 
-#include "wave_gdm.h"
-
 
 using namespace dealii;
 
@@ -33,15 +31,7 @@ test(const unsigned int n_subdivisions_1D,
      const unsigned int fe_degree,
      ConvergenceTable  &table)
 {
-  using VectorType      = LinearAlgebra::distributed::Vector<double>;
-  using BlockVectorType = LinearAlgebra::distributed::BlockVector<double>;
-
-  const double dx      = 2.0 / n_subdivisions_1D;
-  const double cfl     = 0.2;
-  const double delta_t = dx * cfl;
-
-  const TimeStepping::runge_kutta_method runge_kutta_method =
-    get_runge_kutta_method(fe_degree + 1);
+  using VectorType = LinearAlgebra::distributed::Vector<double>;
 
   hp::MappingCollection<dim> mapping;
   mapping.push_back(MappingQ1<dim>());
@@ -51,7 +41,7 @@ test(const unsigned int n_subdivisions_1D,
   constraints.close();
 
   Triangulation<dim> tria;
-  GridGenerator::subdivided_hyper_cube(tria, n_subdivisions_1D, -1.0, +1.0);
+  GridGenerator::subdivided_hyper_cube(tria, n_subdivisions_1D, 0.0, +1.0);
 
   DoFHandler<dim> dof_handler(tria);
   dof_handler.distribute_dofs(FE_Q<dim>(1));
@@ -65,17 +55,7 @@ test(const unsigned int n_subdivisions_1D,
 
   const auto exact_solution =
     std::make_shared<ScalarFunctionFromFunctionObject<dim>>(
-      [](const auto t, const auto &p) {
-        const auto r = p.norm();
-
-        if (dim == 1)
-          {
-            const auto wave_number = 1.0 * numbers::PI;
-            return std::cos(wave_number * r) * std::cos(wave_number * t);
-          }
-        else
-          AssertThrow(false, ExcNotImplemented());
-      });
+      [](const auto &p) { return p[0]; });
 
   const auto get_active_fe_index = [&](const auto &cell) {
     const unsigned int index = cell->active_cell_index();
@@ -86,14 +66,13 @@ test(const unsigned int n_subdivisions_1D,
                  (fe_degree + index - n_subdivisions_1D)));
   };
 
-  BlockVectorType solution(2);
-  solution.block(0).reinit(dof_handler.n_dofs());
-  solution.block(1).reinit(dof_handler.n_dofs());
-  VectorTools::interpolate(dof_handler, *exact_solution, solution.block(0));
+  VectorType solution;
+  solution.reinit(dof_handler.n_dofs());
+
+  VectorTools::interpolate(dof_handler, *exact_solution, solution);
 
   TrilinosWrappers::SparsityPattern sparsity_pattern;
   TrilinosWrappers::SparseMatrix    mass_matrix;
-  TrilinosWrappers::SparseMatrix    stiffness_matrix;
 
   // allocate memory for mass matrix
   {
@@ -117,7 +96,6 @@ test(const unsigned int n_subdivisions_1D,
     sparsity_pattern.compress();
 
     mass_matrix.reinit(sparsity_pattern);
-    stiffness_matrix.reinit(sparsity_pattern);
   }
 
   // compute mass and stiffness matrix
@@ -141,8 +119,6 @@ test(const unsigned int n_subdivisions_1D,
         const auto &fe_values = hp_fe_values.get_present_fe_values();
 
         FullMatrix<double> mass_cell_matrix(n_dofs_per_cell, n_dofs_per_cell);
-        FullMatrix<double> stiffness_cell_matrix(n_dofs_per_cell,
-                                                 n_dofs_per_cell);
 
         for (const unsigned int q_index : fe_values.quadrature_point_indices())
           for (const unsigned int i : fe_values.dof_indices())
@@ -150,13 +126,6 @@ test(const unsigned int n_subdivisions_1D,
               mass_cell_matrix(i, j) += fe_values.shape_value(i, q_index) *
                                         fe_values.shape_value(j, q_index) *
                                         fe_values.JxW(q_index);
-
-        for (const unsigned int q_index : fe_values.quadrature_point_indices())
-          for (const unsigned int i : fe_values.dof_indices())
-            for (const unsigned int j : fe_values.dof_indices())
-              stiffness_cell_matrix(i, j) -= fe_values.shape_grad(i, q_index) *
-                                             fe_values.shape_grad(j, q_index) *
-                                             fe_values.JxW(q_index);
 
         // get indices
         dof_indices.resize(n_dofs_per_cell);
@@ -167,38 +136,13 @@ test(const unsigned int n_subdivisions_1D,
         constraints.distribute_local_to_global(mass_cell_matrix,
                                                dof_indices,
                                                mass_matrix);
-        constraints.distribute_local_to_global(stiffness_cell_matrix,
-                                               dof_indices,
-                                               stiffness_matrix);
       }
 
   mass_matrix.compress(VectorOperation::values::add);
-  stiffness_matrix.compress(VectorOperation::values::add);
 
   // create direct solver
   TrilinosWrappers::SolverDirect mass_matrix_solver;
   mass_matrix_solver.initialize(mass_matrix);
-
-
-
-  // Define rhs of ODE
-  const auto fu_rhs = [&](const double time, const BlockVectorType &solution) {
-    (void)time;
-
-    BlockVectorType result;
-    result.reinit(solution);
-    VectorType vec_rhs;
-    vec_rhs.reinit(solution.block(0));
-
-    // du/dt = v
-    result.block(0) = solution.block(1);
-
-    // dv/dt = f(t, u)
-    stiffness_matrix.vmult(vec_rhs, solution.block(0));
-    mass_matrix_solver.solve(result.block(1), vec_rhs);
-
-    return result;
-  };
 
   unsigned int counter = 0;
   double       error   = 0.0;
@@ -341,26 +285,8 @@ test(const unsigned int n_subdivisions_1D,
       }
   };
 
-  // Perform time stepping
-  DiscreteTime time(0, 1, delta_t);
 
-  TimeStepping::MyExplicitRungeKutta<BlockVectorType> rk;
-  rk.initialize(runge_kutta_method);
-
-  postprocess(0.0, solution.block(0));
-
-  while ((time.is_at_end() == false))
-    {
-      rk.evolve_one_time_step(fu_rhs,
-                              time.get_current_time(),
-                              time.get_next_step_size(),
-                              solution);
-
-      postprocess(time.get_current_time() + time.get_next_step_size(),
-                  solution.block(0));
-
-      time.advance_time();
-    }
+  postprocess(0.0, solution);
 
   table.add_value("n_cells", n_subdivisions_1D);
   table.add_value("degree", fe_degree);
