@@ -73,6 +73,9 @@ test(const unsigned int n_subdivisions_1D,
   TrilinosWrappers::SparsityPattern sparsity_pattern;
   TrilinosWrappers::SparseMatrix    mass_matrix;
 
+  VectorType rhs;
+  rhs.reinit(solution_projected);
+
   {
     sparsity_pattern.reinit(dof_handler.n_dofs(), dof_handler.n_dofs());
 
@@ -100,7 +103,7 @@ test(const unsigned int n_subdivisions_1D,
                                  fe,
                                  hp::QCollection<dim>(quadrature),
                                  update_JxW_values | update_values |
-                                   update_gradients);
+                                   update_quadrature_points);
 
 
   std::vector<types::global_dof_index> dof_indices;
@@ -123,24 +126,30 @@ test(const unsigned int n_subdivisions_1D,
                                       fe_values.shape_value(j, q_index) *
                                       fe_values.JxW(q_index);
 
-      // get indices
+      Vector<double> cell_vector(n_dofs_per_cell);
+      for (const unsigned int q_index : fe_values.quadrature_point_indices())
+        for (const unsigned int i : fe_values.dof_indices())
+          cell_vector(i) +=
+            exact_solution->value(fe_values.quadrature_point(q_index)) *
+            fe_values.shape_value(i, q_index) * fe_values.JxW(q_index);
+
       dof_indices.resize(n_dofs_per_cell);
 
       for (unsigned int i = 0; i < n_dofs_per_cell; ++i)
         dof_indices[i] = cell->active_cell_index() - active_fe_index + i;
 
-      constraints.distribute_local_to_global(mass_cell_matrix,
-                                             dof_indices,
-                                             mass_matrix);
+      constraints.distribute_local_to_global(
+        mass_cell_matrix, cell_vector, dof_indices, mass_matrix, rhs);
     }
 
   mass_matrix.compress(VectorOperation::values::add);
+  rhs.compress(VectorOperation::values::add);
 
   // create direct solver
   TrilinosWrappers::SolverDirect mass_matrix_solver;
   mass_matrix_solver.initialize(mass_matrix);
 
-
+  mass_matrix_solver.vmult(solution_projected, rhs);
 
   // **************************************************************************
   // interpolate
