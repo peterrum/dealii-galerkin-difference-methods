@@ -169,16 +169,13 @@ test()
   std::cout << "error: " << error_projected << " " << error_interpolated
             << std::endl;
 
-  if (false) // not working yet
-    {
-      GDM::DataOut<dim> data_out(system, mapping, fe_degree);
-      data_out.add_data_vector(solution_projected, "solution_projected");
-      data_out.add_data_vector(solution_interpolated, "solution_interpolated");
-      data_out.build_patches();
+  GDM::DataOut<dim> data_out(system, mapping, fe_degree);
+  data_out.add_data_vector(solution_projected, "solution_projected");
+  data_out.add_data_vector(solution_interpolated, "solution_interpolated");
+  data_out.build_patches();
 
-      std::ofstream file("solution.vtu");
-      data_out.write_vtu(file);
-    }
+  std::ofstream file("solution.vtu");
+  data_out.write_vtu(file);
 }
 
 
