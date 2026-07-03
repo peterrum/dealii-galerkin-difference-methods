@@ -72,6 +72,18 @@ test(const unsigned int n_subdivisions_1D,
                  (fe_degree + index - n_subdivisions_1D)));
   };
 
+  const auto get_dof_indices = [&](const auto &cell) {
+    const auto active_fe_index = get_active_fe_index(cell);
+    const auto n_dofs_per_cell = hp_fe[active_fe_index].n_dofs_per_cell();
+
+    std::vector<types::global_dof_index> dof_indices(n_dofs_per_cell);
+
+    for (unsigned int i = 0; i < n_dofs_per_cell; ++i)
+      dof_indices[i] = cell->active_cell_index() - active_fe_index + i;
+
+    return dof_indices;
+  };
+
   VectorType solution_projected, solution_interpolated;
   solution_projected.reinit(dof_handler.n_dofs());
   solution_interpolated.reinit(dof_handler.n_dofs());
@@ -91,15 +103,9 @@ test(const unsigned int n_subdivisions_1D,
       {
         sparsity_pattern.reinit(dof_handler.n_dofs(), dof_handler.n_dofs());
 
-        std::vector<types::global_dof_index> dof_indices;
         for (const auto &cell : tria.active_cell_iterators())
           {
-            dof_indices.resize(n_dofs_per_cell);
-
-            const unsigned int active_fe_index = get_active_fe_index(cell);
-
-            for (unsigned int i = 0; i < n_dofs_per_cell; ++i)
-              dof_indices[i] = cell->active_cell_index() - active_fe_index + i;
+            const auto dof_indices = get_dof_indices(cell);
 
             constraints.add_entries_local_to_global(dof_indices,
                                                     sparsity_pattern);
@@ -116,8 +122,6 @@ test(const unsigned int n_subdivisions_1D,
                                      update_JxW_values | update_values |
                                        update_quadrature_points);
 
-
-      std::vector<types::global_dof_index> dof_indices;
       for (const auto &cell : tria.active_cell_iterators())
         {
           const unsigned int active_fe_index = get_active_fe_index(cell);
@@ -146,10 +150,7 @@ test(const unsigned int n_subdivisions_1D,
                 exact_solution->value(fe_values.quadrature_point(q_index)) *
                 fe_values.shape_value(i, q_index) * fe_values.JxW(q_index);
 
-          dof_indices.resize(n_dofs_per_cell);
-
-          for (unsigned int i = 0; i < n_dofs_per_cell; ++i)
-            dof_indices[i] = cell->active_cell_index() - active_fe_index + i;
+          const auto dof_indices = get_dof_indices(cell);
 
           constraints.distribute_local_to_global(
             mass_cell_matrix, cell_vector, dof_indices, mass_matrix, rhs);
@@ -239,11 +240,7 @@ test(const unsigned int n_subdivisions_1D,
 
           const auto &fe_values = hp_fe_values.get_present_fe_values();
 
-          std::vector<types::global_dof_index> dof_indices(
-            fe_values.dofs_per_cell);
-
-          for (unsigned int i = 0; i < fe_values.dofs_per_cell; ++i)
-            dof_indices[i] = cell->active_cell_index() - active_fe_index + i;
+          const auto dof_indices = get_dof_indices(cell);
 
           std::vector<types::global_dof_index> dof_indices_fe(
             dof_handler_solution.get_fe().n_dofs_per_cell());
@@ -315,11 +312,7 @@ test(const unsigned int n_subdivisions_1D,
 
           const auto &fe_values = hp_fe_values.get_present_fe_values();
 
-          std::vector<types::global_dof_index> dof_indices(
-            fe_values.dofs_per_cell);
-
-          for (unsigned int i = 0; i < fe_values.dofs_per_cell; ++i)
-            dof_indices[i] = cell->active_cell_index() - active_fe_index + i;
+          const auto dof_indices = get_dof_indices(cell);
 
           std::vector<double> quadrature_values(fe_values.n_quadrature_points);
 
