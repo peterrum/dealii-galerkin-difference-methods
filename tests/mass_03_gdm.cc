@@ -32,6 +32,11 @@ test(const unsigned int n_subdivisions_1D,
   // setup
   // **************************************************************************
 
+  const bool do_l2_projection = true;
+  const bool do_interpolation = true;
+  const bool do_paraview      = true;
+  const bool do_compute_error = true;
+
   using VectorType = LinearAlgebra::distributed::Vector<double>;
 
   hp::MappingCollection<dim> mapping;
@@ -74,93 +79,104 @@ test(const unsigned int n_subdivisions_1D,
   // **************************************************************************
   // perform l2 projection
   // **************************************************************************
-  TrilinosWrappers::SparsityPattern sparsity_pattern;
-  TrilinosWrappers::SparseMatrix    mass_matrix;
 
-  VectorType rhs;
-  rhs.reinit(solution_projected);
+  if (do_l2_projection)
+    {
+      TrilinosWrappers::SparsityPattern sparsity_pattern;
+      TrilinosWrappers::SparseMatrix    mass_matrix;
 
-  {
-    sparsity_pattern.reinit(dof_handler.n_dofs(), dof_handler.n_dofs());
+      VectorType rhs;
+      rhs.reinit(solution_projected);
 
-    std::vector<types::global_dof_index> dof_indices;
-    for (const auto &cell : tria.active_cell_iterators())
-      if (true)
+      {
+        sparsity_pattern.reinit(dof_handler.n_dofs(), dof_handler.n_dofs());
+
+        std::vector<types::global_dof_index> dof_indices;
+        for (const auto &cell : tria.active_cell_iterators())
+          if (true)
+            {
+              dof_indices.resize(n_dofs_per_cell);
+
+              const unsigned int active_fe_index = get_active_fe_index(cell);
+
+              for (unsigned int i = 0; i < n_dofs_per_cell; ++i)
+                dof_indices[i] =
+                  cell->active_cell_index() - active_fe_index + i;
+
+              constraints.add_entries_local_to_global(dof_indices,
+                                                      sparsity_pattern);
+            }
+
+        sparsity_pattern.compress();
+      }
+
+      mass_matrix.reinit(sparsity_pattern);
+
+      hp::FEValues<dim> hp_fe_values(mapping,
+                                     fe,
+                                     hp::QCollection<dim>(quadrature),
+                                     update_JxW_values | update_values |
+                                       update_quadrature_points);
+
+
+      std::vector<types::global_dof_index> dof_indices;
+      for (const auto &cell : tria.active_cell_iterators())
         {
-          dof_indices.resize(n_dofs_per_cell);
-
           const unsigned int active_fe_index = get_active_fe_index(cell);
+          hp_fe_values.reinit(cell,
+                              numbers::invalid_unsigned_int,
+                              numbers::invalid_unsigned_int,
+                              active_fe_index);
+
+          const auto &fe_values = hp_fe_values.get_present_fe_values();
+
+          FullMatrix<double> mass_cell_matrix(n_dofs_per_cell, n_dofs_per_cell);
+
+          for (const unsigned int q_index :
+               fe_values.quadrature_point_indices())
+            for (const unsigned int i : fe_values.dof_indices())
+              for (const unsigned int j : fe_values.dof_indices())
+                mass_cell_matrix(i, j) += fe_values.shape_value(i, q_index) *
+                                          fe_values.shape_value(j, q_index) *
+                                          fe_values.JxW(q_index);
+
+          Vector<double> cell_vector(n_dofs_per_cell);
+          for (const unsigned int q_index :
+               fe_values.quadrature_point_indices())
+            for (const unsigned int i : fe_values.dof_indices())
+              cell_vector(i) +=
+                exact_solution->value(fe_values.quadrature_point(q_index)) *
+                fe_values.shape_value(i, q_index) * fe_values.JxW(q_index);
+
+          dof_indices.resize(n_dofs_per_cell);
 
           for (unsigned int i = 0; i < n_dofs_per_cell; ++i)
             dof_indices[i] = cell->active_cell_index() - active_fe_index + i;
 
-          constraints.add_entries_local_to_global(dof_indices,
-                                                  sparsity_pattern);
+          constraints.distribute_local_to_global(
+            mass_cell_matrix, cell_vector, dof_indices, mass_matrix, rhs);
         }
 
-    sparsity_pattern.compress();
-  }
+      mass_matrix.compress(VectorOperation::values::add);
+      rhs.compress(VectorOperation::values::add);
 
-  mass_matrix.reinit(sparsity_pattern);
+      TrilinosWrappers::SolverDirect mass_matrix_solver;
+      mass_matrix_solver.initialize(mass_matrix);
 
-  hp::FEValues<dim> hp_fe_values(mapping,
-                                 fe,
-                                 hp::QCollection<dim>(quadrature),
-                                 update_JxW_values | update_values |
-                                   update_quadrature_points);
-
-
-  std::vector<types::global_dof_index> dof_indices;
-  for (const auto &cell : tria.active_cell_iterators())
-    {
-      const unsigned int active_fe_index = get_active_fe_index(cell);
-      hp_fe_values.reinit(cell,
-                          numbers::invalid_unsigned_int,
-                          numbers::invalid_unsigned_int,
-                          active_fe_index);
-
-      const auto &fe_values = hp_fe_values.get_present_fe_values();
-
-      FullMatrix<double> mass_cell_matrix(n_dofs_per_cell, n_dofs_per_cell);
-
-      for (const unsigned int q_index : fe_values.quadrature_point_indices())
-        for (const unsigned int i : fe_values.dof_indices())
-          for (const unsigned int j : fe_values.dof_indices())
-            mass_cell_matrix(i, j) += fe_values.shape_value(i, q_index) *
-                                      fe_values.shape_value(j, q_index) *
-                                      fe_values.JxW(q_index);
-
-      Vector<double> cell_vector(n_dofs_per_cell);
-      for (const unsigned int q_index : fe_values.quadrature_point_indices())
-        for (const unsigned int i : fe_values.dof_indices())
-          cell_vector(i) +=
-            exact_solution->value(fe_values.quadrature_point(q_index)) *
-            fe_values.shape_value(i, q_index) * fe_values.JxW(q_index);
-
-      dof_indices.resize(n_dofs_per_cell);
-
-      for (unsigned int i = 0; i < n_dofs_per_cell; ++i)
-        dof_indices[i] = cell->active_cell_index() - active_fe_index + i;
-
-      constraints.distribute_local_to_global(
-        mass_cell_matrix, cell_vector, dof_indices, mass_matrix, rhs);
+      mass_matrix_solver.vmult(solution_projected, rhs);
     }
-
-  mass_matrix.compress(VectorOperation::values::add);
-  rhs.compress(VectorOperation::values::add);
-
-  TrilinosWrappers::SolverDirect mass_matrix_solver;
-  mass_matrix_solver.initialize(mass_matrix);
-
-  mass_matrix_solver.vmult(solution_projected, rhs);
-
 
 
   // **************************************************************************
   // interpolate
   // **************************************************************************
 
-  VectorTools::interpolate(dof_handler, *exact_solution, solution_interpolated);
+  if (do_interpolation)
+    {
+      VectorTools::interpolate(dof_handler,
+                               *exact_solution,
+                               solution_interpolated);
+    }
 
 
 
@@ -168,7 +184,7 @@ test(const unsigned int n_subdivisions_1D,
   // postprocess: write paraview results
   // **************************************************************************
 
-  if (true)
+  if (do_paraview)
     {
       DataOutBase::VtkFlags flags;
       flags.write_higher_order_cells = true;
@@ -284,7 +300,7 @@ test(const unsigned int n_subdivisions_1D,
 
   double error_i = 0.0;
   double error_p = 0.0;
-  if (exact_solution)
+  if (do_compute_error && exact_solution)
     {
       hp::FEValues<dim> hp_fe_values(
         mapping,
@@ -344,6 +360,11 @@ test(const unsigned int n_subdivisions_1D,
       error_i = std::sqrt(error_i);
       error_p = std::sqrt(error_p);
     }
+
+
+  // **************************************************************************
+  // postprocess: create convergence table
+  // **************************************************************************
 
   table.add_value("n_cells", n_subdivisions_1D);
   table.add_value("degree", fe_degree);
