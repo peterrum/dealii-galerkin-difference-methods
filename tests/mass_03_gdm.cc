@@ -93,18 +93,17 @@ test(const unsigned int n_subdivisions_1D,
 
         std::vector<types::global_dof_index> dof_indices;
         for (const auto &cell : tria.active_cell_iterators())
-            {
-              dof_indices.resize(n_dofs_per_cell);
+          {
+            dof_indices.resize(n_dofs_per_cell);
 
-              const unsigned int active_fe_index = get_active_fe_index(cell);
+            const unsigned int active_fe_index = get_active_fe_index(cell);
 
-              for (unsigned int i = 0; i < n_dofs_per_cell; ++i)
-                dof_indices[i] =
-                  cell->active_cell_index() - active_fe_index + i;
+            for (unsigned int i = 0; i < n_dofs_per_cell; ++i)
+              dof_indices[i] = cell->active_cell_index() - active_fe_index + i;
 
-              constraints.add_entries_local_to_global(dof_indices,
-                                                      sparsity_pattern);
-            }
+            constraints.add_entries_local_to_global(dof_indices,
+                                                    sparsity_pattern);
+          }
 
         sparsity_pattern.compress();
       }
@@ -307,50 +306,49 @@ test(const unsigned int n_subdivisions_1D,
       error_i = 0.0;
 
       for (const auto &cell : tria.active_cell_iterators())
-          {
-            const unsigned int active_fe_index = get_active_fe_index(cell);
-            hp_fe_values.reinit(cell,
-                                numbers::invalid_unsigned_int,
-                                numbers::invalid_unsigned_int,
-                                active_fe_index);
+        {
+          const unsigned int active_fe_index = get_active_fe_index(cell);
+          hp_fe_values.reinit(cell,
+                              numbers::invalid_unsigned_int,
+                              numbers::invalid_unsigned_int,
+                              active_fe_index);
 
-            const auto &fe_values = hp_fe_values.get_present_fe_values();
+          const auto &fe_values = hp_fe_values.get_present_fe_values();
 
-            std::vector<types::global_dof_index> dof_indices(
-              fe_values.dofs_per_cell);
+          std::vector<types::global_dof_index> dof_indices(
+            fe_values.dofs_per_cell);
 
-            for (unsigned int i = 0; i < fe_values.dofs_per_cell; ++i)
-              dof_indices[i] = cell->active_cell_index() - active_fe_index + i;
+          for (unsigned int i = 0; i < fe_values.dofs_per_cell; ++i)
+            dof_indices[i] = cell->active_cell_index() - active_fe_index + i;
 
-            std::vector<double> quadrature_values(
-              fe_values.n_quadrature_points);
+          std::vector<double> quadrature_values(fe_values.n_quadrature_points);
 
-            // interpolated solution
-            fe_values.get_function_values(solution_interpolated,
-                                          dof_indices,
-                                          quadrature_values);
+          // interpolated solution
+          fe_values.get_function_values(solution_interpolated,
+                                        dof_indices,
+                                        quadrature_values);
 
-            for (const unsigned int q_index :
-                 fe_values.quadrature_point_indices())
-              error_i += std::pow(quadrature_values[q_index] -
-                                    exact_solution->value(
-                                      fe_values.quadrature_point(q_index)),
-                                  2.0) *
-                         fe_values.JxW(q_index);
+          for (const unsigned int q_index :
+               fe_values.quadrature_point_indices())
+            error_i += std::pow(quadrature_values[q_index] -
+                                  exact_solution->value(
+                                    fe_values.quadrature_point(q_index)),
+                                2.0) *
+                       fe_values.JxW(q_index);
 
-            // projected solution
-            fe_values.get_function_values(solution_projected,
-                                          dof_indices,
-                                          quadrature_values);
+          // projected solution
+          fe_values.get_function_values(solution_projected,
+                                        dof_indices,
+                                        quadrature_values);
 
-            for (const unsigned int q_index :
-                 fe_values.quadrature_point_indices())
-              error_p += std::pow(quadrature_values[q_index] -
-                                    exact_solution->value(
-                                      fe_values.quadrature_point(q_index)),
-                                  2.0) *
-                         fe_values.JxW(q_index);
-          }
+          for (const unsigned int q_index :
+               fe_values.quadrature_point_indices())
+            error_p += std::pow(quadrature_values[q_index] -
+                                  exact_solution->value(
+                                    fe_values.quadrature_point(q_index)),
+                                2.0) *
+                       fe_values.JxW(q_index);
+        }
 
       error_i = std::sqrt(error_i);
       error_p = std::sqrt(error_p);
