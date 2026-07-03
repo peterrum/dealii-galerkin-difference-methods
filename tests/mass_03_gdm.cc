@@ -47,11 +47,14 @@ test(const unsigned int n_subdivisions_1D,
   AffineConstraints<double> constraints;
   constraints.close();
 
-  Triangulation<dim> tria;
-  GridGenerator::subdivided_hyper_cube(tria, n_subdivisions_1D, 0.0, +1.0);
+  Triangulation<dim> vertex_tria;
+  GridGenerator::subdivided_hyper_cube(vertex_tria,
+                                       n_subdivisions_1D,
+                                       0.0,
+                                       +1.0);
 
-  DoFHandler<dim> dof_handler(tria);
-  dof_handler.distribute_dofs(FE_Q<dim>(1));
+  DoFHandler<dim> vertex_dof_handler(vertex_tria);
+  vertex_dof_handler.distribute_dofs(FE_Q<dim>(1));
 
   const auto hp_fe =
     GDM::generate_fe_collection<dim>(GDM::generate_polynomials_1D(fe_degree),
@@ -86,8 +89,8 @@ test(const unsigned int n_subdivisions_1D,
   };
 
   VectorType solution_projected, solution_interpolated;
-  solution_projected.reinit(dof_handler.n_dofs());
-  solution_interpolated.reinit(dof_handler.n_dofs());
+  solution_projected.reinit(vertex_dof_handler.n_dofs());
+  solution_interpolated.reinit(vertex_dof_handler.n_dofs());
 
   // **************************************************************************
   // perform l2 projection
@@ -102,9 +105,10 @@ test(const unsigned int n_subdivisions_1D,
       rhs.reinit(solution_projected);
 
       {
-        sparsity_pattern.reinit(dof_handler.n_dofs(), dof_handler.n_dofs());
+        sparsity_pattern.reinit(vertex_dof_handler.n_dofs(),
+                                vertex_dof_handler.n_dofs());
 
-        for (const auto &cell : tria.active_cell_iterators())
+        for (const auto &cell : vertex_tria.active_cell_iterators())
           {
             const auto dof_indices = get_dof_indices(cell);
 
@@ -123,7 +127,7 @@ test(const unsigned int n_subdivisions_1D,
                                      update_JxW_values | update_values |
                                        update_quadrature_points);
 
-      for (const auto &cell : tria.active_cell_iterators())
+      for (const auto &cell : vertex_tria.active_cell_iterators())
         {
           const unsigned int active_fe_index = get_active_fe_index(cell);
           hp_fe_values.reinit(cell,
@@ -173,7 +177,7 @@ test(const unsigned int n_subdivisions_1D,
 
   if (do_interpolation)
     {
-      VectorTools::interpolate(dof_handler,
+      VectorTools::interpolate(vertex_dof_handler,
                                *exact_solution,
                                solution_interpolated);
     }
@@ -191,11 +195,11 @@ test(const unsigned int n_subdivisions_1D,
 
       DataOut<dim> data_out;
       data_out.set_flags(flags);
-      data_out.attach_triangulation(tria);
-      data_out.add_data_vector(dof_handler,
+      data_out.attach_triangulation(vertex_tria);
+      data_out.add_data_vector(vertex_dof_handler,
                                solution_interpolated,
                                "solution_interpolated_lin");
-      data_out.add_data_vector(dof_handler,
+      data_out.add_data_vector(vertex_dof_handler,
                                solution_projected,
                                "solution_projected_lin");
 
@@ -203,7 +207,7 @@ test(const unsigned int n_subdivisions_1D,
 
       if (exact_solution)
         {
-          dof_handler_solution.reinit(tria);
+          dof_handler_solution.reinit(vertex_tria);
           dof_handler_solution.distribute_dofs(FE_Q<dim>(1));
           VectorType analytical_solution;
 
@@ -218,7 +222,7 @@ test(const unsigned int n_subdivisions_1D,
         }
 
       data_out.write_vtu_in_parallel("results_lin.vtu",
-                                     dof_handler.get_mpi_communicator());
+                                     vertex_dof_handler.get_mpi_communicator());
     }
 
   if (do_paraview)
@@ -231,7 +235,7 @@ test(const unsigned int n_subdivisions_1D,
 
       DoFHandler<dim> dof_handler_solution;
 
-      dof_handler_solution.reinit(tria);
+      dof_handler_solution.reinit(vertex_tria);
       dof_handler_solution.distribute_dofs(FE_Q<dim>(fe_degree));
 
       VectorType analytical_solution, solution_interpolated_fe,
@@ -259,7 +263,7 @@ test(const unsigned int n_subdivisions_1D,
           dof_handler_solution.get_fe().get_unit_support_points())),
         update_values);
 
-      for (const auto &cell : tria.active_cell_iterators())
+      for (const auto &cell : vertex_tria.active_cell_iterators())
         {
           const unsigned int active_fe_index = get_active_fe_index(cell);
           hp_fe_values.reinit(cell,
@@ -308,7 +312,7 @@ test(const unsigned int n_subdivisions_1D,
       data_out.build_patches(
         mapping, fe_degree, DataOut<dim>::CurvedCellRegion::curved_inner_cells);
       data_out.write_vtu_in_parallel("results.vtu",
-                                     dof_handler.get_mpi_communicator());
+                                     vertex_dof_handler.get_mpi_communicator());
     }
 
 
@@ -329,7 +333,7 @@ test(const unsigned int n_subdivisions_1D,
 
       error_i = 0.0;
 
-      for (const auto &cell : tria.active_cell_iterators())
+      for (const auto &cell : vertex_tria.active_cell_iterators())
         {
           const unsigned int active_fe_index = get_active_fe_index(cell);
           hp_fe_values.reinit(cell,
