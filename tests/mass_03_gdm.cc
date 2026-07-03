@@ -1,8 +1,5 @@
 #include <deal.II/base/convergence_table.h>
-#include <deal.II/base/discrete_time.h>
 #include <deal.II/base/mpi.h>
-#include <deal.II/base/time_stepping.h>
-#include <deal.II/base/time_stepping.templates.h>
 
 #include <deal.II/dofs/dof_handler.h>
 
@@ -144,10 +141,9 @@ test(const unsigned int n_subdivisions_1D,
   TrilinosWrappers::SolverDirect mass_matrix_solver;
   mass_matrix_solver.initialize(mass_matrix);
 
-  unsigned int counter = 0;
-  double       error   = 0.0;
+  double error = 0.0;
 
-  const auto postprocess = [&](const double time, const VectorType &solution) {
+  const auto postprocess = [&](const VectorType &solution) {
     if (true)
       {
         DataOutBase::VtkFlags flags;
@@ -161,8 +157,6 @@ test(const unsigned int n_subdivisions_1D,
         DoFHandler<dim> dof_handler_solution;
         if (exact_solution)
           {
-            exact_solution->set_time(time);
-
             dof_handler_solution.reinit(tria);
             dof_handler_solution.distribute_dofs(FE_Q<dim>(fe_degree));
 
@@ -222,9 +216,7 @@ test(const unsigned int n_subdivisions_1D,
                                      "solution");
           }
 
-        const std::string file_name =
-          "results_" + std::to_string(counter) + ".vtu";
-        counter++;
+        const std::string file_name = "results.vtu";
 
         // write data
         data_out.build_patches(
@@ -238,8 +230,6 @@ test(const unsigned int n_subdivisions_1D,
 
     if (exact_solution)
       {
-        exact_solution->set_time(time);
-
         hp::FEValues<dim> hp_fe_values(
           mapping,
           fe,
@@ -286,7 +276,7 @@ test(const unsigned int n_subdivisions_1D,
   };
 
 
-  postprocess(0.0, solution);
+  postprocess(solution);
 
   table.add_value("n_cells", n_subdivisions_1D);
   table.add_value("degree", fe_degree);
