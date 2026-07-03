@@ -34,6 +34,7 @@ test(const unsigned int n_subdivisions_1D,
 
   const bool do_l2_projection = true;
   const bool do_interpolation = true;
+  const bool do_paraview_lin  = true;
   const bool do_paraview      = true;
   const bool do_compute_error = true;
 
@@ -183,7 +184,7 @@ test(const unsigned int n_subdivisions_1D,
   // postprocess: write paraview results
   // **************************************************************************
 
-  if (do_paraview)
+  if (do_paraview_lin)
     {
       DataOutBase::VtkFlags flags;
       flags.write_higher_order_cells = true;
@@ -200,6 +201,36 @@ test(const unsigned int n_subdivisions_1D,
 
       DoFHandler<dim> dof_handler_solution;
 
+      if (exact_solution)
+        {
+          dof_handler_solution.reinit(tria);
+          dof_handler_solution.distribute_dofs(FE_Q<dim>(1));
+          VectorType analytical_solution;
+
+          analytical_solution.reinit(dof_handler_solution.n_dofs());
+          VectorTools::interpolate(mapping,
+                                   dof_handler_solution,
+                                   *exact_solution,
+                                   analytical_solution);
+          data_out.add_data_vector(dof_handler_solution,
+                                   analytical_solution,
+                                   "solution_analytical");
+        }
+
+      data_out.write_vtu_in_parallel("results_lin.vtu",
+                                     dof_handler.get_mpi_communicator());
+    }
+
+  if (do_paraview)
+    {
+      DataOutBase::VtkFlags flags;
+      flags.write_higher_order_cells = true;
+
+      DataOut<dim> data_out;
+      data_out.set_flags(flags);
+
+      DoFHandler<dim> dof_handler_solution;
+
       dof_handler_solution.reinit(tria);
       dof_handler_solution.distribute_dofs(FE_Q<dim>(fe_degree));
 
@@ -208,7 +239,6 @@ test(const unsigned int n_subdivisions_1D,
 
       solution_interpolated_fe.reinit(dof_handler_solution.n_dofs());
       solution_projected_fe.reinit(dof_handler_solution.n_dofs());
-
 
       if (exact_solution)
         {
@@ -221,7 +251,6 @@ test(const unsigned int n_subdivisions_1D,
                                    analytical_solution,
                                    "solution_analytical");
         }
-
 
       hp::FEValues<dim> hp_fe_values(
         mapping,
@@ -275,12 +304,10 @@ test(const unsigned int n_subdivisions_1D,
                                solution_projected_fe,
                                "solution_projected");
 
-      const std::string file_name = "results.vtu";
-
       // write data
       data_out.build_patches(
         mapping, fe_degree, DataOut<dim>::CurvedCellRegion::curved_inner_cells);
-      data_out.write_vtu_in_parallel(file_name,
+      data_out.write_vtu_in_parallel("results.vtu",
                                      dof_handler.get_mpi_communicator());
     }
 
