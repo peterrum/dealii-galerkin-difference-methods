@@ -37,6 +37,7 @@ test(const unsigned int n_subdivisions_1D,
   const bool do_paraview_lin  = true;
   const bool do_paraview      = true;
   const bool do_compute_error = true;
+  const bool even_polynomial  = fe_degree % 2 == 0;
 
   using VectorType = LinearAlgebra::distributed::Vector<double>;
 
@@ -53,6 +54,16 @@ test(const unsigned int n_subdivisions_1D,
                                        0.0,
                                        +1.0);
 
+  Triangulation<dim> dual_tria;
+
+  if (even_polynomial)
+    {
+      AssertThrow(false, ExcMessage("TODO!"));
+    }
+
+  // select triangulation for cell loops
+  const auto &comp_tria = even_polynomial ? dual_tria : vertex_tria;
+
   DoFHandler<dim> vertex_dof_handler(vertex_tria);
   vertex_dof_handler.distribute_dofs(FE_Q<dim>(1));
 
@@ -68,6 +79,8 @@ test(const unsigned int n_subdivisions_1D,
       [](const auto &p) { return p[0] * p[0]; });
 
   const auto get_active_fe_index = [&](const auto &cell) {
+    AssertThrow(!even_polynomial, ExcMessage("TODO!"));
+
     const unsigned int index = cell->active_cell_index();
     return (index < (fe_degree / 2) ?
               index :
@@ -77,6 +90,8 @@ test(const unsigned int n_subdivisions_1D,
   };
 
   const auto get_dof_indices = [&](const auto &cell) {
+    AssertThrow(!even_polynomial, ExcMessage("TODO!"));
+
     const auto active_fe_index = get_active_fe_index(cell);
     const auto n_dofs_per_cell = hp_fe[active_fe_index].n_dofs_per_cell();
 
@@ -108,7 +123,7 @@ test(const unsigned int n_subdivisions_1D,
         sparsity_pattern.reinit(vertex_dof_handler.n_dofs(),
                                 vertex_dof_handler.n_dofs());
 
-        for (const auto &cell : vertex_tria.active_cell_iterators())
+        for (const auto &cell : comp_tria.active_cell_iterators())
           {
             const auto dof_indices = get_dof_indices(cell);
 
@@ -127,7 +142,7 @@ test(const unsigned int n_subdivisions_1D,
                                      update_JxW_values | update_values |
                                        update_quadrature_points);
 
-      for (const auto &cell : vertex_tria.active_cell_iterators())
+      for (const auto &cell : comp_tria.active_cell_iterators())
         {
           const unsigned int active_fe_index = get_active_fe_index(cell);
           hp_fe_values.reinit(cell,
@@ -263,7 +278,7 @@ test(const unsigned int n_subdivisions_1D,
           dof_handler_solution.get_fe().get_unit_support_points())),
         update_values);
 
-      for (const auto &cell : vertex_tria.active_cell_iterators())
+      for (const auto &cell : comp_tria.active_cell_iterators())
         {
           const unsigned int active_fe_index = get_active_fe_index(cell);
           hp_fe_values.reinit(cell,
@@ -333,7 +348,7 @@ test(const unsigned int n_subdivisions_1D,
 
       error_i = 0.0;
 
-      for (const auto &cell : vertex_tria.active_cell_iterators())
+      for (const auto &cell : comp_tria.active_cell_iterators())
         {
           const unsigned int active_fe_index = get_active_fe_index(cell);
           hp_fe_values.reinit(cell,
