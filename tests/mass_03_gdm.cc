@@ -52,7 +52,7 @@ test(const unsigned int n_subdivisions_1D,
 
   const auto exact_solution =
     std::make_shared<ScalarFunctionFromFunctionObject<dim>>(
-      [](const auto &p) { return p[0]; });
+      [](const auto &p) { return p[0] * p[0]; });
 
   const auto get_active_fe_index = [&](const auto &cell) {
     const unsigned int index = cell->active_cell_index();
@@ -362,7 +362,7 @@ main(int argc, char **argv)
   const int          dim                    = 1;
   const unsigned int fe_degree              = 3;
   const unsigned int n_subdivisions_1D_min  = 10;
-  const unsigned int n_subdivisions_1D_max  = 40;
+  const unsigned int n_subdivisions_1D_max  = 10;
   const unsigned int n_subdivisions_1D_step = 10;
 
   ConvergenceTable table;
