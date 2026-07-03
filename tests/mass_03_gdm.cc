@@ -28,6 +28,10 @@ test(const unsigned int n_subdivisions_1D,
      const unsigned int fe_degree,
      ConvergenceTable  &table)
 {
+  // **************************************************************************
+  // setup
+  // **************************************************************************
+
   using VectorType = LinearAlgebra::distributed::Vector<double>;
 
   hp::MappingCollection<dim> mapping;
@@ -145,200 +149,201 @@ test(const unsigned int n_subdivisions_1D,
   mass_matrix.compress(VectorOperation::values::add);
   rhs.compress(VectorOperation::values::add);
 
-  // create direct solver
   TrilinosWrappers::SolverDirect mass_matrix_solver;
   mass_matrix_solver.initialize(mass_matrix);
 
   mass_matrix_solver.vmult(solution_projected, rhs);
 
+
+
   // **************************************************************************
   // interpolate
   // **************************************************************************
+
   VectorTools::interpolate(dof_handler, *exact_solution, solution_interpolated);
 
 
 
   // **************************************************************************
-  // postprocess
+  // postprocess: write paraview results
   // **************************************************************************
+
+  if (true)
+    {
+      DataOutBase::VtkFlags flags;
+      flags.write_higher_order_cells = true;
+
+      DataOut<dim> data_out;
+      data_out.set_flags(flags);
+      data_out.attach_triangulation(tria);
+      data_out.add_data_vector(dof_handler,
+                               solution_interpolated,
+                               "solution_interpolated_lin");
+      data_out.add_data_vector(dof_handler,
+                               solution_projected,
+                               "solution_projected_lin");
+
+      DoFHandler<dim> dof_handler_solution;
+      if (exact_solution)
+        {
+          dof_handler_solution.reinit(tria);
+          dof_handler_solution.distribute_dofs(FE_Q<dim>(fe_degree));
+
+          VectorType analytical_solution, solution_interpolated_fe,
+            solution_projected_fe;
+
+          analytical_solution.reinit(dof_handler_solution.n_dofs());
+          solution_interpolated_fe.reinit(dof_handler_solution.n_dofs());
+          solution_projected_fe.reinit(dof_handler_solution.n_dofs());
+
+          VectorTools::interpolate(mapping,
+                                   dof_handler_solution,
+                                   *exact_solution,
+                                   analytical_solution);
+          data_out.add_data_vector(dof_handler_solution,
+                                   analytical_solution,
+                                   "solution_analytical");
+
+
+          hp::FEValues<dim> hp_fe_values(
+            mapping,
+            fe,
+            hp::QCollection<dim>(Quadrature<dim>(
+              dof_handler_solution.get_fe().get_unit_support_points())),
+            update_values);
+
+          for (const auto &cell : tria.active_cell_iterators())
+            if (true)
+              {
+                const unsigned int active_fe_index = get_active_fe_index(cell);
+                hp_fe_values.reinit(cell,
+                                    numbers::invalid_unsigned_int,
+                                    numbers::invalid_unsigned_int,
+                                    active_fe_index);
+
+                const auto &fe_values = hp_fe_values.get_present_fe_values();
+
+                std::vector<types::global_dof_index> dof_indices(
+                  fe_values.dofs_per_cell);
+
+                for (unsigned int i = 0; i < fe_values.dofs_per_cell; ++i)
+                  dof_indices[i] =
+                    cell->active_cell_index() - active_fe_index + i;
+
+                std::vector<types::global_dof_index> dof_indices_fe(
+                  dof_handler_solution.get_fe().n_dofs_per_cell());
+
+                cell->as_dof_handler_iterator(dof_handler_solution)
+                  ->get_dof_indices(dof_indices_fe);
+
+                std::vector<double> quadrature_values(
+                  fe_values.n_quadrature_points);
+
+                // interpolated solution
+                fe_values.get_function_values(solution_interpolated,
+                                              dof_indices,
+                                              quadrature_values);
+
+                for (unsigned int i = 0; i < dof_indices_fe.size(); ++i)
+                  solution_interpolated_fe[dof_indices_fe[i]] =
+                    quadrature_values[i];
+
+
+                // projected solution
+                fe_values.get_function_values(solution_projected,
+                                              dof_indices,
+                                              quadrature_values);
+
+                for (unsigned int i = 0; i < dof_indices_fe.size(); ++i)
+                  solution_projected_fe[dof_indices_fe[i]] =
+                    quadrature_values[i];
+              }
+
+          data_out.add_data_vector(dof_handler_solution,
+                                   solution_interpolated_fe,
+                                   "solution_interpolated");
+          data_out.add_data_vector(dof_handler_solution,
+                                   solution_projected_fe,
+                                   "solution_projected");
+        }
+
+      const std::string file_name = "results.vtu";
+
+      // write data
+      data_out.build_patches(
+        mapping, fe_degree, DataOut<dim>::CurvedCellRegion::curved_inner_cells);
+      data_out.write_vtu_in_parallel(file_name,
+                                     dof_handler.get_mpi_communicator());
+    }
+
+
+
+  // **************************************************************************
+  // postprocess: compute error
+  // **************************************************************************
+
   double error_i = 0.0;
   double error_p = 0.0;
+  if (exact_solution)
+    {
+      hp::FEValues<dim> hp_fe_values(
+        mapping,
+        fe,
+        hp::QCollection<dim>(QGauss<dim>(fe_degree + 3)),
+        update_values | update_JxW_values | update_quadrature_points);
 
-  {
-    if (true)
-      {
-        DataOutBase::VtkFlags flags;
-        flags.write_higher_order_cells = true;
+      error_i = 0.0;
 
-        DataOut<dim> data_out;
-        data_out.set_flags(flags);
-        data_out.attach_triangulation(tria);
-        data_out.add_data_vector(dof_handler,
-                                 solution_interpolated,
-                                 "solution_interpolated_lin");
-        data_out.add_data_vector(dof_handler,
-                                 solution_projected,
-                                 "solution_projected_lin");
-
-        DoFHandler<dim> dof_handler_solution;
-        if (exact_solution)
+      for (const auto &cell : tria.active_cell_iterators())
+        if (true)
           {
-            dof_handler_solution.reinit(tria);
-            dof_handler_solution.distribute_dofs(FE_Q<dim>(fe_degree));
+            const unsigned int active_fe_index = get_active_fe_index(cell);
+            hp_fe_values.reinit(cell,
+                                numbers::invalid_unsigned_int,
+                                numbers::invalid_unsigned_int,
+                                active_fe_index);
 
-            LinearAlgebra::distributed::Vector<double> analytical_solution,
-              solution_interpolated_fe, solution_projected_fe;
+            const auto &fe_values = hp_fe_values.get_present_fe_values();
 
-            analytical_solution.reinit(dof_handler_solution.n_dofs());
-            solution_interpolated_fe.reinit(dof_handler_solution.n_dofs());
-            solution_projected_fe.reinit(dof_handler_solution.n_dofs());
+            std::vector<types::global_dof_index> dof_indices(
+              fe_values.dofs_per_cell);
 
-            VectorTools::interpolate(mapping,
-                                     dof_handler_solution,
-                                     *exact_solution,
-                                     analytical_solution);
-            data_out.add_data_vector(dof_handler_solution,
-                                     analytical_solution,
-                                     "solution_analytical");
+            for (unsigned int i = 0; i < fe_values.dofs_per_cell; ++i)
+              dof_indices[i] = cell->active_cell_index() - active_fe_index + i;
 
+            std::vector<double> quadrature_values(
+              fe_values.n_quadrature_points);
 
-            hp::FEValues<dim> hp_fe_values(
-              mapping,
-              fe,
-              hp::QCollection<dim>(Quadrature<dim>(
-                dof_handler_solution.get_fe().get_unit_support_points())),
-              update_values);
+            // interpolated solution
+            fe_values.get_function_values(solution_interpolated,
+                                          dof_indices,
+                                          quadrature_values);
 
-            for (const auto &cell : tria.active_cell_iterators())
-              if (true)
-                {
-                  const unsigned int active_fe_index =
-                    get_active_fe_index(cell);
-                  hp_fe_values.reinit(cell,
-                                      numbers::invalid_unsigned_int,
-                                      numbers::invalid_unsigned_int,
-                                      active_fe_index);
+            for (const unsigned int q_index :
+                 fe_values.quadrature_point_indices())
+              error_i += std::pow(quadrature_values[q_index] -
+                                    exact_solution->value(
+                                      fe_values.quadrature_point(q_index)),
+                                  2.0) *
+                         fe_values.JxW(q_index);
 
-                  const auto &fe_values = hp_fe_values.get_present_fe_values();
+            // projected solution
+            fe_values.get_function_values(solution_projected,
+                                          dof_indices,
+                                          quadrature_values);
 
-                  std::vector<types::global_dof_index> dof_indices(
-                    fe_values.dofs_per_cell);
-
-                  for (unsigned int i = 0; i < fe_values.dofs_per_cell; ++i)
-                    dof_indices[i] =
-                      cell->active_cell_index() - active_fe_index + i;
-
-                  std::vector<types::global_dof_index> dof_indices_fe(
-                    dof_handler_solution.get_fe().n_dofs_per_cell());
-
-                  cell->as_dof_handler_iterator(dof_handler_solution)
-                    ->get_dof_indices(dof_indices_fe);
-
-                  std::vector<double> quadrature_values(
-                    fe_values.n_quadrature_points);
-
-                  // interpolated solution
-                  fe_values.get_function_values(solution_interpolated,
-                                                dof_indices,
-                                                quadrature_values);
-
-                  for (unsigned int i = 0; i < dof_indices_fe.size(); ++i)
-                    solution_interpolated_fe[dof_indices_fe[i]] =
-                      quadrature_values[i];
-
-
-                  // projected solution
-                  fe_values.get_function_values(solution_projected,
-                                                dof_indices,
-                                                quadrature_values);
-
-                  for (unsigned int i = 0; i < dof_indices_fe.size(); ++i)
-                    solution_projected_fe[dof_indices_fe[i]] =
-                      quadrature_values[i];
-                }
-
-            data_out.add_data_vector(dof_handler_solution,
-                                     solution_interpolated_fe,
-                                     "solution_interpolated");
-            data_out.add_data_vector(dof_handler_solution,
-                                     solution_projected_fe,
-                                     "solution_projected");
+            for (const unsigned int q_index :
+                 fe_values.quadrature_point_indices())
+              error_p += std::pow(quadrature_values[q_index] -
+                                    exact_solution->value(
+                                      fe_values.quadrature_point(q_index)),
+                                  2.0) *
+                         fe_values.JxW(q_index);
           }
 
-        const std::string file_name = "results.vtu";
-
-        // write data
-        data_out.build_patches(
-          mapping,
-          fe_degree,
-          DataOut<dim>::CurvedCellRegion::curved_inner_cells);
-        data_out.write_vtu_in_parallel(file_name,
-                                       dof_handler.get_mpi_communicator());
-      }
-
-
-    if (exact_solution)
-      {
-        hp::FEValues<dim> hp_fe_values(
-          mapping,
-          fe,
-          hp::QCollection<dim>(QGauss<dim>(fe_degree + 3)),
-          update_values | update_JxW_values | update_quadrature_points);
-
-        error_i = 0.0;
-
-        for (const auto &cell : tria.active_cell_iterators())
-          if (true)
-            {
-              const unsigned int active_fe_index = get_active_fe_index(cell);
-              hp_fe_values.reinit(cell,
-                                  numbers::invalid_unsigned_int,
-                                  numbers::invalid_unsigned_int,
-                                  active_fe_index);
-
-              const auto &fe_values = hp_fe_values.get_present_fe_values();
-
-              std::vector<types::global_dof_index> dof_indices(
-                fe_values.dofs_per_cell);
-
-              for (unsigned int i = 0; i < fe_values.dofs_per_cell; ++i)
-                dof_indices[i] =
-                  cell->active_cell_index() - active_fe_index + i;
-
-              std::vector<double> quadrature_values(
-                fe_values.n_quadrature_points);
-
-              // interpolated solution
-              fe_values.get_function_values(solution_interpolated,
-                                            dof_indices,
-                                            quadrature_values);
-
-              for (const unsigned int q_index :
-                   fe_values.quadrature_point_indices())
-                error_i += std::pow(quadrature_values[q_index] -
-                                      exact_solution->value(
-                                        fe_values.quadrature_point(q_index)),
-                                    2.0) *
-                           fe_values.JxW(q_index);
-
-              // projected solution
-              fe_values.get_function_values(solution_projected,
-                                            dof_indices,
-                                            quadrature_values);
-
-              for (const unsigned int q_index :
-                   fe_values.quadrature_point_indices())
-                error_p += std::pow(quadrature_values[q_index] -
-                                      exact_solution->value(
-                                        fe_values.quadrature_point(q_index)),
-                                    2.0) *
-                           fe_values.JxW(q_index);
-            }
-
-        error_i = std::sqrt(error_i);
-        error_p = std::sqrt(error_p);
-      }
-  }
+      error_i = std::sqrt(error_i);
+      error_p = std::sqrt(error_p);
+    }
 
   table.add_value("n_cells", n_subdivisions_1D);
   table.add_value("degree", fe_degree);
