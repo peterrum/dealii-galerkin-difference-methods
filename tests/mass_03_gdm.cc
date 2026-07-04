@@ -236,6 +236,8 @@ test(const unsigned int n_subdivisions_1D,
                                    "solution_analytical");
         }
 
+      data_out.build_patches(
+        mapping, 1, DataOut<dim>::CurvedCellRegion::curved_inner_cells);
       data_out.write_vtu_in_parallel("results_lin.vtu",
                                      vertex_dof_handler.get_mpi_communicator());
     }
@@ -250,7 +252,7 @@ test(const unsigned int n_subdivisions_1D,
 
       DoFHandler<dim> dof_handler_solution;
 
-      dof_handler_solution.reinit(vertex_tria);
+      dof_handler_solution.reinit(dual_tria);
       dof_handler_solution.distribute_dofs(FE_Q<dim>(fe_degree));
 
       VectorType analytical_solution, solution_interpolated_fe,
