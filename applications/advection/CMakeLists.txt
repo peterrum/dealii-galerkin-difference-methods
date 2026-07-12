@@ -14,4 +14,5 @@ FOREACH ( source_file ${SOURCE_FILES} )
 ENDFOREACH ( source_file ${SOURCE_FILES} )
 
 ADD_SUBDIRECTORY(tests)
+ADD_SUBDIRECTORY(tests-convergence)
 

@@ -9,6 +9,7 @@
 #include <deal.II/base/discrete_time.h>
 #include <deal.II/base/function.h>
 #include <deal.II/base/function_signed_distance.h>
+#include <deal.II/base/parameter_handler.h>
 #include <deal.II/base/quadrature_lib.h>
 #include <deal.II/base/time_stepping.h>
 
@@ -121,12 +122,15 @@ private:
 
 template <int dim>
 void
-test(ConvergenceTable  &table,
-     const unsigned int fe_degree,
-     const unsigned int n_subdivisions_1D,
-     const double       cfl,
-     const double       factor_rotation,
-     const double       factor)
+test(ConvergenceTable      &table,
+     const unsigned int     fe_degree,
+     const unsigned int     n_subdivisions_1D,
+     const double           cfl,
+     const double           factor_rotation,
+     const double           factor,
+     const RungeKuttaMethod rk_method     = RungeKuttaMethod::RK_AUTO,
+     const double           cfl_h_scaling = 1.0,
+     const bool             no_cut        = false)
 {
   const double increment  = 5.0;
   const double rotation_0 = increment * factor;
@@ -153,9 +157,11 @@ test(ConvergenceTable  &table,
   params.ghost_parameter_A = 0.5;
 
   // time stepping
-  params.start_t = 0.0;
-  params.end_t   = 0.1;
-  params.cfl     = cfl;
+  params.start_t       = 0.0;
+  params.end_t         = 0.1;
+  params.cfl           = cfl;
+  params.rk_method     = rk_method;
+  params.cfl_h_scaling = cfl_h_scaling;
 
   params.exact_solution =
     std::make_shared<ExactSolution<dim>>(x_shift, phi, phi_add);
@@ -171,7 +177,7 @@ test(ConvergenceTable  &table,
     advection.begin_raw(), dim);
 
   params.level_set_fe_degree = 1;
-  const Point<dim> point     = {x_shift, 0.0};
+  const Point<dim> point     = {x_shift + (no_cut ? 10.0 : 0.0), 0.0};
   Tensor<1, dim>   normal;
   normal[0] = +std::sin(phi);
   normal[1] = -std::cos(phi);
@@ -191,32 +197,60 @@ main(int argc, char **argv)
 {
   Utilities::MPI::MPI_InitFinalize mpi(argc, argv, 1);
 
-  const std::string case_name = "parallel-convergence";
+  std::string case_name = "parallel-convergence";
+
+  if (argc > 1)
+    {
+      if (std::string(argv[1]).find(".json") == std::string::npos)
+        {
+          case_name = std::string(argv[1]);
+        }
+      else
+        {
+          dealii::ParameterHandler prm;
+          prm.add_parameter("case name", case_name);
+          prm.parse_input(std::string(argv[1]), "", true);
+        }
+    }
 
   ConvergenceTable table;
 
   // parallel ramp: fe degree, cfl, h
-  if (case_name == "parallel-convergence")
+  if (case_name == "parallel-convergence" ||
+      case_name == "parallel-convergence-no-cut")
     {
       const double factor = 5.0;
+      const double cfl    = 0.4;
 
-      for (const unsigned int fe_degree : {3, 5})
+      const bool no_cut = case_name == "parallel-convergence-no-cut";
+
+      const std::vector<std::tuple<unsigned int, double, RungeKuttaMethod>>
+        cases = {{3, 1.0, RungeKuttaMethod::RK_FOURTH_ORDER},
+                 {5, 1.0, RungeKuttaMethod::RK_SIXTH_ORDER},
+                 {5, 1.5, RungeKuttaMethod::RK_FOURTH_ORDER}};
+
+
+      for (const auto &[fe_degree, cfl_h_scaling, rk] : cases)
         {
-          for (const double cfl : {0.4, 0.2, 0.1, 0.05, 0.025})
+          for (unsigned int n_subdivisions_1D = 10; n_subdivisions_1D <= 100;
+               n_subdivisions_1D += 10)
+            test<2>(table,
+                    fe_degree,
+                    n_subdivisions_1D,
+                    cfl,
+                    0.0,
+                    factor,
+                    rk,
+                    cfl_h_scaling,
+                    no_cut);
+
+          if (Utilities::MPI::this_mpi_process(MPI_COMM_WORLD) == 0)
             {
-              for (unsigned int n_subdivisions_1D = 10;
-                   n_subdivisions_1D <= 100;
-                   n_subdivisions_1D += 10)
-                test<2>(table, fe_degree, n_subdivisions_1D, cfl, 0.0, factor);
-
-              if (Utilities::MPI::this_mpi_process(MPI_COMM_WORLD) == 0)
-                {
-                  table.write_text(std::cout);
-                  std::cout << std::endl;
-                }
-
-              table.clear();
+              table.write_text(std::cout);
+              std::cout << std::endl;
             }
+
+          table.clear();
         }
     }
 
@@ -227,7 +261,7 @@ main(int argc, char **argv)
         {
           for (unsigned int factor = 1.0; factor <= 9; ++factor)
             {
-              const double       cfl = (fe_degree == 3) ? 0.4 : 0.1;
+              const double       cfl               = 0.4;
               const unsigned int n_subdivisions_1D = 40;
 
               test<2>(table, fe_degree, n_subdivisions_1D, cfl, 0.0, factor);
@@ -251,8 +285,8 @@ main(int argc, char **argv)
           for (int factor_rotation = 0.0; factor_rotation <= 18;
                ++factor_rotation)
             {
-              const double       factor = 5;
-              const double       cfl    = (fe_degree == 3) ? 0.4 : 0.1;
+              const double       factor            = 5;
+              const double       cfl               = 0.4;
               const unsigned int n_subdivisions_1D = 40;
 
               test<2>(table,

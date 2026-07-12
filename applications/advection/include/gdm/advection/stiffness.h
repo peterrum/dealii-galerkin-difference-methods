@@ -1,5 +1,6 @@
 #pragma once
 
+#include <deal.II/lac/la_parallel_block_vector.h>
 #include <deal.II/lac/trilinos_sparse_matrix.h>
 #include <deal.II/lac/trilinos_sparsity_pattern.h>
 
@@ -35,6 +36,14 @@ public:
     if (composite)
       this->all_points_1 =
         collect_boundary_points(NonMatching::LocationToLevelSet::outside);
+  }
+
+  const TrilinosWrappers::SparseMatrix &
+  get_sparse_matrix() const
+  {
+    compute_sparse_matrix();
+
+    return sparse_matrix;
   }
 
   std::vector<Point<dim>>
@@ -621,4 +630,341 @@ private:
 
   std::vector<Point<dim>> all_points_0;
   std::vector<Point<dim>> all_points_1;
+
+  void
+  compute_sparse_matrix() const
+  {
+    const auto location = NonMatching::LocationToLevelSet::inside;
+
+    const NonMatching::LocationToLevelSet inverse_location =
+      (location == NonMatching::LocationToLevelSet::inside) ?
+        NonMatching::LocationToLevelSet::outside :
+        NonMatching::LocationToLevelSet::inside;
+
+    const auto advection =
+      (location == NonMatching::LocationToLevelSet::inside) ? this->advection :
+                                                              advection_1;
+
+
+    const auto          &mapping       = discretization.get_mapping();
+    const Quadrature<1> &quadrature_1D = discretization.get_quadrature_1D();
+    const Quadrature<dim - 1> &face_quadrature =
+      discretization.get_face_quadrature();
+    const auto                      &system = discretization.get_system();
+    const AffineConstraints<Number> &constraints =
+      discretization.get_affine_constraints();
+    const NonMatching::MeshClassifier<dim> &mesh_classifier =
+      discretization.get_mesh_classifier();
+    const hp::FECollection<dim> &fe        = discretization.get_fe();
+    const VectorType            &level_set = discretization.get_level_set();
+    const DoFHandler<dim>       &level_set_dof_handler =
+      discretization.get_level_set_dof_handler();
+
+    const double alpha = 0.0;
+
+    // 1) create sparsity pattern
+    if (sparse_matrix.m() == 0 || sparse_matrix.n() == 0)
+      {
+        sparsity_pattern.reinit(system.locally_owned_dofs(), MPI_COMM_WORLD);
+        system.create_flux_sparsity_pattern(constraints, sparsity_pattern);
+        sparsity_pattern.compress();
+
+        sparse_matrix.reinit(sparsity_pattern);
+      }
+    else
+      {
+        sparse_matrix = 0.0;
+      }
+
+    const auto face_has_ghost_penalty = [&](const auto        &cell,
+                                            const unsigned int face_index) {
+      if (cell->at_boundary(face_index))
+        return false;
+
+      const NonMatching::LocationToLevelSet cell_location =
+        mesh_classifier.location_to_level_set(cell);
+
+      const NonMatching::LocationToLevelSet neighbor_location =
+        mesh_classifier.location_to_level_set(cell->neighbor(face_index));
+
+      if (cell_location == NonMatching::LocationToLevelSet::intersected &&
+          neighbor_location != inverse_location)
+        return true;
+
+      if (neighbor_location == NonMatching::LocationToLevelSet::intersected &&
+          cell_location != inverse_location)
+        return true;
+
+      return false;
+    };
+
+    // evaluate advection operator
+    NonMatching::RegionUpdateFlags region_update_flags;
+    if (location == NonMatching::LocationToLevelSet::inside)
+      region_update_flags.inside = update_values | update_gradients |
+                                   update_JxW_values | update_quadrature_points;
+    else if (location == NonMatching::LocationToLevelSet::outside)
+      region_update_flags.outside = update_values | update_gradients |
+                                    update_JxW_values |
+                                    update_quadrature_points;
+    else
+      AssertThrow(false, ExcNotImplemented());
+    region_update_flags.surface = update_values | update_gradients |
+                                  update_JxW_values | update_quadrature_points |
+                                  update_normal_vectors;
+
+    NonMatching::FEValues<dim> non_matching_fe_values(fe,
+                                                      quadrature_1D,
+                                                      region_update_flags,
+                                                      mesh_classifier,
+                                                      level_set_dof_handler,
+                                                      level_set);
+
+    NonMatching::RegionUpdateFlags region_update_flags_face;
+    if (location == NonMatching::LocationToLevelSet::inside)
+      region_update_flags_face.inside =
+        update_values | update_gradients | update_JxW_values |
+        update_quadrature_points | update_normal_vectors;
+    else if (location == NonMatching::LocationToLevelSet::outside)
+      region_update_flags_face.outside =
+        update_values | update_gradients | update_JxW_values |
+        update_quadrature_points | update_normal_vectors;
+    else
+      AssertThrow(false, ExcNotImplemented());
+
+    NonMatching::FEInterfaceValues<dim> non_matching_fe_interface_values(
+      fe,
+      quadrature_1D,
+      region_update_flags_face,
+      mesh_classifier,
+      level_set_dof_handler,
+      level_set);
+
+    FEInterfaceValues<dim> fe_interface_values(
+      mapping,
+      fe,
+      hp::QCollection<dim - 1>(face_quadrature),
+      update_gradients | update_JxW_values | update_normal_vectors);
+
+    advection->set_time(0.0 /*TODO*/);
+
+    for (const auto &cell : system.locally_active_cell_iterators())
+      if (cell->is_locally_owned() &&
+          (mesh_classifier.location_to_level_set(cell->dealii_iterator()) !=
+           inverse_location))
+        {
+          non_matching_fe_values.reinit(cell->dealii_iterator(),
+                                        numbers::invalid_unsigned_int,
+                                        numbers::invalid_unsigned_int,
+                                        cell->active_fe_index());
+
+          const double cell_side_length =
+            cell->dealii_iterator()->minimum_vertex_distance();
+
+          const auto &fe_values_ptr =
+            (location == NonMatching::LocationToLevelSet::inside) ?
+              non_matching_fe_values.get_inside_fe_values() :
+              non_matching_fe_values.get_outside_fe_values();
+
+          const auto &surface_fe_values_ptr =
+            non_matching_fe_values.get_surface_fe_values();
+
+          const unsigned int n_dofs_per_cell = fe[0].dofs_per_cell;
+
+          std::vector<types::global_dof_index> dof_indices(n_dofs_per_cell);
+          cell->get_dof_indices(dof_indices);
+
+          FullMatrix<Number> cell_matrix(n_dofs_per_cell, n_dofs_per_cell);
+
+          // (I) cell integral
+          if (fe_values_ptr)
+            {
+              const auto &fe_values = *fe_values_ptr;
+
+              std::vector<Tensor<1, dim, Number>> advection_value(
+                fe_values.n_quadrature_points);
+
+              for (const auto q : fe_values.quadrature_point_indices())
+                {
+                  const auto point = fe_values.quadrature_point(q);
+                  for (unsigned int d = 0; d < dim; ++d)
+                    advection_value[q][d] = advection->value(point, d);
+                }
+
+              for (const unsigned int q_index :
+                   fe_values.quadrature_point_indices())
+                for (const unsigned int i : fe_values.dof_indices())
+                  for (const unsigned int j : fe_values.dof_indices())
+                    cell_matrix(i, j) +=
+                      alpha * (-(fe_values.shape_grad(j, q_index) *
+                                 advection_value[q_index]) *
+                               fe_values.shape_value(i, q_index) *
+                               fe_values.JxW(q_index)) +
+                      (1 - alpha) * ((fe_values.shape_value(j, q_index) *
+                                      advection_value[q_index]) *
+                                     fe_values.shape_grad(i, q_index) *
+                                     fe_values.JxW(q_index));
+            }
+
+          // (II) surface integral to apply BC
+          if (surface_fe_values_ptr)
+            {
+              const auto &fe_face_values = *surface_fe_values_ptr;
+
+              std::vector<Number> fluxes(fe_face_values.n_quadrature_points, 0);
+
+              for (const auto q : fe_face_values.quadrature_point_indices())
+                {
+                  auto normal = fe_face_values.normal_vector(q);
+
+                  if (location == NonMatching::LocationToLevelSet::outside)
+                    normal *= -1.0;
+
+                  const auto point = fe_face_values.quadrature_point(q);
+
+                  for (unsigned int d = 0; d < dim; ++d)
+                    fluxes[q] += normal[d] * advection->value(point, d);
+                }
+
+              std::vector<Number> u_plus(fe_face_values.n_quadrature_points, 0);
+
+              AssertThrow(composite == false, ExcNotImplemented());
+
+              for (const unsigned int q_index :
+                   fe_face_values.quadrature_point_indices())
+                for (const unsigned int i : fe_face_values.dof_indices())
+                  for (const unsigned int j : fe_face_values.dof_indices())
+                    cell_matrix(i, j) +=
+                      fluxes[q_index] *
+                      (alpha * fe_face_values.shape_value(j, q_index) -
+                       ((fluxes[q_index] >= 0.0) ?
+                          fe_face_values.shape_value(j, q_index) :
+                          u_plus[q_index])) *
+                      fe_face_values.shape_value(i, q_index) *
+                      fe_face_values.JxW(q_index);
+            }
+
+          // (III) face integral to apply BC
+          for (const auto f : cell->dealii_iterator()->face_indices())
+            if (cell->dealii_iterator()->face(f)->at_boundary())
+              {
+                non_matching_fe_interface_values.reinit(
+                  cell->dealii_iterator(),
+                  f,
+                  numbers::invalid_unsigned_int,
+                  numbers::invalid_unsigned_int,
+                  cell->active_fe_index());
+
+                const auto &fe_interface_values =
+                  (location == NonMatching::LocationToLevelSet::inside) ?
+                    non_matching_fe_interface_values.get_inside_fe_values() :
+                    non_matching_fe_interface_values.get_outside_fe_values();
+
+                if (fe_interface_values)
+                  {
+                    const auto &fe_face_values =
+                      fe_interface_values->get_fe_face_values(0);
+
+                    std::vector<Number> fluxes(
+                      fe_face_values.n_quadrature_points, 0);
+
+                    for (const auto q :
+                         fe_face_values.quadrature_point_indices())
+                      {
+                        const auto normal = fe_face_values.normal_vector(q);
+                        const auto point  = fe_face_values.quadrature_point(q);
+
+                        for (unsigned int d = 0; d < dim; ++d)
+                          fluxes[q] += normal[d] * advection->value(point, d);
+                      }
+
+                    std::vector<Number> u_plus(
+                      fe_face_values.n_quadrature_points, 0);
+
+                    for (const unsigned int q_index :
+                         fe_face_values.quadrature_point_indices())
+                      for (const unsigned int i : fe_face_values.dof_indices())
+                        for (const unsigned int j :
+                             fe_face_values.dof_indices())
+                          cell_matrix(i, j) +=
+                            fluxes[q_index] *
+                            (alpha * fe_face_values.shape_value(j, q_index) -
+                             ((fluxes[q_index] >= 0.0) ?
+                                fe_face_values.shape_value(j, q_index) :
+                                u_plus[q_index])) *
+                            fe_face_values.shape_value(i, q_index) *
+                            fe_face_values.JxW(q_index);
+                  }
+              }
+
+          // (IV) face integral for apply GP
+          for (const unsigned int f : cell->dealii_iterator()->face_indices())
+            if (face_has_ghost_penalty(cell->dealii_iterator(), f))
+              {
+                fe_interface_values.reinit(
+                  cell->dealii_iterator(),
+                  f,
+                  numbers::invalid_unsigned_int,
+                  cell->dealii_iterator()->neighbor(f),
+                  cell->dealii_iterator()->neighbor_of_neighbor(f),
+                  numbers::invalid_unsigned_int,
+                  numbers::invalid_unsigned_int,
+                  numbers::invalid_unsigned_int,
+                  cell->active_fe_index(),
+                  cell->neighbor(f)->active_fe_index());
+
+                const unsigned int n_interface_dofs =
+                  fe_interface_values.n_current_interface_dofs();
+                FullMatrix<double> local_stabilization(n_interface_dofs,
+                                                       n_interface_dofs);
+
+                std::vector<types::global_dof_index>
+                  local_interface_dof_indices;
+                cell->get_dof_indices(dof_indices);
+                for (const auto i : dof_indices)
+                  local_interface_dof_indices.emplace_back(i);
+                cell->neighbor(f)->get_dof_indices(dof_indices);
+                for (const auto i : dof_indices)
+                  local_interface_dof_indices.emplace_back(i);
+
+                for (unsigned int q = 0;
+                     q < fe_interface_values.n_quadrature_points;
+                     ++q)
+                  {
+                    const Tensor<1, dim> normal = fe_interface_values.normal(q);
+                    for (unsigned int i = 0; i < n_interface_dofs; ++i)
+                      for (unsigned int j = 0; j < n_interface_dofs; ++j)
+                        {
+                          local_stabilization(i, j) -=
+                            .5 * ghost_parameter_A * cell_side_length *
+                            cell_side_length *
+                            (normal *
+                             fe_interface_values.jump_in_shape_gradients(i,
+                                                                         q)) *
+                            (normal *
+                             fe_interface_values.jump_in_shape_gradients(j,
+                                                                         q)) *
+                            fe_interface_values.JxW(q);
+                        }
+                  }
+
+                constraints.distribute_local_to_global(
+                  local_stabilization,
+                  local_interface_dof_indices,
+                  sparse_matrix);
+              }
+
+          cell->get_dof_indices(dof_indices);
+          constraints.distribute_local_to_global(cell_matrix,
+                                                 dof_indices,
+                                                 sparse_matrix);
+        }
+
+
+    sparse_matrix.compress(VectorOperation::values::add);
+
+    for (auto &entry : sparse_matrix)
+      if ((entry.row() == entry.column()) && (entry.value() == 0.0))
+        entry.value() = 1.0;
+  }
 };

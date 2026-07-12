@@ -42,10 +42,36 @@ public:
         const double start_t = params.start_t;
         const double end_t   = params.end_t;
         const double max_vel = params.max_val;
-        const double delta_t = discretization.get_dx() * params.cfl / max_vel;
+        const double delta_t =
+          std::pow(discretization.get_dx(), params.cfl_h_scaling) * params.cfl /
+          max_vel;
 
-        const TimeStepping::runge_kutta_method runge_kutta_method =
+        TimeStepping::runge_kutta_method runge_kutta_method =
           TimeStepping::runge_kutta_method::RK_CLASSIC_FOURTH_ORDER;
+
+        if (params.rk_method == RungeKuttaMethod::RK_AUTO)
+          {
+            if (params.fe_degree == 3)
+              runge_kutta_method =
+                TimeStepping::runge_kutta_method::RK_CLASSIC_FOURTH_ORDER;
+            else if (params.fe_degree == 5)
+              runge_kutta_method =
+                TimeStepping::runge_kutta_method::RK_SIXTH_ORDER;
+            else
+              AssertThrow(false, ExcNotImplemented());
+          }
+        else if (params.rk_method == RungeKuttaMethod::RK_FOURTH_ORDER)
+          {
+            runge_kutta_method =
+              TimeStepping::runge_kutta_method::RK_CLASSIC_FOURTH_ORDER;
+          }
+        else if (params.rk_method == RungeKuttaMethod::RK_SIXTH_ORDER)
+          {
+            runge_kutta_method =
+              TimeStepping::runge_kutta_method::RK_SIXTH_ORDER;
+          }
+        else
+          AssertThrow(false, ExcNotImplemented());
 
         // Compute mass matrix
         const auto &mass_matrix = mass_matrix_operator.get_sparse_matrix();
@@ -229,6 +255,10 @@ private:
       preconditioner_ilu[id].initialize(sparse_matrix);
     else if (params.solver_name == "direct")
       solver_direct[id].initialize(sparse_matrix);
+    else if (params.solver_name == "none")
+      {
+        // nothing to do
+      }
     else
       AssertThrow(false, ExcNotImplemented());
   }
@@ -239,7 +269,8 @@ private:
         const VectorType                     &vec_rhs,
         const unsigned int                    id = 0)
   {
-    if (params.solver_name == "AMG" || params.solver_name == "ILU")
+    if (params.solver_name == "AMG" || params.solver_name == "ILU" ||
+        params.solver_name == "none")
       {
         ReductionControl solver_control(params.solver_max_iterations,
                                         params.solver_abs_tolerance,
@@ -251,6 +282,11 @@ private:
           solver.solve(sparse_matrix, result, vec_rhs, preconditioner_amg[id]);
         else if (params.solver_name == "ILU")
           solver.solve(sparse_matrix, result, vec_rhs, preconditioner_ilu[id]);
+        else if (params.solver_name == "none")
+          {
+            PreconditionIdentity precon;
+            solver.solve(sparse_matrix, result, vec_rhs, precon);
+          }
         else
           AssertThrow(false, ExcNotImplemented());
 
@@ -433,7 +469,7 @@ private:
              error_Linf);
 
     // output result -> Paraview
-    GDM::DataOut<dim> data_out(system, mapping, fe_degree_output);
+    GDM::DataOut<dim> data_out(system, mapping, fe_degree_output, time);
     solution.update_ghost_values();
     data_out.add_data_vector(solution, "solution");
 

@@ -1,0 +1,3 @@
+fe_degree  cfl   n_subdivision  error_2    error_1   error_inf  error_2_face error_1_face error_inf_face 
+        5 0.2000            50 5.0445e-13 1.6176e-13 2.1931e-11   5.8744e-12   5.3817e-12     2.3833e-11 
+
