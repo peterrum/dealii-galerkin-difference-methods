@@ -16,7 +16,7 @@
 #include <deal.II/numerics/data_out.h>
 #include <deal.II/numerics/vector_tools.h>
 
-#include <gdm/fe.h>
+#include <gdm/fe_even.h>
 
 
 using namespace dealii;
@@ -58,7 +58,27 @@ test(const unsigned int n_subdivisions_1D,
 
   if (even_polynomial)
     {
-      AssertThrow(false, ExcMessage("TODO!"));
+      // DGGD dual mesh: N+1 cells, first/last half-width
+      const double h = 1.0 / n_subdivisions_1D; // domain is [0,1]
+
+      std::vector<std::vector<double>> step_sizes(dim);
+      for (unsigned int d = 0; d < dim; ++d)
+        {
+          step_sizes[d].push_back(h / 2.0); //  <- first cell
+          for (unsigned int i = 1; i < n_subdivisions_1D; ++i)
+            step_sizes[d].push_back(h);     //  <- middle cells
+          step_sizes[d].push_back(h / 2.0); //  <- last cell
+        }
+
+      Point<dim> p1, p2;
+      for (unsigned int d = 0; d < dim; ++d)
+        {
+          p1[d] = 0.0;
+          p2[d] = 1.0;
+        }
+
+      GridGenerator::subdivided_hyper_rectangle(
+        dual_tria, step_sizes, p1, p2, true);
     }
 
   // select triangulation for cell loops
@@ -76,29 +96,86 @@ test(const unsigned int n_subdivisions_1D,
 
   const auto exact_solution =
     std::make_shared<ScalarFunctionFromFunctionObject<dim>>(
-      [](const auto &p) { return p[0] * p[0]; });
+      [](const auto &p) { return std::sin(p[0]); });
+
+  // cells per direction: N+1 for DGGD, N for continuous
+  std::array<unsigned int, dim> cell_shape;
+  for (unsigned int d = 0; d < dim; ++d)
+    cell_shape[d] =
+      even_polynomial ? (n_subdivisions_1D + 1) : n_subdivisions_1D;
+
+  // Category per direction: fe_degree+1 for DGGD, fe_degree for continuous
+  const unsigned int category_count =
+    even_polynomial ? fe_degree + 1 : fe_degree;
 
   const auto get_active_fe_index = [&](const auto &cell) {
-    AssertThrow(!even_polynomial, ExcMessage("TODO!"));
+    //  flat cell number -> (row, col, ...)
+    const auto indices =
+      GDM::index_to_indices<dim>(cell->active_cell_index(), cell_shape);
 
-    const unsigned int index = cell->active_cell_index();
-    return (index < (fe_degree / 2) ?
-              index :
-              (index < (n_subdivisions_1D - fe_degree / 2) ?
-                 (fe_degree / 2) :
-                 (fe_degree + index - n_subdivisions_1D)));
+    // same formula as before, applied per direction
+    std::array<unsigned int, dim> category_indices;
+    for (unsigned int d = 0; d < dim; ++d)
+      {
+        const unsigned int index = indices[d];
+        category_indices[d]      = (index < (fe_degree / 2) ?
+                                      index :
+                                      (index < (n_subdivisions_1D - fe_degree / 2) ?
+                                         (fe_degree / 2) :
+                                         (fe_degree + index - n_subdivisions_1D)));
+      }
+
+    // recombine into one flat FE-collection index
+    return GDM::indices_to_index<dim>(category_indices, category_count);
   };
 
   const auto get_dof_indices = [&](const auto &cell) {
-    AssertThrow(!even_polynomial, ExcMessage("TODO!"));
-
     const auto active_fe_index = get_active_fe_index(cell);
     const auto n_dofs_per_cell = hp_fe[active_fe_index].n_dofs_per_cell();
 
-    std::vector<types::global_dof_index> dof_indices(n_dofs_per_cell);
+    //  flat cell number -> (row, col, ...)
+    const auto indices =
+      GDM::index_to_indices<dim>(cell->active_cell_index(), cell_shape);
 
-    for (unsigned int i = 0; i < n_dofs_per_cell; ++i)
-      dof_indices[i] = cell->active_cell_index() - active_fe_index + i;
+    // window start, per direction (centered-on-1-node vs straddle-2-nodes)
+    std::array<unsigned int, dim> offset_reference;
+    for (unsigned int d = 0; d < dim; ++d)
+      {
+        const unsigned int index = indices[d];
+        if (even_polynomial)
+          offset_reference[d] =
+            (index < fe_degree / 2) ?
+              0 :
+              std::min(n_subdivisions_1D - fe_degree, index - fe_degree / 2);
+        else
+          offset_reference[d] =
+            (index < fe_degree / 2) ?
+              0 :
+              (std::min(n_subdivisions_1D, index + fe_degree / 2 + 1) -
+               fe_degree);
+      }
+
+    // global node-grid shape: always N+1 per direction
+    std::array<unsigned int, dim> n_dofs;
+    for (unsigned int d = 0; d < dim; ++d)
+      n_dofs[d] = n_subdivisions_1D + 1;
+
+    // walk the (fe_degree+1)^dim window, flatten each point
+    std::vector<types::global_dof_index> dof_indices(n_dofs_per_cell);
+    for (unsigned int k = 0, c = 0; k <= ((dim >= 3) ? fe_degree : 0); ++k)
+      for (unsigned int j = 0; j <= ((dim >= 2) ? fe_degree : 0); ++j)
+        for (unsigned int i = 0; i <= fe_degree; ++i, ++c)
+          {
+            auto offset = offset_reference;
+            if (dim >= 1)
+              offset[0] += i;
+            if (dim >= 2)
+              offset[1] += j;
+            if (dim >= 3)
+              offset[2] += k;
+
+            dof_indices[c] = GDM::indices_to_index<dim>(offset, n_dofs);
+          }
 
     return dof_indices;
   };
@@ -192,9 +269,21 @@ test(const unsigned int n_subdivisions_1D,
 
   if (do_interpolation)
     {
-      VectorTools::interpolate(vertex_dof_handler,
-                               *exact_solution,
-                               solution_interpolated);
+      const double                  h = 1.0 / n_subdivisions_1D;
+      std::array<unsigned int, dim> node_shape;
+      for (unsigned int d = 0; d < dim; ++d)
+        node_shape[d] = n_subdivisions_1D + 1;
+
+      for (unsigned int index = 0; index < vertex_dof_handler.n_dofs(); ++index)
+        {
+          const auto indices = GDM::index_to_indices<dim>(index, node_shape);
+
+          Point<dim> p;
+          for (unsigned int d = 0; d < dim; ++d)
+            p[d] = indices[d] * h;
+
+          solution_interpolated[index] = exact_solution->value(p);
+        }
     }
 
 
@@ -252,7 +341,7 @@ test(const unsigned int n_subdivisions_1D,
 
       DoFHandler<dim> dof_handler_solution;
 
-      dof_handler_solution.reinit(dual_tria);
+      dof_handler_solution.reinit(comp_tria);
       dof_handler_solution.distribute_dofs(FE_Q<dim>(fe_degree));
 
       VectorType analytical_solution, solution_interpolated_fe,
@@ -419,13 +508,13 @@ main(int argc, char **argv)
 {
   Utilities::MPI::MPI_InitFinalize mpi(argc, argv, 1);
 
-  const int          dim                    = 1;
-  const unsigned int fe_degree              = 3;
-  const unsigned int n_subdivisions_1D_min  = 10;
-  const unsigned int n_subdivisions_1D_max  = 10;
-  const unsigned int n_subdivisions_1D_step = 10;
+  const int          dim       = 2;
+  const unsigned int fe_degree = 4;
 
-  ConvergenceTable table;
+  const unsigned int n_subdivisions_1D_min  = 5;
+  const unsigned int n_subdivisions_1D_max  = 40;
+  const unsigned int n_subdivisions_1D_step = 5;
+  ConvergenceTable   table;
 
   for (unsigned int n_subdivisions_1D = n_subdivisions_1D_min;
        n_subdivisions_1D <=
