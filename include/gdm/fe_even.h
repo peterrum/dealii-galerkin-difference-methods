@@ -1,5 +1,6 @@
 #pragma once
 
+#include <deal.II/base/exceptions.h>
 #include <deal.II/base/polynomial.h>
 #include <deal.II/base/tensor_product_polynomials.h>
 
@@ -7,6 +8,14 @@
 #include <deal.II/fe/fe_system.h>
 
 #include <deal.II/hp/fe_collection.h>
+
+#include <algorithm>
+#include <array>
+#include <cmath>
+#include <limits>
+#include <memory>
+#include <sstream>
+#include <vector>
 
 using namespace dealii;
 
@@ -25,8 +34,8 @@ namespace GDM
     get_name() const override
     {
       std::ostringstream namebuf;
-      namebuf << "FE_GDM<" << Utilities::dim_string(dim, dim) << ">("
-              << thisty->degree << ")";
+      namebuf << "FE_GDM<" << Utilities::dim_string(dim, dim) << ">(";
+      namebuf << this->degree << ")";
       return namebuf.str();
     }
 
@@ -43,65 +52,267 @@ namespace GDM
       std::vector<unsigned int> dofs_per_object(dim + 1);
       dofs_per_object[dim] = n;
 
-      FiniteElementData<dim> fe_data(dofs_per_object,
-                                     1,
-                                     std::round(std::pow(n, 1.0 / dim)) - 1);
+      const unsigned int polynomial_degree =
+        static_cast<unsigned int>(
+          std::round(std::pow(static_cast<double>(n), 1.0 / dim))) -
+        1;
+
+      FiniteElementData<dim> fe_data(dofs_per_object, 1, polynomial_degree);
 
       return fe_data;
     }
   };
 
 
-  std::vector<std::vector<Polynomials::Polynomial<double>>>
+  // Coefficients for all basis polynomials associated with one degree:
+  // [position][basis polynomial][coefficient].
+  using DegreeCoefficients = std::vector<std::vector<std::vector<double>>>;
+
+  // Coefficient tables for several polynomial degrees:
+  // [degree table][position][basis polynomial][coefficient].
+  using CoefficientLibrary = std::vector<DegreeCoefficients>;
+
+  // One complete one-dimensional basis on one position-dependent cell.
+  using PolynomialSet = std::vector<Polynomials::Polynomial<double>>;
+
+  // One PolynomialSet for every position-dependent cell.
+  using PositionDependentPolynomialSets = std::vector<PolynomialSet>;
+
+
+  namespace internal
+  {
+    // Coefficients are stored in ascending powers:
+    // coefficients[k] is the coefficient multiplying x^k.
+    using PolynomialCoefficients = std::vector<long double>;
+
+    using PolynomialCoefficientSets = std::vector<PolynomialCoefficients>;
+
+
+    inline PolynomialCoefficients
+    make_lagrange_polynomial_coefficients(
+      const std::vector<long double> &reference_nodes,
+      const unsigned int              basis_node)
+    {
+      PolynomialCoefficients polynomial_coefficients(1, 1.0L);
+      long double            denominator = 1.0L;
+
+      // Construct
+      //              product_{j != basis_node} (x - reference_nodes[j])
+      // L_i(x) = ---------------------------------------------------------.
+      //              product_{j != basis_node} (x_i - reference_nodes[j])
+      for (unsigned int node = 0; node < reference_nodes.size(); ++node)
+        {
+          if (node == basis_node)
+            continue;
+
+          PolynomialCoefficients product_coefficients(
+            polynomial_coefficients.size() + 1, 0.0L);
+
+          // Multiply the current polynomial by (x - reference_nodes[node]).
+          for (unsigned int power = 0; power < polynomial_coefficients.size();
+               ++power)
+            {
+              product_coefficients[power] -=
+                reference_nodes[node] * polynomial_coefficients[power];
+              product_coefficients[power + 1] += polynomial_coefficients[power];
+            }
+
+          polynomial_coefficients.swap(product_coefficients);
+          denominator *= reference_nodes[basis_node] - reference_nodes[node];
+        }
+
+      for (auto &coefficient : polynomial_coefficients)
+        coefficient /= denominator;
+
+      return polynomial_coefficients;
+    }
+
+
+    inline long double
+    map_stencil_node_to_reference_cell(const int          stencil_node,
+                                       const unsigned int position,
+                                       const unsigned int fe_degree)
+    {
+      // The boundary cells are half-cells. Their coordinates therefore use
+      // a different mapping from the coordinates of an interior dual cell.
+      if (position == 0)
+        return 2.0L * stencil_node;
+
+      if (position == fe_degree)
+        return 2.0L * (stencil_node - static_cast<int>(fe_degree)) + 1.0L;
+
+      return stencil_node - static_cast<int>(position) + 0.5L;
+    }
+
+
+    inline long double
+    physical_node_extrapolation_weight(const int          target_stencil_node,
+                                       const unsigned int physical_node,
+                                       const unsigned int fe_degree)
+    {
+      long double weight = 1.0L;
+
+      // Evaluate the Lagrange polynomial associated with physical_node on
+      // the physical nodes 0,...,p at target_stencil_node:
+      //
+      //                  product_{j != physical_node} (target - j)
+      // weight_i(target) = --------------------------------------------.
+      //                  product_{j != physical_node} (i - j)
+      for (unsigned int node = 0; node <= fe_degree; ++node)
+        {
+          if (node == physical_node)
+            continue;
+
+          const long double numerator =
+            target_stencil_node - static_cast<int>(node);
+          const long double denominator =
+            static_cast<int>(physical_node) - static_cast<int>(node);
+
+          weight *= numerator / denominator;
+        }
+
+      return weight;
+    }
+
+
+    inline PolynomialSet
+    convert_to_dealii_polynomials(
+      const PolynomialCoefficientSets &basis_coefficients)
+    {
+      PolynomialSet polynomials;
+      polynomials.reserve(basis_coefficients.size());
+
+      for (const auto &high_precision_coefficients : basis_coefficients)
+        {
+          long double coefficient_scale = 1.0L;
+          for (const long double coefficient : high_precision_coefficients)
+            {
+              coefficient_scale =
+                std::max(coefficient_scale, std::abs(coefficient));
+            }
+
+          const long double zero_tolerance =
+            1000.0L * std::numeric_limits<long double>::epsilon() *
+            coefficient_scale;
+
+          std::vector<double> coefficients;
+          coefficients.reserve(high_precision_coefficients.size());
+
+          for (const long double coefficient : high_precision_coefficients)
+            {
+              if (std::abs(coefficient) < zero_tolerance)
+                coefficients.push_back(0.0);
+              else
+                coefficients.push_back(static_cast<double>(coefficient));
+            }
+
+          // deal.II expects coefficients in ascending powers.
+          polynomials.emplace_back(coefficients);
+        }
+
+      return polynomials;
+    }
+
+
+    inline PositionDependentPolynomialSets
+    generate_even_polynomials_1D(const unsigned int fe_degree)
+    {
+      AssertThrow(fe_degree >= 2 && fe_degree % 2 == 0,
+                  ExcMessage("DGGD requires a positive even polynomial "
+                             "degree."));
+
+      const unsigned int number_of_nodes = fe_degree + 1;
+      const int          stencil_radius  = static_cast<int>(fe_degree / 2);
+
+      PositionDependentPolynomialSets all_polynomial_sets;
+      all_polynomial_sets.reserve(number_of_nodes);
+
+      // There are p+1 position-dependent dual cells: c = 0,...,p.
+      for (unsigned int position = 0; position < number_of_nodes; ++position)
+        {
+          std::vector<int>         stencil_nodes(number_of_nodes);
+          std::vector<long double> reference_nodes(number_of_nodes);
+
+          for (unsigned int local_node = 0; local_node < number_of_nodes;
+               ++local_node)
+            {
+              stencil_nodes[local_node] = static_cast<int>(position) -
+                                          stencil_radius +
+                                          static_cast<int>(local_node);
+
+              reference_nodes[local_node] =
+                map_stencil_node_to_reference_cell(stencil_nodes[local_node],
+                                                   position,
+                                                   fe_degree);
+            }
+
+          // Natural Lagrange basis for the possibly ghosted stencil.
+          PolynomialCoefficientSets natural_basis_coefficients;
+          natural_basis_coefficients.reserve(number_of_nodes);
+
+          for (unsigned int basis_node = 0; basis_node < number_of_nodes;
+               ++basis_node)
+            {
+              natural_basis_coefficients.push_back(
+                make_lagrange_polynomial_coefficients(reference_nodes,
+                                                      basis_node));
+            }
+
+          // Express every stencil value using the physical nodes 0,...,p.
+          // For an ordinary physical stencil node, the weights reduce to the
+          // Kronecker delta. For a ghost node, they perform extrapolation.
+          // This is exactly the boundary modification used by
+          // scripts/create_even_coefficients.py.
+          PolynomialCoefficientSets physical_basis_coefficients(
+            number_of_nodes, PolynomialCoefficients(number_of_nodes, 0.0L));
+
+          // phi_i(x) = sum_s weight_i(stencil_node_s) N_s(x),
+          // where N_s is the natural stencil basis polynomial.
+          for (unsigned int stencil_basis = 0; stencil_basis < number_of_nodes;
+               ++stencil_basis)
+            {
+              const int stencil_node = stencil_nodes[stencil_basis];
+
+              for (unsigned int physical_node = 0;
+                   physical_node < number_of_nodes;
+                   ++physical_node)
+                {
+                  const long double weight =
+                    physical_node_extrapolation_weight(stencil_node,
+                                                       physical_node,
+                                                       fe_degree);
+
+                  for (unsigned int power = 0; power < number_of_nodes; ++power)
+                    {
+                      physical_basis_coefficients[physical_node][power] +=
+                        weight *
+                        natural_basis_coefficients[stencil_basis][power];
+                    }
+                }
+            }
+
+          all_polynomial_sets.push_back(
+            convert_to_dealii_polynomials(physical_basis_coefficients));
+        }
+
+      return all_polynomial_sets;
+    }
+  } // namespace internal
+
+
+  inline PositionDependentPolynomialSets
   generate_polynomials_1D(const unsigned int fe_degree)
   {
-    std::vector<std::vector<Polynomials::Polynomial<double>>> all_polynomial;
+    AssertThrow(fe_degree > 0,
+                ExcMessage("The polynomial degree must be positive."));
 
-    if (fe_degree == 2)
-      {
-        // p = 2 DGGD basis on the dual grid.
-        //
-        // These coefficient tables are written in the deal.II reference
-        // coordinate xi in [0,1].
-        //
-        // Each polynomial is entered in descending powers:
-        // a2, a1, a0.
-        //
-        // The code below reverses them before constructing Polynomial<double>.
+    if (fe_degree % 2 == 0)
+      return internal::generate_even_polynomials_1D(fe_degree);
 
-        std::vector<std::vector<std::vector<double>>> all_coefficients_p2 = {
-          // Case 0: left boundary half-cell I_0^Omega
-          {{1.0 / 8.0, -3.0 / 4.0, 1.0},
-           {-1.0 / 4.0, 1.0, 0.0},
-           {1.0 / 8.0, -1.0 / 4.0, 0.0}},
-
-          // Case 1: interior dual cell I_k
-          {{1.0 / 2.0, -1.0, 3.0 / 8.0},
-           {-1.0, 1.0, 3.0 / 4.0},
-           {1.0 / 2.0, 0.0, -1.0 / 8.0}},
-
-          // Case 2: right boundary half-cell I_n^Omega
-          {{1.0 / 8.0, 0.0, -1.0 / 8.0},
-           {-1.0 / 4.0, -1.0 / 2.0, 3.0 / 4.0},
-           {1.0 / 8.0, 1.0 / 2.0, 3.0 / 8.0}}};
-
-        for (auto coefficients : all_coefficients_p2)
-          {
-            for (unsigned int i = 0; i < coefficients.size(); ++i)
-              std::reverse(coefficients[i].begin(), coefficients[i].end());
-
-            std::vector<Polynomials::Polynomial<double>> polynomials;
-            for (unsigned int i = 0; i < coefficients.size(); ++i)
-              polynomials.emplace_back(coefficients[i]);
-
-            all_polynomial.push_back(polynomials);
-          }
-
-        return all_polynomial;
-      }
+    PositionDependentPolynomialSets all_polynomials;
 
     // clang-format off
-std::vector<std::vector<std::vector<std::vector<double>>>> all_coefficients =
+    const CoefficientLibrary odd_coefficients =
       {{
         // fe_degree == 1
         {{
@@ -361,21 +572,40 @@ std::vector<std::vector<std::vector<std::vector<double>>>> all_coefficients =
       }};
     // clang-format on
 
-    AssertIndexRange(fe_degree / 2, all_coefficients.size());
+    const unsigned int degree_index = fe_degree / 2;
 
-    for (auto coefficients : all_coefficients[fe_degree / 2])
+    AssertThrow(degree_index < odd_coefficients.size(),
+                ExcMessage("The requested odd polynomial degree is not "
+                           "available."));
+
+    const DegreeCoefficients &selected_coefficients =
+      odd_coefficients[degree_index];
+
+    AssertDimension(selected_coefficients.size(), fe_degree);
+
+    for (auto position_coefficients : selected_coefficients)
       {
-        for (unsigned int i = 0; i < coefficients.size(); ++i)
-          std::reverse(coefficients[i].begin(), coefficients[i].end());
+        AssertDimension(position_coefficients.size(), fe_degree + 1);
 
-        std::vector<Polynomials::Polynomial<double>> polynomials;
-        for (unsigned int i = 0; i < coefficients.size(); ++i)
-          polynomials.emplace_back(coefficients[i]);
+        PolynomialSet polynomials;
+        polynomials.reserve(fe_degree + 1);
 
-        all_polynomial.push_back(polynomials);
+        for (auto polynomial_coefficients : position_coefficients)
+          {
+            AssertDimension(polynomial_coefficients.size(), fe_degree + 1);
+
+            // The generated tables use descending powers, whereas deal.II
+            // expects coefficients in ascending powers.
+            std::reverse(polynomial_coefficients.begin(),
+                         polynomial_coefficients.end());
+
+            polynomials.emplace_back(polynomial_coefficients);
+          }
+
+        all_polynomials.push_back(polynomials);
       }
 
-    return all_polynomial;
+    return all_polynomials;
   }
 
 
@@ -443,17 +673,15 @@ std::vector<std::vector<std::vector<std::vector<double>>>> all_coefficients =
   template <int dim>
   hp::FECollection<dim>
   generate_fe_collection(
-    const std::vector<std::vector<Polynomials::Polynomial<double>>>
-                      &all_polynomials_1D,
-    const unsigned int n_components = 1)
+    const PositionDependentPolynomialSets &all_polynomials_1D,
+    const unsigned int                     n_components = 1)
   {
     hp::FECollection<dim> fe_collection;
 
     for (unsigned int p = 0; p < Utilities::pow(all_polynomials_1D.size(), dim);
          ++p)
       {
-        std::vector<std::vector<Polynomials::Polynomial<double>>>
-          aniso_polynomials;
+        std::vector<PolynomialSet> aniso_polynomials;
         for (const auto d : index_to_indices<dim>(p, all_polynomials_1D.size()))
           aniso_polynomials.push_back(all_polynomials_1D[d]);
 
